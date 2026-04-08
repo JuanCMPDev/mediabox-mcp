@@ -7,72 +7,152 @@ import { jfApi, sonarrApi, radarrApi, textResult } from "../helpers/api.js";
 import { pyloadApi } from "../helpers/pyload.js";
 import { qbitApi } from "../helpers/qbittorrent.js";
 import { moveFile, isVideoFile, isArchiveFile, extractArchive, detectAndFixExtension } from "../helpers/files.js";
+import { startJob } from "../helpers/jobs.js";
 import { MEDIA_PATH, DOWNLOADS_PATH } from "../config.js";
 
 export function registerDownloadTools(server: McpServer): void {
-  // 19. DOWNLOAD ADD
   server.registerTool("download_add", {
-    description: "Add URLs to PyLoad for downloading from file hosters (Mega, MediaFire, etc.)",
+    description: "Add URLs to PyLoad for downloading from file hosters (Mega, MediaFire, etc.). Use a descriptive packageName — it becomes the subfolder name in downloads, which you'll need later for organizing.",
     inputSchema: {
-      urls: z.array(z.string()), packageName: z.string().default("MCP Download"),
+      urls: z.array(z.string()),
+      packageName: z.string().describe("Package name (becomes the download subfolder). Use the movie/show name, e.g. 'Pet Sematary 1989'"),
     },
   }, async ({ urls, packageName }) => {
     const normalized = urls.map(u => u.replace("depositfiles.org", "depositfiles.com"));
     const result = await pyloadApi("add_package", "POST", { name: JSON.stringify(packageName), links: JSON.stringify(normalized) });
-    return textResult({ message: `Added ${urls.length} URL(s) as "${packageName}"`, packageId: result, tip: "Use download_status to monitor" });
+    return textResult({
+      message: `Added ${urls.length} URL(s) as "${packageName}"`,
+      packageId: result,
+      packageFolder: packageName,
+      tip: "Use download_status to monitor. When done, use download_status with organize=true, packageFolder='" + packageName + "' to move to Jellyfin library.",
+    });
   });
 
-  // 20. DOWNLOAD STATUS
   server.registerTool("download_status", {
-    description: "Check PyLoad download status. Can also organize completed downloads into Jellyfin library.",
+    description: "Check PyLoad download status, organize completed downloads into Jellyfin library, or delete PyLoad packages. For organize: pass the packageFolder (same as packageName from download_add), the target showName for Jellyfin, and archivePassword if the download is a password-protected archive. For movies, use libraryFolder='movies' and omit seasonNumber. Runs as background job for large files/archives.",
     inputSchema: {
-      organize: z.boolean().default(false).describe("Move completed downloads to library"),
-      showName: z.string().optional().describe("Show/movie name for organizing"),
-      seasonNumber: z.number().default(1).describe("Season number for organizing"),
-      episodeNumber: z.number().optional().describe("Starting episode number"),
-      libraryFolder: z.enum(["tv", "movies", "music", "anime"]).default("tv"),
-      archivePassword: z.string().optional(),
-      packageFolder: z.string().optional().describe("Specific subfolder in downloads"),
+      action: z.enum(["status", "organize", "delete"]).default("status").describe("status = check queue, organize = move to library, delete = remove PyLoad packages"),
+      packageIds: z.array(z.number()).optional().describe("PyLoad package IDs to delete (for action=delete)"),
+      showName: z.string().optional().describe("Movie or show name for Jellyfin (for organize)"),
+      seasonNumber: z.number().optional().describe("Season number (for TV/anime organize). Omit for movies."),
+      episodeNumber: z.number().optional().describe("Starting episode number (for TV/anime)"),
+      libraryFolder: z.enum(["tv", "movies", "music", "anime"]).default("movies").describe("Target library folder"),
+      archivePassword: z.string().optional().describe("Password for RAR/ZIP/7z archives"),
+      packageFolder: z.string().optional().describe("Subfolder in downloads to organize (usually same as packageName from download_add)"),
     },
-  }, async ({ organize, showName, seasonNumber, episodeNumber, libraryFolder, archivePassword, packageFolder }) => {
-    if (!organize) {
-      const [status, queue] = await Promise.all([pyloadApi("status_server"), pyloadApi("get_queue")]);
-      return textResult({ server: status, queue: Array.isArray(queue) ? queue.map((p: any) => ({ id: p.pid, name: p.name, links: p.links?.map((l: any) => ({ name: l.name, status: l.statusmsg, size: l.format_size })) })) : queue });
-    }
-    if (!showName) throw new Error("showName required for organize");
-    const seasonPad = String(seasonNumber).padStart(2, "0");
-    const seasonDir = path.join(MEDIA_PATH, libraryFolder, showName, `Season ${seasonPad}`);
-    await fs.mkdir(seasonDir, { recursive: true });
-    const searchDir = packageFolder ? path.join(DOWNLOADS_PATH, packageFolder) : DOWNLOADS_PATH;
-    const allFiles: string[] = [];
-    async function find(dir: string) { for (const e of await fs.readdir(dir, { withFileTypes: true })) { const f = path.join(dir, e.name); if (e.isDirectory()) await find(f); else allFiles.push(f); } }
-    await find(searchDir);
-    if (!allFiles.length) return textResult({ error: "No files in downloads" });
-
-    const results: string[] = [];
-    const startEp = episodeNumber || 1;
-    let epCounter = 0;
-    for (const fp of allFiles.sort()) {
-      const fixed = await detectAndFixExtension(fp);
-      if (isArchiveFile(fixed)) {
-        const ext = path.join("/tmp", `extract-${crypto.randomUUID()}`);
-        await fs.mkdir(ext, { recursive: true });
-        const vids = await extractArchive(fixed, ext, archivePassword);
-        vids.sort((a, b) => path.basename(a).localeCompare(path.basename(b)));
-        for (const v of vids) { const n = `${showName} - S${seasonPad}E${String(startEp + epCounter).padStart(2, "0")}${path.extname(v)}`; await moveFile(v, path.join(seasonDir, n)); results.push(n); epCounter++; }
-        await fs.unlink(fixed).catch(() => {});
-        await fs.rm(ext, { recursive: true, force: true }).catch(() => {});
-      } else if (isVideoFile(fixed)) {
-        const n = `${showName} - S${seasonPad}E${String(startEp + epCounter).padStart(2, "0")}${path.extname(fixed)}`; await moveFile(fixed, path.join(seasonDir, n)); results.push(n); epCounter++;
+  }, async ({ action, packageIds, showName, seasonNumber, episodeNumber, libraryFolder, archivePassword, packageFolder }) => {
+    // DELETE packages from PyLoad
+    if (action === "delete") {
+      if (!packageIds?.length) {
+        // List packages so the caller can pick IDs
+        const queue = await pyloadApi("get_queue");
+        const collector = await pyloadApi("get_collector");
+        const all = [...(Array.isArray(queue) ? queue : []), ...(Array.isArray(collector) ? collector : [])];
+        return textResult({ message: "Provide packageIds to delete", packages: all.map((p: any) => ({ id: p.pid, name: p.name, status: p.statusmsg, links: p.links?.length })) });
       }
+      for (const pid of packageIds) {
+        await pyloadApi("delete_packages", "POST", { pids: JSON.stringify([pid]) });
+      }
+      return textResult({ message: `Deleted ${packageIds.length} package(s) from PyLoad` });
     }
-    if (!results.length) return textResult({ error: "No video files found" });
-    if (packageFolder) await fs.rm(path.join(DOWNLOADS_PATH, packageFolder), { recursive: true, force: true }).catch(() => {});
-    await jfApi("/Library/Refresh", "POST");
-    return textResult({ message: "Organized and scan triggered", destination: seasonDir, files: results });
+
+    // STATUS
+    if (action === "status") {
+      const [status, queue] = await Promise.all([pyloadApi("status_server"), pyloadApi("get_queue")]);
+      return textResult({
+        server: status,
+        queue: Array.isArray(queue) ? queue.map((p: any) => ({
+          id: p.pid, name: p.name, folder: p.folder,
+          links: p.links?.map((l: any) => ({ name: l.name, status: l.statusmsg, size: l.format_size })),
+        })) : queue,
+        tip: "Package 'folder' is the packageFolder you need for organize. Package 'id' is what you need for delete.",
+      });
+    }
+
+    // ORGANIZE
+    if (!showName) throw new Error("showName required for organize");
+
+    // Determine destination
+    let destDir: string;
+    if (libraryFolder === "movies") {
+      // Movies go directly into /data/movies/Movie Name/
+      destDir = path.join(MEDIA_PATH, "movies", showName);
+    } else {
+      const seasonPad = String(seasonNumber || 1).padStart(2, "0");
+      destDir = path.join(MEDIA_PATH, libraryFolder, showName, `Season ${seasonPad}`);
+    }
+
+    const searchDir = packageFolder ? path.join(DOWNLOADS_PATH, packageFolder) : DOWNLOADS_PATH;
+
+    // Check if dir exists
+    try { await fs.stat(searchDir); } catch { return textResult({ error: `Folder not found: ${packageFolder || "downloads/"}. Use download_status action=status to see available package folders.` }); }
+
+    // Run as async job (archives can take minutes to extract)
+    const job = startJob("organize_downloads", async (j) => {
+      await fs.mkdir(destDir, { recursive: true });
+      const allFiles: string[] = [];
+      async function find(dir: string) { for (const e of await fs.readdir(dir, { withFileTypes: true })) { const f = path.join(dir, e.name); if (e.isDirectory()) await find(f); else allFiles.push(f); } }
+      await find(searchDir);
+      if (!allFiles.length) { j.message = "No files found"; j.status = "failed"; return; }
+
+      const results: string[] = [];
+      const isMovie = libraryFolder === "movies";
+      const seasonPad = String(seasonNumber || 1).padStart(2, "0");
+      const startEp = episodeNumber || 1;
+      let epCounter = 0;
+
+      for (const fp of allFiles.sort()) {
+        j.message = `Processing ${path.basename(fp)}...`;
+        const fixed = await detectAndFixExtension(fp);
+        if (isArchiveFile(fixed)) {
+          const extractDir = path.join("/tmp", `extract-${crypto.randomUUID()}`);
+          await fs.mkdir(extractDir, { recursive: true });
+          j.message = `Extracting ${path.basename(fixed)}...`;
+          const vids = await extractArchive(fixed, extractDir, archivePassword);
+          vids.sort((a, b) => path.basename(a).localeCompare(path.basename(b)));
+          for (const v of vids) {
+            let destName: string;
+            if (isMovie) {
+              destName = `${showName}${path.extname(v)}`;
+            } else {
+              destName = `${showName} - S${seasonPad}E${String(startEp + epCounter).padStart(2, "0")}${path.extname(v)}`;
+              epCounter++;
+            }
+            await moveFile(v, path.join(destDir, destName));
+            results.push(destName);
+          }
+          await fs.unlink(fixed).catch(() => {});
+          await fs.rm(extractDir, { recursive: true, force: true }).catch(() => {});
+        } else if (isVideoFile(fixed)) {
+          let destName: string;
+          if (isMovie) {
+            destName = `${showName}${path.extname(fixed)}`;
+          } else {
+            destName = `${showName} - S${seasonPad}E${String(startEp + epCounter).padStart(2, "0")}${path.extname(fixed)}`;
+            epCounter++;
+          }
+          await moveFile(fixed, path.join(destDir, destName));
+          results.push(destName);
+        }
+      }
+
+      if (!results.length) { j.message = "No video files found after processing"; j.status = "failed"; return; }
+
+      // Clean up package folder
+      if (packageFolder) await fs.rm(path.join(DOWNLOADS_PATH, packageFolder), { recursive: true, force: true }).catch(() => {});
+
+      await jfApi("/Library/Refresh", "POST");
+      j.message = `Organized ${results.length} file(s) to ${libraryFolder}/${showName}`;
+      j.result = { destination: destDir, files: results };
+    });
+
+    return textResult({
+      message: `Organizing in background — archives may take a few minutes to extract`,
+      jobId: job.id,
+      tip: "Use check_jobs to monitor progress",
+    });
   });
 
-  // 24. CANCEL DOWNLOADS
   server.registerTool("cancel_downloads", {
     description: "Manage download queue: Sonarr/Radarr and qBittorrent. Cancel items, purge duplicates, or clean orphan torrents.",
     inputSchema: {
