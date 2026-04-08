@@ -4,7 +4,7 @@ import { sonarrApi, textResult } from "../helpers/api.js";
 
 export function registerSonarrTools(server: McpServer): void {
   server.registerTool("series_search", {
-    description: "Search for a TV series and optionally add it to Sonarr for monitoring",
+    description: "Search for a TV series and optionally add it to Sonarr for monitoring. Use searchNow=false to add without auto-downloading (lets you pick a release manually via series_releases + series_grab).",
     inputSchema: {
       query: z.string().optional().describe("Series name to search. Required for search, optional when adding by ID."),
       addTvdbId: z.number().optional().describe("TVDB ID to add (from search results). Omit to just search."),
@@ -12,8 +12,9 @@ export function registerSonarrTools(server: McpServer): void {
       monitor: z.enum(["all", "future", "missing", "none", "firstSeason", "lastSeason"]).default("all"),
       seasons: z.array(z.number()).optional().describe("Specific season numbers to monitor"),
       quality: z.enum(["Any", "SD", "HD-720p", "HD-1080p", "Ultra-HD", "HD - 720p/1080p"]).default("HD-1080p"),
+      searchNow: z.boolean().default(false).describe("Trigger automatic download search after adding. Default false to allow manual release selection."),
     },
-  }, async ({ query, addTvdbId, rootFolder, monitor, seasons, quality }) => {
+  }, async ({ query, addTvdbId, rootFolder, monitor, seasons, quality, searchNow }) => {
     if (!addTvdbId) {
       if (!query) throw new Error("query is required when not adding by ID");
       const results = await sonarrApi(`series/lookup?term=${encodeURIComponent(query)}`);
@@ -29,25 +30,25 @@ export function registerSonarrTools(server: McpServer): void {
       else { for (const s of existing.seasons || []) s.monitored = true; }
       existing.qualityProfileId = profile.id;
       await sonarrApi(`series/${existing.id}`, "PUT", existing);
-      if (monitor === "all" || monitor === "missing") await sonarrApi("command", "POST", { name: "SeriesSearch", seriesId: existing.id });
+      if (searchNow) await sonarrApi("command", "POST", { name: "SeriesSearch", seriesId: existing.id });
       const queue = await sonarrApi("queue?pageSize=100");
       const activeDownloads = (queue.records || []).filter((r: any) => r.seriesId === existing.id).length;
-      return textResult({ message: `Updated "${existing.title}" monitoring`, id: existing.id, quality: profile.name, activeDownloads: activeDownloads || undefined, warning: activeDownloads ? `${activeDownloads} downloads already active for this series. Use cancel_downloads to manage.` : undefined });
+      return textResult({ message: `Updated "${existing.title}" monitoring`, id: existing.id, quality: profile.name, searchNow, activeDownloads: activeDownloads || undefined, warning: activeDownloads ? `${activeDownloads} downloads already active for this series. Use cancel_downloads to manage.` : undefined });
     }
 
     const lookup = await sonarrApi(`series/lookup?term=tvdb:${addTvdbId}`);
     if (!lookup.length) throw new Error("Series not found");
     const series = lookup[0];
     if (seasons && series.seasons) { for (const s of series.seasons) s.monitored = seasons.includes(s.seasonNumber); }
-    const result = await sonarrApi("series", "POST", { ...series, rootFolderPath: rootFolder, qualityProfileId: profile.id, monitored: true, addOptions: { monitor, searchForMissingEpisodes: monitor === "all" || monitor === "missing" } });
+    const result = await sonarrApi("series", "POST", { ...series, rootFolderPath: rootFolder, qualityProfileId: profile.id, monitored: true, addOptions: { monitor, searchForMissingEpisodes: searchNow } });
     if (seasons) {
       const added = await sonarrApi(`series/${result.id}`);
       added.monitored = true;
       for (const s of added.seasons || []) s.monitored = seasons.includes(s.seasonNumber);
       await sonarrApi(`series/${result.id}`, "PUT", added);
     }
-    if (monitor === "all" || monitor === "missing") await sonarrApi("command", "POST", { name: "SeriesSearch", seriesId: result.id });
-    return textResult({ message: `Added "${result.title}" (${result.year})`, id: result.id, rootFolder, quality: profile.name, monitoring: seasons ? `Seasons ${seasons.join(",")}` : monitor });
+    if (searchNow) await sonarrApi("command", "POST", { name: "SeriesSearch", seriesId: result.id });
+    return textResult({ message: `Added "${result.title}" (${result.year})`, id: result.id, rootFolder, quality: profile.name, searchNow, monitoring: seasons ? `Seasons ${seasons.join(",")}` : monitor });
   });
 
   server.registerTool("series_status", {
@@ -111,12 +112,20 @@ export function registerSonarrTools(server: McpServer): void {
   });
 
   server.registerTool("series_grab", {
-    description: "Download a specific torrent release for a series episode",
+    description: "Download a specific torrent release for a series episode. Automatically cancels any existing download for the same episode to avoid duplicates.",
     inputSchema: {
       guid: z.string(), indexerId: z.number(),
+      episodeId: z.number().optional().describe("Episode ID — if provided, cancels any active download for this episode before grabbing"),
     },
-  }, async ({ guid, indexerId }) => {
+  }, async ({ guid, indexerId, episodeId }) => {
+    if (episodeId) {
+      const q = await sonarrApi("queue?pageSize=200");
+      const dupes = (q.records || []).filter((r: any) => r.episodeId === episodeId);
+      if (dupes.length) {
+        await sonarrApi("queue/bulk?removeFromClient=true&blocklist=false", "DELETE", { ids: dupes.map((r: any) => r.id) } as any);
+      }
+    }
     await sonarrApi("release", "POST", { guid, indexerId });
-    return textResult({ message: "Release sent to download client" });
+    return textResult({ message: "Release sent to download client", replaced: episodeId ? true : undefined });
   });
 }

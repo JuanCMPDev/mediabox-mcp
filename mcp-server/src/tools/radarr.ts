@@ -4,12 +4,12 @@ import { radarrApi, textResult } from "../helpers/api.js";
 
 export function registerRadarrTools(server: McpServer): void {
   server.registerTool("movie_search", {
-    description: "Search for a movie and optionally add it to Radarr for downloading",
+    description: "Search for a movie and optionally add it to Radarr for monitoring. Use searchNow=false (default) to add without auto-downloading, letting you pick a release manually via movie_releases + movie_grab.",
     inputSchema: {
       query: z.string().optional().describe("Movie name to search. Required for search, optional when adding by ID."),
       addTmdbId: z.number().optional().describe("TMDB ID to add (from search results). Omit to just search."),
       quality: z.enum(["Any", "SD", "HD-720p", "HD-1080p", "Ultra-HD", "HD - 720p/1080p"]).default("HD-1080p"),
-      searchNow: z.boolean().default(true),
+      searchNow: z.boolean().default(false).describe("Trigger automatic download search after adding. Default false to allow manual release selection."),
     },
   }, async ({ query, addTmdbId, quality, searchNow }) => {
     if (!addTmdbId) {
@@ -26,12 +26,12 @@ export function registerRadarrTools(server: McpServer): void {
       existing.qualityProfileId = profile.id;
       await radarrApi(`movie/${existing.id}`, "PUT", existing);
       if (searchNow) await radarrApi("command", "POST", { name: "MoviesSearch", movieIds: [existing.id] });
-      return textResult({ message: `Updated "${existing.title}" monitoring${searchNow ? ", searching" : ""}`, id: existing.id });
+      return textResult({ message: `Updated "${existing.title}" monitoring${searchNow ? ", searching" : ""}`, id: existing.id, searchNow });
     }
     const lookup = await radarrApi(`movie/lookup?term=tmdb:${addTmdbId}`);
     if (!lookup.length) throw new Error("Movie not found");
     const result = await radarrApi("movie", "POST", { ...lookup[0], rootFolderPath: "/movies", qualityProfileId: profile.id, monitored: true, minimumAvailability: "released", addOptions: { searchForMovie: searchNow } });
-    return textResult({ message: `Added "${result.title}" (${result.year})${searchNow ? " — searching" : ""}`, id: result.id, quality: profile.name });
+    return textResult({ message: `Added "${result.title}" (${result.year})${searchNow ? " — searching" : ""}`, id: result.id, quality: profile.name, searchNow });
   });
 
   server.registerTool("movie_status", {
@@ -78,12 +78,20 @@ export function registerRadarrTools(server: McpServer): void {
   });
 
   server.registerTool("movie_grab", {
-    description: "Download a specific torrent release for a movie",
+    description: "Download a specific torrent release for a movie. Automatically cancels any existing download for the same movie to avoid duplicates.",
     inputSchema: {
       guid: z.string(), indexerId: z.number(),
+      movieId: z.number().optional().describe("Movie ID — if provided, cancels any active download for this movie before grabbing"),
     },
-  }, async ({ guid, indexerId }) => {
+  }, async ({ guid, indexerId, movieId }) => {
+    if (movieId) {
+      const q = await radarrApi("queue?pageSize=200");
+      const dupes = (q.records || []).filter((r: any) => r.movieId === movieId);
+      if (dupes.length) {
+        await radarrApi("queue/bulk?removeFromClient=true&blocklist=false", "DELETE", { ids: dupes.map((r: any) => r.id) } as any);
+      }
+    }
     await radarrApi("release", "POST", { guid, indexerId });
-    return textResult({ message: "Release sent to download client" });
+    return textResult({ message: "Release sent to download client", replaced: movieId ? true : undefined });
   });
 }
