@@ -201,7 +201,7 @@ const VIRTUAL_TOOLS: Record<string, VirtualToolDef> = {
   series: {
     name: "series",
     description:
-      "Manage TV series via Sonarr. search=find by name. add=add to monitoring (needs addTvdbId from search). status=view series/calendar/missing/queue/history. remove=delete from Sonarr. releases=find available torrents. grab=download specific release.",
+      "Manage TV series via Sonarr. search=find by name. add=add to monitoring (needs addTvdbId from search, searchNow=false to skip auto-download). status=view series/episodes/calendar/missing/queue/history (use view='episodes' with seriesId to list episodes). remove=delete from Sonarr. releases=find torrents (pass seriesId+seasonNumber+episodeNumber). grab=download specific release.",
     parameters: {
       type: "object",
       properties: {
@@ -221,12 +221,14 @@ const VIRTUAL_TOOLS: Record<string, VirtualToolDef> = {
           type: "string",
           enum: ["Any", "SD", "HD-720p", "HD-1080p", "Ultra-HD", "HD - 720p/1080p"],
         },
+        searchNow: { type: "boolean", description: "false=add without downloading (default). true=auto-search." },
         view: {
           type: "string",
-          enum: ["series", "calendar", "missing", "queue", "history"],
+          enum: ["series", "episodes", "calendar", "missing", "queue", "history"],
         },
-        seriesId: { type: "number" },
+        seriesId: { type: "number", description: "Sonarr series ID or tvdbId (auto-resolved)" },
         seasonNumber: { type: "number" },
+        episodeNumber: { type: "number", description: "Episode number (for releases/grab)" },
         episodeId: { type: "number" },
         guid: { type: "string" },
         indexerId: { type: "number" },
@@ -269,29 +271,24 @@ const VIRTUAL_TOOLS: Record<string, VirtualToolDef> = {
   downloads: {
     name: "downloads",
     description:
-      "Manage downloads: PyLoad file hosters and qBittorrent/Sonarr/Radarr queues. add=send URLs to PyLoad. status=check PyLoad progress. organize=move completed to library. cancel=cancel specific downloads. purge=remove duplicates. clean_orphans=remove orphan qBit torrents. list_queue=show download queue.",
+      "Manage downloads. PyLoad: add=send URLs, status=check PyLoad queue + download folders, organize=move completed to Jellyfin library (async for archives), delete_pyload=remove PyLoad packages by ID. Sonarr/Radarr/qBit: list_queue, cancel, purge, clean_orphans.",
     parameters: {
       type: "object",
       properties: {
         action: {
           type: "string",
-          enum: ["add", "status", "organize", "cancel", "purge", "clean_orphans", "list_queue"],
+          enum: ["add", "status", "organize", "delete_pyload", "cancel", "purge", "clean_orphans", "list_queue"],
         },
         urls: { type: "array", items: { type: "string" } },
-        packageName: { type: "string" },
-        source: {
-          type: "string",
-          enum: ["sonarr", "radarr", "qbittorrent"],
-        },
-        showName: { type: "string" },
+        packageName: { type: "string", description: "Descriptive name for PyLoad download (becomes folder name)" },
+        packageIds: { type: "array", items: { type: "number" }, description: "PyLoad package IDs to delete" },
+        packageFolder: { type: "string", description: "Download subfolder to organize (from status response)" },
+        showName: { type: "string", description: "Target name in Jellyfin" },
+        libraryFolder: { type: "string", enum: ["tv", "movies", "music", "anime"] },
         seasonNumber: { type: "number" },
         episodeNumber: { type: "number" },
-        libraryFolder: {
-          type: "string",
-          enum: ["tv", "movies", "music", "anime"],
-        },
-        archivePassword: { type: "string" },
-        packageFolder: { type: "string" },
+        archivePassword: { type: "string", description: "Password for RAR/ZIP/7z archives" },
+        source: { type: "string", enum: ["sonarr", "radarr", "qbittorrent"] },
         queueIds: { type: "array", items: { type: "number" } },
         torrentHashes: { type: "array", items: { type: "string" } },
         seriesId: { type: "number" },
@@ -386,10 +383,10 @@ const KEYWORD_MAP: Record<string, string[]> = {
   bajar: ["series", "movies", "downloads"],
 
   // Delete actions
-  borrar: ["files", "series", "movies"],
-  eliminar: ["files", "series", "movies"],
-  quitar: ["files", "series", "movies"],
-  delete: ["files", "series", "movies"],
+  borrar: ["files", "series", "movies", "downloads"],
+  eliminar: ["files", "series", "movies", "downloads"],
+  quitar: ["files", "series", "movies", "downloads"],
+  delete: ["files", "series", "movies", "downloads"],
 
   // File actions
   mover: ["files"],
@@ -514,19 +511,43 @@ async function executeVirtualTool(
 
     case "series":
       if (action === "search" || action === "add")
-        return callMCPSmart("series_search", params);
+        return callMCPSmart("series_search", {
+          ...params,
+          searchNow: params.searchNow ?? false,
+        });
       if (action === "status")
-        return callMCPSmart("series_status", params);
+        return callMCPSmart("series_status", {
+          view: params.view || "series",
+          seriesId: params.seriesId,
+          seasonNumber: params.seasonNumber,
+          limit: params.limit,
+        });
       if (action === "remove")
         return callMCPSmart("series_remove", params);
       if (action === "releases")
-        return callMCPSmart("series_releases", params);
-      if (action === "grab") return callMCPSmart("series_grab", params);
+        return callMCPSmart("series_releases", {
+          seriesId: params.seriesId,
+          seasonNumber: params.seasonNumber,
+          episodeNumber: params.episodeNumber,
+          episodeId: params.episodeId,
+        });
+      if (action === "grab")
+        return callMCPSmart("series_grab", {
+          guid: params.guid,
+          indexerId: params.indexerId,
+          seriesId: params.seriesId,
+          seasonNumber: params.seasonNumber,
+          episodeNumber: params.episodeNumber,
+          episodeId: params.episodeId,
+        });
       break;
 
     case "movies":
       if (action === "search" || action === "add")
-        return callMCPSmart("movie_search", params);
+        return callMCPSmart("movie_search", {
+          ...params,
+          searchNow: params.searchNow ?? false,
+        });
       if (action === "status")
         return callMCPSmart("movie_status", params);
       if (action === "remove")
@@ -543,9 +564,22 @@ async function executeVirtualTool(
           packageName: params.packageName,
         });
       if (action === "status")
-        return callMCPSmart("download_status", { organize: false });
+        return callMCPSmart("download_status", { action: "status" });
       if (action === "organize")
-        return callMCPSmart("download_status", { organize: true, ...params });
+        return callMCPSmart("download_status", {
+          action: "organize",
+          packageFolder: params.packageFolder,
+          showName: params.showName,
+          libraryFolder: params.libraryFolder,
+          seasonNumber: params.seasonNumber,
+          episodeNumber: params.episodeNumber,
+          archivePassword: params.archivePassword,
+        });
+      if (action === "delete_pyload")
+        return callMCPSmart("download_status", {
+          action: "delete",
+          packageIds: params.packageIds,
+        });
       if (action === "list_queue")
         return callMCPSmart("cancel_downloads", {
           source: params.source || "sonarr",
