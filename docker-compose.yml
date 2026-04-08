@@ -137,7 +137,7 @@ services:
     restart: unless-stopped
 
   flaresolverr:
-    image: ghcr.io/flaresolverr/flaresolverr:latest
+    image: ghcr.io/thephaseless/byparr:latest
     container_name: flaresolverr
     networks:
       - mediabox-net
