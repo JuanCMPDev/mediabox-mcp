@@ -1,6 +1,6 @@
 import { Bot, Context } from "grammy";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
-import { SSEClientTransport } from "@modelcontextprotocol/sdk/client/sse.js";
+import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import OpenAI from "openai";
 import { GoogleGenAI, Type } from "@google/genai";
 import type {
@@ -14,7 +14,7 @@ import type {
 const TELEGRAM_TOKEN = process.env.TELEGRAM_BOT_TOKEN || "";
 const OPENROUTER_KEY = process.env.OPENROUTER_API_KEY || "";
 const GOOGLE_AI_KEY = process.env.GOOGLE_AI_API_KEY || "";
-const MCP_URL = process.env.MCP_SERVER_URL || "http://mcp-server:3000/sse";
+const MCP_URL = process.env.MCP_SERVER_URL || "http://mcp-server:3000/mcp";
 const MCP_API_KEY = process.env.MCP_INTERNAL_API_KEY || "";
 const MODEL = process.env.LLM_MODEL || "openai/gpt-4o-mini";
 const PROVIDER =
@@ -601,7 +601,7 @@ async function connectMCP(): Promise<void> {
   const client = new Client({ name: "telegram-bot", version: "0.3.0" });
   const headers: Record<string, string> = {};
   if (MCP_API_KEY) headers["Authorization"] = `Bearer ${MCP_API_KEY}`;
-  const transport = new SSEClientTransport(new URL(MCP_URL), {
+  const transport = new StreamableHTTPClientTransport(new URL(MCP_URL), {
     requestInit: { headers },
   });
   await client.connect(transport);
