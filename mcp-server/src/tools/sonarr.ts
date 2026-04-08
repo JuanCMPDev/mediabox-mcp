@@ -91,33 +91,53 @@ export function registerSonarrTools(server: McpServer): void {
   });
 
   server.registerTool("series_releases", {
-    description: "Search available torrent releases for an episode or season. Shows size, languages, seeders, score.",
+    description: "Search available torrent releases for an episode or season. You can pass seriesId + seasonNumber + episodeNumber to look up a specific episode (the tool resolves the internal episodeId automatically).",
     inputSchema: {
-      episodeId: z.number().optional().describe("Episode ID for specific episode"),
-      seriesId: z.number().optional().describe("Series ID (use with seasonNumber for full season)"),
+      episodeId: z.number().optional().describe("Sonarr internal episode ID (if you already have it)"),
+      seriesId: z.number().optional().describe("Series ID (use with seasonNumber for full season, or add episodeNumber for a specific episode)"),
       seasonNumber: z.number().optional(),
+      episodeNumber: z.number().optional().describe("Episode number within the season (e.g. 6 for S04E06). Requires seriesId and seasonNumber."),
     },
-  }, async ({ episodeId, seriesId, seasonNumber }) => {
+  }, async ({ episodeId, seriesId, seasonNumber, episodeNumber }) => {
+    // Resolve episodeId from seriesId + seasonNumber + episodeNumber
+    if (!episodeId && seriesId && seasonNumber !== undefined && episodeNumber !== undefined) {
+      const episodes = await sonarrApi(`episode?seriesId=${seriesId}`);
+      const match = episodes.find((e: any) => e.seasonNumber === seasonNumber && e.episodeNumber === episodeNumber);
+      if (!match) throw new Error(`Episode S${String(seasonNumber).padStart(2, "0")}E${String(episodeNumber).padStart(2, "0")} not found for series ${seriesId}`);
+      episodeId = match.id;
+    }
+
     let ep = "release?";
     if (episodeId) ep += `episodeId=${episodeId}`;
     else if (seriesId && seasonNumber !== undefined) ep += `seriesId=${seriesId}&seasonNumber=${seasonNumber}`;
     else if (seriesId) ep += `seriesId=${seriesId}`;
-    else throw new Error("Provide episodeId or seriesId");
+    else throw new Error("Provide episodeId, or seriesId + seasonNumber + episodeNumber");
     const rels = await sonarrApi(ep);
     return textResult(rels.slice(0, 20).map((r: any) => ({
       guid: r.guid, title: r.title, quality: r.quality?.quality?.name, size: `${(r.size / 1073741824).toFixed(1)}GB`,
       seeders: r.seeders, languages: r.languages?.map((l: any) => l.name), indexer: r.indexer, indexerId: r.indexerId,
       score: r.customFormatScore, rejected: r.rejected || undefined, rejections: r.rejections?.length ? r.rejections.map((j: any) => j.reason) : undefined,
+      ...(episodeId ? { resolvedEpisodeId: episodeId } : {}),
     })));
   });
 
   server.registerTool("series_grab", {
-    description: "Download a specific torrent release for a series episode. Automatically cancels any existing download for the same episode to avoid duplicates.",
+    description: "Download a specific torrent release for a series episode. Automatically cancels any existing download for the same episode to avoid duplicates. Pass episodeId directly, or seriesId + seasonNumber + episodeNumber to resolve it.",
     inputSchema: {
       guid: z.string(), indexerId: z.number(),
-      episodeId: z.number().optional().describe("Episode ID — if provided, cancels any active download for this episode before grabbing"),
+      episodeId: z.number().optional().describe("Sonarr internal episode ID — if provided, cancels any active download for this episode before grabbing"),
+      seriesId: z.number().optional().describe("Series ID (used with seasonNumber + episodeNumber to resolve episodeId)"),
+      seasonNumber: z.number().optional(),
+      episodeNumber: z.number().optional().describe("Episode number within the season"),
     },
-  }, async ({ guid, indexerId, episodeId }) => {
+  }, async ({ guid, indexerId, episodeId, seriesId, seasonNumber, episodeNumber }) => {
+    // Resolve episodeId from seriesId + seasonNumber + episodeNumber
+    if (!episodeId && seriesId && seasonNumber !== undefined && episodeNumber !== undefined) {
+      const episodes = await sonarrApi(`episode?seriesId=${seriesId}`);
+      const match = episodes.find((e: any) => e.seasonNumber === seasonNumber && e.episodeNumber === episodeNumber);
+      if (match) episodeId = match.id;
+    }
+
     if (episodeId) {
       const q = await sonarrApi("queue?pageSize=200");
       const dupes = (q.records || []).filter((r: any) => r.episodeId === episodeId);
