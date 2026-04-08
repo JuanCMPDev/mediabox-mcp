@@ -12,6 +12,13 @@ async function pyloadLogin() {
   pyloadCsrf = html.match(/csrf-token" content="([^"]+)"/)?.[1] || null;
 }
 
+export async function pyloadCall(method_name: string, ...args: any[]): Promise<any> {
+  // PyLoad-NG API: positional args as URL path segments
+  const encoded = args.map(a => encodeURIComponent(typeof a === "string" ? `"${a}"` : JSON.stringify(a))).join("/");
+  const endpoint = encoded ? `${method_name}/${encoded}` : method_name;
+  return pyloadApi(endpoint);
+}
+
 export async function pyloadApi(endpoint: string, method: "GET" | "POST" = "GET", body?: Record<string, string>): Promise<any> {
   if (!pyloadCookie) await pyloadLogin();
   const headers: Record<string, string> = { Cookie: pyloadCookie! };
