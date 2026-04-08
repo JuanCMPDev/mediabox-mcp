@@ -44,28 +44,32 @@ export function registerDownloadTools(server: McpServer): void {
     // DELETE packages from PyLoad
     if (action === "delete") {
       if (!packageIds?.length) {
-        // List packages so the caller can pick IDs
         const queue = await pyloadApi("get_queue");
-        const collector = await pyloadApi("get_collector");
-        const all = [...(Array.isArray(queue) ? queue : []), ...(Array.isArray(collector) ? collector : [])];
-        return textResult({ message: "Provide packageIds to delete", packages: all.map((p: any) => ({ id: p.pid, name: p.name, status: p.statusmsg, links: p.links?.length })) });
+        const all = Array.isArray(queue) ? queue : [];
+        return textResult({ message: "Provide packageIds to delete", packages: all.map((p: any) => ({ id: p.pid, name: p.name, links: p.links?.length })) });
       }
-      for (const pid of packageIds) {
-        await pyloadApi("delete_packages", "POST", { pids: JSON.stringify([pid]) });
-      }
+      // PyLoad-NG expects pids as positional JSON arg in URL
+      await pyloadApi(`delete_packages/${JSON.stringify(packageIds)}`);
       return textResult({ message: `Deleted ${packageIds.length} package(s) from PyLoad` });
     }
 
     // STATUS
     if (action === "status") {
       const [status, queue] = await Promise.all([pyloadApi("status_server"), pyloadApi("get_queue")]);
+      // Also list actual folders in downloads dir so bot can find completed packages
+      let downloadFolders: string[] = [];
+      try {
+        const entries = await fs.readdir(DOWNLOADS_PATH, { withFileTypes: true });
+        downloadFolders = entries.map(e => e.name);
+      } catch {}
       return textResult({
         server: status,
-        queue: Array.isArray(queue) ? queue.map((p: any) => ({
+        packages: Array.isArray(queue) ? queue.map((p: any) => ({
           id: p.pid, name: p.name, folder: p.folder,
           links: p.links?.map((l: any) => ({ name: l.name, status: l.statusmsg, size: l.format_size })),
         })) : queue,
-        tip: "Package 'folder' is the packageFolder you need for organize. Package 'id' is what you need for delete.",
+        downloadFolders,
+        tip: "Use 'id' for action=delete. Use folder names from 'downloadFolders' as packageFolder for action=organize.",
       });
     }
 
