@@ -2,6 +2,16 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { sonarrApi, textResult } from "../helpers/api.js";
 
+async function resolveSeriesId(seriesId: number): Promise<number> {
+  // If seriesId looks like a tvdbId (high number), resolve to actual Sonarr ID
+  const allSeries = await sonarrApi("series");
+  const byId = allSeries.find((s: any) => s.id === seriesId);
+  if (byId) return seriesId;
+  const byTvdb = allSeries.find((s: any) => s.tvdbId === seriesId);
+  if (byTvdb) return byTvdb.id;
+  throw new Error(`Series ${seriesId} not found in Sonarr. Add it first with series_search.`);
+}
+
 export function registerSonarrTools(server: McpServer): void {
   server.registerTool("series_search", {
     description: "Search for a TV series and optionally add it to Sonarr for monitoring. Use searchNow=false to add without auto-downloading (lets you pick a release manually via series_releases + series_grab).",
@@ -33,7 +43,7 @@ export function registerSonarrTools(server: McpServer): void {
       if (searchNow) await sonarrApi("command", "POST", { name: "SeriesSearch", seriesId: existing.id });
       const queue = await sonarrApi("queue?pageSize=100");
       const activeDownloads = (queue.records || []).filter((r: any) => r.seriesId === existing.id).length;
-      return textResult({ message: `Updated "${existing.title}" monitoring`, id: existing.id, quality: profile.name, searchNow, activeDownloads: activeDownloads || undefined, warning: activeDownloads ? `${activeDownloads} downloads already active for this series. Use cancel_downloads to manage.` : undefined });
+      return textResult({ message: `Updated "${existing.title}" monitoring`, sonarrId: existing.id, tvdbId: addTvdbId, quality: profile.name, searchNow, activeDownloads: activeDownloads || undefined, warning: activeDownloads ? `${activeDownloads} downloads already active for this series. Use cancel_downloads to manage.` : undefined, tip: "Use sonarrId (not tvdbId) for series_releases, series_grab, and series_status episodes view." });
     }
 
     const lookup = await sonarrApi(`series/lookup?term=tvdb:${addTvdbId}`);
@@ -48,19 +58,41 @@ export function registerSonarrTools(server: McpServer): void {
       await sonarrApi(`series/${result.id}`, "PUT", added);
     }
     if (searchNow) await sonarrApi("command", "POST", { name: "SeriesSearch", seriesId: result.id });
-    return textResult({ message: `Added "${result.title}" (${result.year})`, id: result.id, rootFolder, quality: profile.name, searchNow, monitoring: seasons ? `Seasons ${seasons.join(",")}` : monitor });
+    return textResult({ message: `Added "${result.title}" (${result.year})`, sonarrId: result.id, tvdbId: addTvdbId, rootFolder, quality: profile.name, searchNow, monitoring: seasons ? `Seasons ${seasons.join(",")}` : monitor, tip: "Use sonarrId (not tvdbId) for series_releases, series_grab, and series_status episodes view." });
   });
 
   server.registerTool("series_status", {
-    description: "View monitored series, calendar, missing episodes, queue, or download history",
+    description: "View monitored series, calendar, missing episodes, queue, download history, or list episodes of a specific series/season.",
     inputSchema: {
-      view: z.enum(["series", "calendar", "missing", "queue", "history"]).default("series"),
+      view: z.enum(["series", "episodes", "calendar", "missing", "queue", "history"]).default("series").describe("Use 'episodes' with seriesId to list all episodes of a series"),
+      seriesId: z.number().optional().describe("Sonarr series ID (or tvdbId — auto-resolved). Required for 'episodes' view."),
+      seasonNumber: z.number().optional().describe("Filter episodes by season number (for 'episodes' view)"),
       limit: z.number().default(20),
     },
-  }, async ({ view, limit }) => {
+  }, async ({ view, seriesId, seasonNumber, limit }) => {
     if (view === "series") {
       const series = await sonarrApi("series");
-      return textResult(series.map((s: any) => ({ id: s.id, title: s.title, year: s.year, monitored: s.monitored, seasons: s.seasonCount, episodes: `${s.episodeFileCount}/${s.episodeCount}`, size: `${((s.statistics?.sizeOnDisk || 0) / 1073741824).toFixed(1)}GB`, root: s.rootFolderPath })));
+      return textResult(series.map((s: any) => ({ sonarrId: s.id, tvdbId: s.tvdbId, title: s.title, year: s.year, monitored: s.monitored, seasons: s.seasonCount, episodes: `${s.episodeFileCount}/${s.episodeCount}`, size: `${((s.statistics?.sizeOnDisk || 0) / 1073741824).toFixed(1)}GB`, root: s.rootFolderPath })));
+    }
+    if (view === "episodes") {
+      if (!seriesId) throw new Error("seriesId required for episodes view");
+      const resolved = await resolveSeriesId(seriesId);
+      const episodes = await sonarrApi(`episode?seriesId=${resolved}`);
+      let filtered = episodes;
+      if (seasonNumber !== undefined) filtered = episodes.filter((e: any) => e.seasonNumber === seasonNumber);
+      return textResult({
+        seriesId: resolved,
+        totalEpisodes: filtered.length,
+        episodes: filtered.map((e: any) => ({
+          episodeId: e.id,
+          season: e.seasonNumber,
+          episode: e.episodeNumber,
+          title: e.title,
+          airDate: e.airDate,
+          hasFile: e.hasFile,
+          monitored: e.monitored,
+        })),
+      });
     }
     if (view === "calendar") {
       const now = new Date(), end = new Date(now.getTime() + 14 * 86400_000);
@@ -85,20 +117,23 @@ export function registerSonarrTools(server: McpServer): void {
       seriesId: z.number(), deleteFiles: z.boolean().default(false),
     },
   }, async ({ seriesId, deleteFiles }) => {
-    const s = await sonarrApi(`series/${seriesId}`);
-    await sonarrApi(`series/${seriesId}?deleteFiles=${deleteFiles}`, "DELETE");
+    const resolved = await resolveSeriesId(seriesId);
+    const s = await sonarrApi(`series/${resolved}`);
+    await sonarrApi(`series/${resolved}?deleteFiles=${deleteFiles}`, "DELETE");
     return textResult({ message: `Removed "${s.title}"${deleteFiles ? " + files" : ""}` });
   });
 
   server.registerTool("series_releases", {
-    description: "Search available torrent releases for an episode or season. You can pass seriesId + seasonNumber + episodeNumber to look up a specific episode (the tool resolves the internal episodeId automatically).",
+    description: "Search available torrent releases for an episode or season. You can pass seriesId + seasonNumber + episodeNumber to look up a specific episode (the tool resolves the internal episodeId automatically). seriesId can be a Sonarr ID or tvdbId — both are auto-resolved.",
     inputSchema: {
       episodeId: z.number().optional().describe("Sonarr internal episode ID (if you already have it)"),
-      seriesId: z.number().optional().describe("Series ID (use with seasonNumber for full season, or add episodeNumber for a specific episode)"),
+      seriesId: z.number().optional().describe("Sonarr series ID or tvdbId (auto-resolved). Use with seasonNumber for full season, or add episodeNumber for a specific episode."),
       seasonNumber: z.number().optional(),
       episodeNumber: z.number().optional().describe("Episode number within the season (e.g. 6 for S04E06). Requires seriesId and seasonNumber."),
     },
   }, async ({ episodeId, seriesId, seasonNumber, episodeNumber }) => {
+    if (seriesId) seriesId = await resolveSeriesId(seriesId);
+
     // Resolve episodeId from seriesId + seasonNumber + episodeNumber
     if (!episodeId && seriesId && seasonNumber !== undefined && episodeNumber !== undefined) {
       const episodes = await sonarrApi(`episode?seriesId=${seriesId}`);
@@ -122,15 +157,17 @@ export function registerSonarrTools(server: McpServer): void {
   });
 
   server.registerTool("series_grab", {
-    description: "Download a specific torrent release for a series episode. Automatically cancels any existing download for the same episode to avoid duplicates. Pass episodeId directly, or seriesId + seasonNumber + episodeNumber to resolve it.",
+    description: "Download a specific torrent release for a series episode. Automatically cancels any existing download for the same episode to avoid duplicates. seriesId can be Sonarr ID or tvdbId — both auto-resolved.",
     inputSchema: {
       guid: z.string(), indexerId: z.number(),
       episodeId: z.number().optional().describe("Sonarr internal episode ID — if provided, cancels any active download for this episode before grabbing"),
-      seriesId: z.number().optional().describe("Series ID (used with seasonNumber + episodeNumber to resolve episodeId)"),
+      seriesId: z.number().optional().describe("Sonarr series ID or tvdbId (used with seasonNumber + episodeNumber to resolve episodeId)"),
       seasonNumber: z.number().optional(),
       episodeNumber: z.number().optional().describe("Episode number within the season"),
     },
   }, async ({ guid, indexerId, episodeId, seriesId, seasonNumber, episodeNumber }) => {
+    if (seriesId) seriesId = await resolveSeriesId(seriesId);
+
     // Resolve episodeId from seriesId + seasonNumber + episodeNumber
     if (!episodeId && seriesId && seasonNumber !== undefined && episodeNumber !== undefined) {
       const episodes = await sonarrApi(`episode?seriesId=${seriesId}`);
