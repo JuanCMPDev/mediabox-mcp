@@ -1,0 +1,21 @@
+# Dependencies & build output
+node_modules/
+dist/
+
+# Environment
+.env
+
+# Media & runtime data (local only)
+media/
+downloads/
+config/
+Peliculas/
+Series/
+
+# IDE & OS
+.claude/
+.vscode/
+.idea/
+*.swp
+.DS_Store
+Thumbs.db

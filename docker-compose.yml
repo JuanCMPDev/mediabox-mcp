@@ -1,0 +1,223 @@
+###############################################################################
+# Mediabox MCP — Docker Compose
+# Full media server stack with AI-powered management via MCP
+###############################################################################
+
+networks:
+  mediabox-net:
+    driver: bridge
+
+services:
+  # =========================================================================
+  # JELLYFIN — Open-source media streaming server
+  # =========================================================================
+  jellyfin:
+    image: lscr.io/linuxserver/jellyfin:latest
+    container_name: jellyfin
+    networks:
+      - mediabox-net
+    ports:
+      - "8096:8096"
+      - "8920:8920"
+      - "7359:7359/udp"
+      - "1900:1900/udp"
+    environment:
+      - PUID=1000
+      - PGID=1000
+      - TZ=${TZ:-UTC}
+    volumes:
+      - ./config/jellyfin:/config
+      - ./media/movies:/data/movies
+      - ./media/tv:/data/tv
+      - ./media/music:/data/music
+      - ./media/anime:/data/anime
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 4G
+
+  # =========================================================================
+  # MCP SERVER — AI tool server for media management
+  # =========================================================================
+  mcp-server:
+    build: ./mcp-server
+    container_name: mcp-server
+    networks:
+      - mediabox-net
+    ports:
+      - "3000:3000"
+    environment:
+      - TZ=${TZ:-UTC}
+      - JELLYFIN_URL=http://jellyfin:8096
+      - JELLYFIN_API_KEY=${JELLYFIN_API_KEY}
+      - MEDIA_PATH=/data
+      - PORT=3000
+      - PUBLIC_URL=${MCP_PUBLIC_URL}
+      - MCP_AUTH_SECRET=${MCP_AUTH_SECRET}
+      - PYLOAD_URL=http://pyload:8000
+      - SONARR_URL=http://sonarr:8989
+      - SONARR_API_KEY=${SONARR_API_KEY}
+      - RADARR_URL=http://radarr:7878
+      - RADARR_API_KEY=${RADARR_API_KEY}
+      - INTERNAL_API_KEY=${INTERNAL_API_KEY}
+      - QBIT_URL=http://qbittorrent:8085
+      - QBIT_USER=admin
+      - QBIT_PASSWORD=${QBIT_PASSWORD}
+    volumes:
+      - ./media/movies:/data/movies
+      - ./media/tv:/data/tv
+      - ./media/music:/data/music
+      - ./media/anime:/data/anime
+      - ./downloads:/downloads
+    restart: unless-stopped
+    depends_on:
+      - jellyfin
+      - pyload
+
+  # =========================================================================
+  # PYLOAD — Universal file hoster downloader (Mega, MediaFire, etc.)
+  # =========================================================================
+  pyload:
+    image: lscr.io/linuxserver/pyload-ng:latest
+    container_name: pyload
+    networks:
+      - mediabox-net
+    ports:
+      - "8001:8000"
+    environment:
+      - PUID=1000
+      - PGID=1000
+      - TZ=${TZ:-UTC}
+    volumes:
+      - ./config/pyload:/config
+      - ./downloads:/downloads
+    restart: unless-stopped
+
+  # =========================================================================
+  # TELEGRAM BOT — MCP client with LLM integration (optional)
+  # =========================================================================
+  telegram-bot:
+    build: ./mcp-telegram-client
+    container_name: telegram-bot
+    networks:
+      - mediabox-net
+    environment:
+      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
+      - OPENROUTER_API_KEY=${OPENROUTER_API_KEY}
+      - MCP_SERVER_URL=http://mcp-server:3000/mcp
+      - OPENROUTER_MODEL=${OPENROUTER_MODEL:-openai/gpt-4o}
+      - ALLOWED_TELEGRAM_USERS=${ALLOWED_TELEGRAM_USERS}
+      - MCP_INTERNAL_API_KEY=${INTERNAL_API_KEY}
+    restart: unless-stopped
+    depends_on:
+      - mcp-server
+
+  # =========================================================================
+  # DOWNLOAD STACK — Automated media acquisition
+  # =========================================================================
+
+  qbittorrent:
+    image: lscr.io/linuxserver/qbittorrent:latest
+    container_name: qbittorrent
+    networks:
+      - mediabox-net
+    ports:
+      - "8085:8085"
+      - "6881:6881"
+      - "6881:6881/udp"
+    environment:
+      - PUID=1000
+      - PGID=1000
+      - TZ=${TZ:-UTC}
+      - WEBUI_PORT=8085
+    volumes:
+      - ./config/qbittorrent:/config
+      - ./downloads:/downloads
+    restart: unless-stopped
+
+  flaresolverr:
+    image: ghcr.io/flaresolverr/flaresolverr:latest
+    container_name: flaresolverr
+    networks:
+      - mediabox-net
+    ports:
+      - "8191:8191"
+    environment:
+      - LOG_LEVEL=info
+      - TZ=${TZ:-UTC}
+    restart: unless-stopped
+
+  prowlarr:
+    image: lscr.io/linuxserver/prowlarr:latest
+    container_name: prowlarr
+    networks:
+      - mediabox-net
+    ports:
+      - "9696:9696"
+    environment:
+      - PUID=1000
+      - PGID=1000
+      - TZ=${TZ:-UTC}
+    volumes:
+      - ./config/prowlarr:/config
+    restart: unless-stopped
+
+  radarr:
+    image: lscr.io/linuxserver/radarr:latest
+    container_name: radarr
+    networks:
+      - mediabox-net
+    ports:
+      - "7878:7878"
+    environment:
+      - PUID=1000
+      - PGID=1000
+      - TZ=${TZ:-UTC}
+    volumes:
+      - ./config/radarr:/config
+      - ./media/movies:/movies
+      - ./downloads:/downloads
+    restart: unless-stopped
+    depends_on:
+      - qbittorrent
+      - prowlarr
+
+  sonarr:
+    image: lscr.io/linuxserver/sonarr:latest
+    container_name: sonarr
+    networks:
+      - mediabox-net
+    ports:
+      - "8989:8989"
+    environment:
+      - PUID=1000
+      - PGID=1000
+      - TZ=${TZ:-UTC}
+    volumes:
+      - ./config/sonarr:/config
+      - ./media/tv:/tv
+      - ./media/anime:/anime
+      - ./downloads:/downloads
+    restart: unless-stopped
+    depends_on:
+      - qbittorrent
+      - prowlarr
+
+  # Uncomment to enable automatic subtitle downloads
+  # bazarr:
+  #   image: lscr.io/linuxserver/bazarr:latest
+  #   container_name: bazarr
+  #   networks:
+  #     - mediabox-net
+  #   ports:
+  #     - "6767:6767"
+  #   environment:
+  #     - PUID=1000
+  #     - PGID=1000
+  #     - TZ=${TZ:-UTC}
+  #   volumes:
+  #     - ./config/bazarr:/config
+  #     - ./media/movies:/movies
+  #     - ./media/tv:/tv
+  #   restart: unless-stopped

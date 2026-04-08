@@ -1,0 +1,14 @@
+export const JELLYFIN_URL = process.env.JELLYFIN_URL || "http://jellyfin:8096";
+export const API_KEY = process.env.JELLYFIN_API_KEY || "";
+export const MEDIA_PATH = process.env.MEDIA_PATH || "/data";
+export const DOWNLOADS_PATH = process.env.DOWNLOADS_PATH || "/downloads";
+export const PYLOAD_URL = process.env.PYLOAD_URL || "http://pyload:8000";
+export const SONARR_URL = process.env.SONARR_URL || "http://sonarr:8989";
+export const SONARR_API_KEY = process.env.SONARR_API_KEY || "";
+export const RADARR_URL = process.env.RADARR_URL || "http://radarr:7878";
+export const RADARR_API_KEY = process.env.RADARR_API_KEY || "";
+export const QBIT_URL = process.env.QBIT_URL || "http://qbittorrent:8085";
+export const QBIT_USER = process.env.QBIT_USER || "admin";
+export const QBIT_PASS = process.env.QBIT_PASSWORD || "";
+export const PORT = parseInt(process.env.PORT || "3000");
+export const PUBLIC_URL = process.env.PUBLIC_URL || `http://localhost:${PORT}`;
