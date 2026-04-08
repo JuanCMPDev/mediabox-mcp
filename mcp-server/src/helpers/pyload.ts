@@ -12,21 +12,29 @@ async function pyloadLogin() {
   pyloadCsrf = html.match(/csrf-token" content="([^"]+)"/)?.[1] || null;
 }
 
-export async function pyloadCall(method_name: string, ...args: any[]): Promise<any> {
-  // PyLoad-NG API: positional args as URL path segments
-  const encoded = args.map(a => encodeURIComponent(typeof a === "string" ? `"${a}"` : JSON.stringify(a))).join("/");
-  const endpoint = encoded ? `${method_name}/${encoded}` : method_name;
-  return pyloadApi(endpoint);
-}
-
-export async function pyloadApi(endpoint: string, method: "GET" | "POST" = "GET", body?: Record<string, string>): Promise<any> {
+async function ensureAuth(): Promise<Record<string, string>> {
   if (!pyloadCookie) await pyloadLogin();
   const headers: Record<string, string> = { Cookie: pyloadCookie! };
   if (pyloadCsrf) headers["X-CSRFToken"] = pyloadCsrf;
+  return headers;
+}
+
+export async function pyloadApiJson(endpoint: string, jsonBody: Record<string, any>): Promise<any> {
+  let headers = await ensureAuth();
+  headers["Content-Type"] = "application/json";
+  let res = await fetch(`${PYLOAD_URL}/api/${endpoint}`, { method: "POST", headers, body: JSON.stringify(jsonBody) });
+  if (res.status === 401 || res.status === 403) { await pyloadLogin(); headers = await ensureAuth(); headers["Content-Type"] = "application/json"; res = await fetch(`${PYLOAD_URL}/api/${endpoint}`, { method: "POST", headers, body: JSON.stringify(jsonBody) }); }
+  if (!res.ok) throw new Error(`PyLoad ${res.status}: ${await res.text()}`);
+  const text = await res.text();
+  try { return JSON.parse(text); } catch { return text; }
+}
+
+export async function pyloadApi(endpoint: string, method: "GET" | "POST" = "GET", body?: Record<string, string>): Promise<any> {
+  let headers = await ensureAuth();
   const opts: RequestInit = { method, headers };
   if (body) { headers["Content-Type"] = "application/x-www-form-urlencoded"; opts.body = new URLSearchParams(body); }
   let res = await fetch(`${PYLOAD_URL}/api/${endpoint}`, opts);
-  if (res.status === 401 || res.status === 403) { await pyloadLogin(); headers.Cookie = pyloadCookie!; if (pyloadCsrf) headers["X-CSRFToken"] = pyloadCsrf; res = await fetch(`${PYLOAD_URL}/api/${endpoint}`, { ...opts, headers }); }
+  if (res.status === 401 || res.status === 403) { await pyloadLogin(); headers = await ensureAuth(); if (body) { headers["Content-Type"] = "application/x-www-form-urlencoded"; } res = await fetch(`${PYLOAD_URL}/api/${endpoint}`, { ...opts, headers }); }
   if (!res.ok) throw new Error(`PyLoad ${res.status}: ${await res.text()}`);
   const text = await res.text();
   try { return JSON.parse(text); } catch { return text; }

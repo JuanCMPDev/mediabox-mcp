@@ -4,7 +4,7 @@ import fs from "fs/promises";
 import path from "path";
 import crypto from "crypto";
 import { jfApi, sonarrApi, radarrApi, textResult } from "../helpers/api.js";
-import { pyloadApi, pyloadCall } from "../helpers/pyload.js";
+import { pyloadApi, pyloadApiJson } from "../helpers/pyload.js";
 import { qbitApi } from "../helpers/qbittorrent.js";
 import { moveFile, isVideoFile, isArchiveFile, extractArchive, detectAndFixExtension } from "../helpers/files.js";
 import { startJob, jobs } from "../helpers/jobs.js";
@@ -84,23 +84,7 @@ export function registerDownloadTools(server: McpServer): void {
     // === DELETE ===
     if (action === "delete") {
       if (!packageIds?.length) return textResult({ error: "Provide packageIds to delete. Use action=status to see available IDs." });
-      const errors: string[] = [];
-      for (const pid of packageIds) {
-        try {
-          await pyloadCall("deletePackages", [pid]);
-        } catch (e: any) {
-          try {
-            await pyloadCall("delete_packages", [pid]);
-          } catch {
-            try {
-              await pyloadApi(`delete_packages/${encodeURIComponent(JSON.stringify([pid]))}`);
-            } catch {
-              errors.push(`Package ${pid}: ${e.message}`);
-            }
-          }
-        }
-      }
-      if (errors.length) return textResult({ message: `Deleted ${packageIds.length - errors.length}/${packageIds.length} packages`, errors });
+      await pyloadApiJson("deletePackages", { package_ids: packageIds });
       return textResult({ message: `Deleted ${packageIds.length} package(s) from PyLoad` });
     }
 
