@@ -146,14 +146,23 @@ export function registerLibraryTools(server: McpServer): void {
 
   // 7. RENAME EPISODES
   server.registerTool("rename_episodes", {
-    description: "Rename episode files to Jellyfin standard format. Searches recursively.",
+    description: "Rename episode files to Jellyfin standard format. Searches recursively. You can pass jellyfinItemId instead of showPath — the tool resolves the path from Jellyfin automatically. Use search_media first to find the item ID if needed.",
     inputSchema: {
-      showPath: z.string().describe("Path relative to media volume (e.g. 'anime/Samurai X')"),
-      showName: z.string().describe("Correct show name (e.g. 'Rurouni Kenshin')"),
+      showPath: z.string().optional().describe("Path relative to media volume (e.g. 'anime/Samurai X'). Optional if jellyfinItemId is provided."),
+      jellyfinItemId: z.string().optional().describe("Jellyfin item ID — resolves the file path automatically"),
+      showName: z.string().describe("Correct show name for renamed files (e.g. 'Rurouni Kenshin')"),
       seasonNumber: z.number().default(1),
       dryRun: z.boolean().default(true).describe("Preview changes without applying"),
     },
-  }, async ({ showPath, showName, seasonNumber, dryRun }) => {
+  }, async ({ showPath, jellyfinItemId, showName, seasonNumber, dryRun }) => {
+    if (!showPath && jellyfinItemId) {
+      const lookup = await jfApi(`/Items?ids=${jellyfinItemId}`);
+      const item = lookup.Items?.[0];
+      if (!item?.Path) throw new Error("Item not found or has no path");
+      const itemPath = item.Type === "Series" ? item.Path : path.dirname(item.Path);
+      showPath = path.relative(MEDIA_PATH, itemPath);
+    }
+    if (!showPath) throw new Error("Provide showPath or jellyfinItemId");
     const fullPath = path.join(MEDIA_PATH, showPath);
     const seasonPad = String(seasonNumber).padStart(2, "0");
     const seasonDir = path.join(fullPath, `Season ${seasonPad}`);
