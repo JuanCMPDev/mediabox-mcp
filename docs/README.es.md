@@ -169,7 +169,7 @@ mediabox-mcp/
 │       │   ├── pyload.ts       # PyLoad (sesión + CSRF)
 │       │   ├── files.ts        # Archivos, extracción, ffmpeg
 │       │   └── jobs.ts         # Sistema de tareas en segundo plano
-│       └── tools/              # 24 herramientas MCP
+│       └── tools/              # 25 herramientas MCP
 │           ├── register.ts     # Registro de herramientas
 │           ├── jellyfin.ts     # Estado, búsqueda, detalles
 │           ├── library.ts      # Archivos, renombrado, subtítulos

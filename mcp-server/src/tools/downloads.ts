@@ -6,7 +6,7 @@ import crypto from "crypto";
 import { jfApi, sonarrApi, radarrApi, textResult } from "../helpers/api.js";
 import { pyloadApi, pyloadApiJson } from "../helpers/pyload.js";
 import { qbitApi } from "../helpers/qbittorrent.js";
-import { moveFile, isVideoFile, isArchiveFile, extractArchive, detectAndFixExtension } from "../helpers/files.js";
+import { execFileAsync, moveFile, isVideoFile, isArchiveFile, extractArchive, detectAndFixExtension } from "../helpers/files.js";
 import { startJob, jobs } from "../helpers/jobs.js";
 import { MEDIA_PATH, DOWNLOADS_PATH } from "../config.js";
 
@@ -160,6 +160,99 @@ export function registerDownloadTools(server: McpServer): void {
       message: `Organizing "${packageFolder}" → ${libraryFolder}/${showName}`,
       jobId: job.id,
       note: "Use download_status action=status to see job progress (shown in activeJobs), or check_jobs with this jobId.",
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // DOWNLOAD DIRECT — aria2c/yt-dlp for direct URLs and video sites
+  // -------------------------------------------------------------------------
+  server.registerTool("download_direct", {
+    description: "Download a file from a direct URL (or YouTube/video site via yt-dlp) and optionally organize it into Jellyfin. Use this instead of download_add for direct HTTP links, Google Drive, and YouTube-supported sites. Runs as a background job.",
+    inputSchema: {
+      url: z.string().describe("Direct URL to download (HTTP link, YouTube, Google Drive, etc.)"),
+      showName: z.string().describe("Target name in Jellyfin (e.g. 'Tears of Steel (2012)')"),
+      libraryFolder: z.enum(["tv", "movies", "music", "anime"]).default("movies"),
+      seasonNumber: z.number().optional().describe("Season number (only for tv/anime)"),
+      episodeNumber: z.number().optional().describe("Starting episode number (only for tv/anime)"),
+    },
+  }, async ({ url, showName, libraryFolder, seasonNumber, episodeNumber }) => {
+    const isYtDlp = /youtu|vimeo|dailymotion|twitch|twitter|reddit/i.test(url);
+    const tmpDir = path.join("/tmp", `dl-${crypto.randomUUID().slice(0, 8)}`);
+
+    const job = startJob("download_direct", async (j) => {
+      await fs.mkdir(tmpDir, { recursive: true });
+
+      // Download
+      if (isYtDlp) {
+        j.message = `Downloading with yt-dlp...`;
+        await execFileAsync("yt-dlp", ["-o", `${tmpDir}/%(title)s.%(ext)s`, "--no-playlist", url], { timeout: 1800_000 });
+      } else {
+        j.message = `Downloading with aria2c...`;
+        await execFileAsync("aria2c", ["-d", tmpDir, "-x", "8", "-s", "8", "--file-allocation=none", url], { timeout: 1800_000 });
+      }
+
+      // Find downloaded files
+      const files = await fs.readdir(tmpDir);
+      if (!files.length) { j.message = "Download produced no files"; j.status = "failed"; return; }
+
+      // Determine destination
+      let destDir: string;
+      if (libraryFolder === "movies") {
+        destDir = path.join(MEDIA_PATH, "movies", showName);
+      } else {
+        const seasonPad = String(seasonNumber || 1).padStart(2, "0");
+        destDir = path.join(MEDIA_PATH, libraryFolder, showName, `Season ${seasonPad}`);
+      }
+      await fs.mkdir(destDir, { recursive: true });
+
+      // Move files
+      j.message = "Organizing files...";
+      const results: string[] = [];
+      const isMovie = libraryFolder === "movies";
+      const seasonPad = String(seasonNumber || 1).padStart(2, "0");
+      let epCounter = 0;
+
+      for (const file of files.sort()) {
+        const src = path.join(tmpDir, file);
+        const fixed = await detectAndFixExtension(src);
+
+        if (isArchiveFile(fixed)) {
+          const extractDir = path.join("/tmp", `extract-${crypto.randomUUID().slice(0, 8)}`);
+          await fs.mkdir(extractDir, { recursive: true });
+          j.message = `Extracting ${path.basename(fixed)}...`;
+          const vids = await extractArchive(fixed, extractDir);
+          for (const v of vids.sort()) {
+            const destName = isMovie
+              ? `${showName}${path.extname(v)}`
+              : `${showName} - S${seasonPad}E${String((episodeNumber || 1) + epCounter++).padStart(2, "0")}${path.extname(v)}`;
+            await moveFile(v, path.join(destDir, destName));
+            results.push(destName);
+          }
+          await fs.unlink(fixed).catch(() => {});
+          await fs.rm(extractDir, { recursive: true, force: true }).catch(() => {});
+        } else if (isVideoFile(fixed)) {
+          const destName = isMovie
+            ? `${showName}${path.extname(fixed)}`
+            : `${showName} - S${seasonPad}E${String((episodeNumber || 1) + epCounter++).padStart(2, "0")}${path.extname(fixed)}`;
+          await moveFile(fixed, path.join(destDir, destName));
+          results.push(destName);
+        } else {
+          // Non-video file (subtitle, nfo, etc.) — move as-is
+          await moveFile(fixed, path.join(destDir, path.basename(fixed)));
+          results.push(path.basename(fixed));
+        }
+      }
+
+      await fs.rm(tmpDir, { recursive: true, force: true }).catch(() => {});
+      await jfApi("/Library/Refresh", "POST");
+      j.message = `Done — ${results.length} file(s) added to ${libraryFolder}/${showName}`;
+      j.result = { destination: destDir, files: results };
+    });
+
+    return textResult({
+      message: `Downloading ${isYtDlp ? "via yt-dlp" : "via aria2c"} → ${libraryFolder}/${showName}`,
+      jobId: job.id,
+      note: "Use download_status action=status to see job progress, or check_jobs with this jobId.",
     });
   });
 

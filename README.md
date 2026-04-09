@@ -34,25 +34,25 @@
                    ▼
 ┌──────────────────────────────────────────────────────────┐
 │                   MCP Server (:3000)                     │
-│        24 tools · OAuth2 · Express · TypeScript          │
+│        25 tools · OAuth2 · Express · TypeScript          │
 └──┬──────────┬──────────┬──────────┬──────────┬───────────┘
    ▼          ▼          ▼          ▼          ▼
 Jellyfin   Sonarr    Radarr    qBittorrent   PyLoad
  :8096     :8989     :7878      :8085        :8000
    │          │          │          │
-   │       Prowlarr ◄───┘          │
-   │        :9696                  │
-   │          │                    │
-   │        ByParr                 │
-   │        :8191                  │
-   ▼                               ▼
+   │       Prowlarr  ◄───┘          │
+   │        :9696                   │
+   │          │                     │
+   │        ByParr                  │
+   │        :8191                   │
+   ▼                                ▼
 ┌──────────────────────────────────────────────────────────┐
 │                   Shared Media Volume                    │
 │           /data/movies · /data/tv · /data/anime          │
 └──────────────────────────────────────────────────────────┘
 ```
 
-### MCP Tools (24)
+### MCP Tools (25)
 
 | Category | Tools | Description |
 |----------|-------|-------------|
@@ -60,7 +60,7 @@ Jellyfin   Sonarr    Radarr    qBittorrent   PyLoad
 | **Library** | `manage_library` `manage_files` `rename_episodes` `fix_subtitles` | File ops, subtitle conversion, batch renaming |
 | **Sonarr** | `series_search` `series_status` `series_remove` `series_releases` `series_grab` | TV/anime management with auto ID resolution |
 | **Radarr** | `movie_search` `movie_status` `movie_remove` `movie_releases` `movie_grab` | Movie management with duplicate prevention |
-| **Downloads** | `download_add` `download_status` `cancel_downloads` | PyLoad, queue management, orphan cleanup |
+| **Downloads** | `download_add` `download_direct` `download_status` `cancel_downloads` | Direct URLs, PyLoad, queue management, orphan cleanup |
 | **Maintenance** | `optimize_media` `cleanup_server` `check_jobs` | Strip tracks, clean server, monitor jobs |
 
 ### Quick Start

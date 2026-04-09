@@ -271,14 +271,15 @@ const VIRTUAL_TOOLS: Record<string, VirtualToolDef> = {
   downloads: {
     name: "downloads",
     description:
-      "Manage downloads. PyLoad: add=send URLs, status=check PyLoad queue + download folders, organize=move completed to Jellyfin library (async for archives), delete_pyload=remove PyLoad packages by ID. Sonarr/Radarr/qBit: list_queue, cancel, purge, clean_orphans.",
+      "Manage downloads. direct=download from direct URL/YouTube/Google Drive and organize into Jellyfin (best for HTTP links). add=send to PyLoad for file hosters (Mega, MediaFire). status=check PyLoad queue + download folders. organize=move completed to Jellyfin. delete_pyload=remove PyLoad packages. Sonarr/Radarr/qBit: list_queue, cancel, purge, clean_orphans.",
     parameters: {
       type: "object",
       properties: {
         action: {
           type: "string",
-          enum: ["add", "status", "organize", "delete_pyload", "cancel", "purge", "clean_orphans", "list_queue"],
+          enum: ["direct", "add", "status", "organize", "delete_pyload", "cancel", "purge", "clean_orphans", "list_queue"],
         },
+        url: { type: "string", description: "Single URL for direct download (action=direct)" },
         urls: { type: "array", items: { type: "string" } },
         packageName: { type: "string", description: "Descriptive name for PyLoad download (becomes folder name)" },
         packageIds: { type: "array", items: { type: "number" }, description: "PyLoad package IDs to delete" },
@@ -558,6 +559,14 @@ async function executeVirtualTool(
       break;
 
     case "downloads":
+      if (action === "direct")
+        return callMCPSmart("download_direct", {
+          url: params.url,
+          showName: params.showName,
+          libraryFolder: params.libraryFolder,
+          seasonNumber: params.seasonNumber,
+          episodeNumber: params.episodeNumber,
+        });
       if (action === "add")
         return callMCPSmart("download_add", {
           urls: params.urls,
@@ -684,6 +693,7 @@ function isWriteCall(name: string, args: Record<string, unknown>): boolean {
     "fix_subtitles",
     "cleanup_server",
     "download_add",
+    "download_direct",
     "cancel_downloads",
     "rename_episodes",
   ]);

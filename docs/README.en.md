@@ -169,7 +169,7 @@ mediabox-mcp/
 │       │   ├── pyload.ts       # PyLoad (session + CSRF)
 │       │   ├── files.ts        # File ops, archive extraction, ffmpeg
 │       │   └── jobs.ts         # Background job system
-│       └── tools/              # 24 MCP tools
+│       └── tools/              # 25 MCP tools
 │           ├── register.ts     # Tool registry
 │           ├── jellyfin.ts     # Server status, search, details
 │           ├── library.ts      # File management, renaming, subtitles
