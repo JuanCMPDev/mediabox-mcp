@@ -10,5 +10,7 @@ export const RADARR_API_KEY = process.env.RADARR_API_KEY || "";
 export const QBIT_URL = process.env.QBIT_URL || "http://qbittorrent:8085";
 export const QBIT_USER = process.env.QBIT_USER || "admin";
 export const QBIT_PASS = process.env.QBIT_PASSWORD || "";
+export const PYLOAD_USER = process.env.PYLOAD_USER || "pyload";
+export const PYLOAD_PASS = process.env.PYLOAD_PASSWORD || "pyload";
 export const PORT = parseInt(process.env.PORT || "3000");
 export const PUBLIC_URL = process.env.PUBLIC_URL || `http://localhost:${PORT}`;

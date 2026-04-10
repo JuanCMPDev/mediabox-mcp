@@ -1,12 +1,35 @@
-import { PYLOAD_URL } from "../config.js";
+import { PYLOAD_URL, PYLOAD_USER, PYLOAD_PASS } from "../config.js";
 
 let pyloadCookie: string | null = null;
 let pyloadCsrf: string | null = null;
 
 async function pyloadLogin() {
-  const res = await fetch(`${PYLOAD_URL}/login`, { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body: new URLSearchParams({ do: "login", username: "pyload", password: "pyload" }), redirect: "manual" });
-  pyloadCookie = res.headers.get("set-cookie")?.split(";")[0] || null;
+  // Step 1: GET login page to obtain session cookie + CSRF token
+  const pageRes = await fetch(`${PYLOAD_URL}/login`);
+  const pageCookie = pageRes.headers.get("set-cookie")?.split(";")[0] || null;
+  const pageHtml = await pageRes.text();
+  const csrf = pageHtml.match(/csrf-token" content="([^"]+)"/)?.[1] || "";
+
+  // Step 2: POST login with CSRF token in the form body
+  const res = await fetch(`${PYLOAD_URL}/login`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/x-www-form-urlencoded",
+      ...(pageCookie ? { Cookie: pageCookie } : {}),
+    },
+    body: new URLSearchParams({
+      do: "login",
+      username: PYLOAD_USER,
+      password: PYLOAD_PASS,
+      _csrf_token: csrf,
+    }),
+    redirect: "manual",
+  });
+
+  pyloadCookie = res.headers.get("set-cookie")?.split(";")[0] || pageCookie;
   if (!pyloadCookie) throw new Error("PyLoad login failed");
+
+  // Step 3: Get dashboard to extract fresh CSRF for API calls
   const dash = await fetch(`${PYLOAD_URL}/dashboard`, { headers: { Cookie: pyloadCookie } });
   const html = await dash.text();
   pyloadCsrf = html.match(/csrf-token" content="([^"]+)"/)?.[1] || null;

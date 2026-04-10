@@ -56,6 +56,8 @@ services:
       - PUBLIC_URL=${MCP_PUBLIC_URL}
       - MCP_AUTH_SECRET=${MCP_AUTH_SECRET}
       - PYLOAD_URL=http://pyload:8000
+      - PYLOAD_USER=${PYLOAD_USER:-pyload}
+      - PYLOAD_PASSWORD=${PYLOAD_PASSWORD:-pyload}
       - SONARR_URL=http://sonarr:8989
       - SONARR_API_KEY=${SONARR_API_KEY}
       - RADARR_URL=http://radarr:7878
@@ -105,8 +107,10 @@ services:
     environment:
       - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
       - OPENROUTER_API_KEY=${OPENROUTER_API_KEY}
+      - GOOGLE_AI_API_KEY=${GOOGLE_AI_API_KEY}
+      - LLM_PROVIDER=${LLM_PROVIDER}
+      - LLM_MODEL=${LLM_MODEL:-openai/gpt-4o}
       - MCP_SERVER_URL=http://mcp-server:3000/mcp
-      - OPENROUTER_MODEL=${OPENROUTER_MODEL:-openai/gpt-4o}
       - ALLOWED_TELEGRAM_USERS=${ALLOWED_TELEGRAM_USERS}
       - MCP_INTERNAL_API_KEY=${INTERNAL_API_KEY}
     restart: unless-stopped
@@ -137,7 +141,7 @@ services:
     restart: unless-stopped
 
   flaresolverr:
-    image: ghcr.io/thephaseless/byparr:latest
+    image: ghcr.io/flaresolverr/flaresolverr:latest
     container_name: flaresolverr
     networks:
       - mediabox-net
