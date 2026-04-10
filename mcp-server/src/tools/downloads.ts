@@ -56,13 +56,15 @@ export function registerDownloadTools(server: McpServer): void {
     if (action === "status") {
       let pyloadQueue: any[] = [];
       let pyloadFinished: any[] = [];
+      let activeDownloads: any[] = [];
       let serverStatus: any = null;
       try {
-        const [queue, collector, status] = await Promise.all([
-          pyloadApi("get_queue"), pyloadApi("get_collector"), pyloadApi("statusServer"),
+        const [queue, collector, status, downloads] = await Promise.all([
+          pyloadApi("get_queue"), pyloadApi("get_collector"), pyloadApi("statusServer"), pyloadApi("statusDownloads"),
         ]);
         pyloadQueue = Array.isArray(queue) ? queue : [];
         pyloadFinished = Array.isArray(collector) ? collector : [];
+        activeDownloads = Array.isArray(downloads) ? downloads : [];
         serverStatus = status;
       } catch {}
 
@@ -76,12 +78,25 @@ export function registerDownloadTools(server: McpServer): void {
       const activeJobs: any[] = [];
       jobs.forEach((j) => { if (j.type === "organize_downloads") activeJobs.push({ id: j.id, status: j.status, message: j.message }); });
 
-      const mapPkg = (p: any, status: string) => ({
-        id: p.pid, name: p.name, status,
-        progress: p.sizetotal > 0 ? `${Math.round((p.sizedone / p.sizetotal) * 100)}%` : "0%",
-        size: p.sizetotal > 0 ? `${(p.sizetotal / 1048576).toFixed(0)}MB` : "unknown",
-        linksDone: `${p.linksdone}/${p.linkstotal}`,
-      });
+      // Build real-time download map from statusDownloads
+      const dlMap = new Map(activeDownloads.map((d: any) => [d.package_id, d]));
+
+      const mapPkg = (p: any) => {
+        const dl = dlMap.get(p.pid);
+        if (dl) return {
+          id: p.pid, name: p.name, status: "downloading",
+          fileName: dl.name, progress: `${dl.percent}%`,
+          speed: `${(dl.speed / 1048576).toFixed(1)}MB/s`,
+          eta: dl.format_eta, size: dl.format_size,
+        };
+        const done = p.linksdone === p.linkstotal && p.linkstotal > 0;
+        return {
+          id: p.pid, name: p.name,
+          status: done ? "finished" : "queued",
+          size: p.sizetotal > 0 ? `${(p.sizetotal / 1048576).toFixed(0)}MB` : "unknown",
+          linksDone: `${p.linksdone}/${p.linkstotal}`,
+        };
+      };
 
       return textResult({
         pyload: {
@@ -89,8 +104,11 @@ export function registerDownloadTools(server: McpServer): void {
           speed: serverStatus?.speed ? `${(serverStatus.speed / 1048576).toFixed(1)}MB/s` : "0",
           paused: serverStatus?.pause || false,
         },
-        activeDownloads: pyloadQueue.map((p: any) => mapPkg(p, p.sizedone > 0 && p.sizedone < p.sizetotal ? "downloading" : p.linksdone === p.linkstotal && p.linkstotal > 0 ? "finished" : "queued")),
-        finishedPackages: pyloadFinished.map((p: any) => mapPkg(p, "finished")),
+        activeDownloads: pyloadQueue.map(mapPkg),
+        finishedPackages: pyloadFinished.map((p: any) => ({
+          id: p.pid, name: p.name, status: "finished",
+          size: p.sizetotal > 0 ? `${(p.sizetotal / 1048576).toFixed(0)}MB` : "unknown",
+        })),
         downloadFolders,
         activeJobs: activeJobs.length ? activeJobs : undefined,
         help: "Wait until activeDownloads shows 'finished' before organizing. Use folder names from downloadFolders as packageFolder for organize.",
