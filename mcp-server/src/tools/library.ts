@@ -3,6 +3,7 @@ import { z } from "zod";
 import fs from "fs/promises";
 import path from "path";
 import { jfApi, sonarrApi, radarrApi, textResult } from "../helpers/api.js";
+import { pyloadApi, pyloadApiJson } from "../helpers/pyload.js";
 import { execFileAsync, moveFile, isVideoFile, extractEpisodeNumber, resolvePath } from "../helpers/files.js";
 import { startJob, estimateTime } from "../helpers/jobs.js";
 import { MEDIA_PATH } from "../config.js";
@@ -130,6 +131,17 @@ export function registerLibraryTools(server: McpServer): void {
             if (match) await radarrApi(`movie/${match.id}?deleteFiles=true`, "DELETE");
           } catch {}
         }
+
+        // Clean matching PyLoad packages (finished/failed leftovers)
+        try {
+          const nameLower = item.Name.toLowerCase();
+          for (const getter of ["get_queue", "get_collector"]) {
+            const pkgs = await pyloadApi(getter);
+            if (!Array.isArray(pkgs)) continue;
+            const matchIds = pkgs.filter((p: any) => p.name?.toLowerCase().includes(nameLower)).map((p: any) => p.pid);
+            if (matchIds.length) await pyloadApiJson("deletePackages", { package_ids: matchIds });
+          }
+        } catch {}
 
         await jfApi("/Library/Refresh", "POST");
         return textResult({ message: `Deleted "${item.Name}" (${item.Type}) from Jellyfin, Sonarr/Radarr, and disk` });

@@ -122,6 +122,9 @@ export function registerDownloadTools(server: McpServer): void {
       const startEp = episodeNumber || 1;
       let epCounter = 0;
 
+      const MIN_VIDEO_SIZE = 5 * 1024 * 1024; // 5MB — anything smaller is likely junk (HTML pages, broken downloads)
+      const skipped: string[] = [];
+
       for (const fp of allFiles.sort()) {
         j.message = `Processing ${path.basename(fp)}...`;
         const fixed = await detectAndFixExtension(fp);
@@ -132,6 +135,8 @@ export function registerDownloadTools(server: McpServer): void {
           const vids = await extractArchive(fixed, extractDir, archivePassword);
           vids.sort((a, b) => path.basename(a).localeCompare(path.basename(b)));
           for (const v of vids) {
+            const vStat = await fs.stat(v).catch(() => null);
+            if (!vStat || vStat.size < MIN_VIDEO_SIZE) { skipped.push(`${path.basename(v)} (too small: ${vStat ? Math.round(vStat.size / 1024) + 'KB' : '0'})`); continue; }
             const destName = isMovie
               ? `${showName}${path.extname(v)}`
               : `${showName} - S${seasonPad}E${String(startEp + epCounter++).padStart(2, "0")}${path.extname(v)}`;
@@ -141,6 +146,8 @@ export function registerDownloadTools(server: McpServer): void {
           await fs.unlink(fixed).catch(() => {});
           await fs.rm(extractDir, { recursive: true, force: true }).catch(() => {});
         } else if (isVideoFile(fixed)) {
+          const fStat = await fs.stat(fixed).catch(() => null);
+          if (!fStat || fStat.size < MIN_VIDEO_SIZE) { skipped.push(`${path.basename(fixed)} (too small: ${fStat ? Math.round(fStat.size / 1024) + 'KB' : '0'})`); continue; }
           const destName = isMovie
             ? `${showName}${path.extname(fixed)}`
             : `${showName} - S${seasonPad}E${String(startEp + epCounter++).padStart(2, "0")}${path.extname(fixed)}`;
@@ -149,7 +156,7 @@ export function registerDownloadTools(server: McpServer): void {
         }
       }
 
-      if (!results.length) { j.message = "No video files found after processing"; j.status = "failed"; return; }
+      if (!results.length) { j.message = `No valid video files found${skipped.length ? `. Skipped: ${skipped.join(', ')}` : ''}`; j.status = "failed"; return; }
       await fs.rm(searchDir, { recursive: true, force: true }).catch(() => {});
       await jfApi("/Library/Refresh", "POST");
       j.message = `Done — ${results.length} file(s) added to ${libraryFolder}/${showName}`;
