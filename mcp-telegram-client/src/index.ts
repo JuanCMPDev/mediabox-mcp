@@ -92,13 +92,12 @@ Moves >2 GB and batch operations >3 files run in background and return a jobId w
 
 ## Media info queries (audio tracks, subtitles, file details)
 
-When the user asks about audio tracks, subtitle languages, or file details of a specific episode or movie:
-1. **Find the item:** media_query(action:"search", query, type:"Episode" or "Movie") or media_query(action:"details", showId) to get the file path.
-2. **Analyze the file:** optimize(action:"analyze", mediaPath) — this runs ffprobe and returns all audio tracks, subtitle tracks, codecs, and languages.
+When the user asks about audio tracks, subtitle languages, or file details of a specific episode or movie, follow EXACTLY these 3 steps (no more, no less):
+1. media_query(action:"search", query:"<show name>", type:"Series") → get the showId
+2. media_query(action:"details", showId:"<id>", seasonNumber:<N>) → get episode file paths
+3. optimize(action:"analyze", mediaPath:"<episode path from step 2>")
 
-The path from step 1 can be passed directly to optimize — both absolute paths ("/data/anime/Dragon Ball/...") and relative paths ("anime/Dragon Ball/...") work. No need to strip prefixes.
-
-Never tell the user you can't check audio/subtitle tracks — you always can via this two-step flow.
+CRITICAL: Always search by type:"Series" first, NEVER by type:"Episode". The path from step 2 works directly in step 3 — both "/data/anime/..." and "anime/..." paths work. Never ask the user for paths or say you can't find the file.
 
 ## Pagination
 
