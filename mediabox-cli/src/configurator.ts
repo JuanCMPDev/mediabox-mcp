@@ -13,7 +13,6 @@ import * as sonarr from "./services/sonarr.js";
 import * as radarr from "./services/radarr.js";
 import { configureProwlarr, configureFlareSolverr } from "./services/prowlarr.js";
 import { verifyQbittorrent } from "./services/qbittorrent.js";
-import { configureArrAuth } from "./services/arr-auth.js";
 
 /**
  * Phase 4: Auto-configure all services via their APIs.
@@ -98,15 +97,6 @@ export async function autoConfigureServices(
       log.success(`Updated .env with ${Object.keys(updates).length} API keys`);
     }
   });
-
-  // ── 4.4b: Configure web UI auth for *arr services ───────────────────
-  await step("Configure *arr web UI auth", () =>
-    configureArrAuth(
-      { sonarr: keys.sonarrApiKey, radarr: keys.radarrApiKey, prowlarr: prowlarrApiKey },
-      answers.jellyfinUser,
-      answers.jellyfinPassword
-    )
-  );
 
   // ── 4.5/4.6: Configure download clients (parallel) ─────────────────
   const dlClientPromises: Promise<boolean>[] = [];
