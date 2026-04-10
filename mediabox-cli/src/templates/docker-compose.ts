@@ -1,0 +1,221 @@
+import { stringify } from "yaml";
+import type { WizardAnswers } from "../types.js";
+import { ensureRelative } from "../utils/paths.js";
+
+const GHCR_MCP_IMAGE = "ghcr.io/juancmpdev/mediabox-mcp:latest";
+const GHCR_TELEGRAM_IMAGE = "ghcr.io/juancmpdev/mediabox-telegram:latest";
+
+/** Environment array for the Telegram bot — varies by LLM provider */
+function buildTelegramEnv(answers: WizardAnswers): string[] {
+  const env = [
+    "TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}",
+    "MCP_SERVER_URL=http://mcp-server:3000/mcp",
+    "ALLOWED_TELEGRAM_USERS=${ALLOWED_TELEGRAM_USERS}",
+    "MCP_INTERNAL_API_KEY=${INTERNAL_API_KEY}",
+  ];
+
+  if (answers.llmProvider === "google") {
+    env.push(
+      "GOOGLE_AI_API_KEY=${GOOGLE_AI_API_KEY}",
+      "LLM_PROVIDER=google",
+    );
+  } else {
+    env.push(
+      "OPENROUTER_API_KEY=${OPENROUTER_API_KEY}",
+      "LLM_PROVIDER=openrouter",
+      "LLM_MODEL=${LLM_MODEL:-openai/gpt-4o}",
+    );
+  }
+
+  return env;
+}
+
+/** Environment array for LinuxServer containers */
+function lsEnv(answers: WizardAnswers): string[] {
+  const env = [`PUID=${answers.puid}`, `PGID=${answers.pgid}`, "TZ=${TZ:-UTC}"];
+  return env;
+}
+
+export function generateDockerCompose(answers: WizardAnswers): string {
+  const mov = ensureRelative(answers.mediaMovies);
+  const tv = ensureRelative(answers.mediaTv);
+  const anime = ensureRelative(answers.mediaAnime);
+  const music = ensureRelative(answers.mediaMusic);
+
+  const services: Record<string, any> = {};
+
+  // ── Jellyfin ──────────────────────────────────────────────────────────
+  services.jellyfin = {
+    image: "lscr.io/linuxserver/jellyfin:latest",
+    container_name: "jellyfin",
+    networks: ["mediabox-net"],
+    ports: ["8096:8096", "8920:8920", "7359:7359/udp", "1900:1900/udp"],
+    environment: lsEnv(answers),
+    volumes: [
+      "./config/jellyfin:/config",
+      `${mov}:/data/movies`,
+      `${tv}:/data/tv`,
+      `${music}:/data/music`,
+      `${anime}:/data/anime`,
+    ],
+    restart: "unless-stopped",
+    deploy: { resources: { limits: { memory: "4G" } } },
+  };
+
+  // ── MCP Server ────────────────────────────────────────────────────────
+  const mcpServer: Record<string, any> = {
+    container_name: "mcp-server",
+    networks: ["mediabox-net"],
+    ports: ["3000:3000"],
+    environment: [
+      "TZ=${TZ:-UTC}",
+      "JELLYFIN_URL=http://jellyfin:8096",
+      "JELLYFIN_API_KEY=${JELLYFIN_API_KEY}",
+      "MEDIA_PATH=/data",
+      "PORT=3000",
+      "PUBLIC_URL=${MCP_PUBLIC_URL}",
+      "MCP_AUTH_SECRET=${MCP_AUTH_SECRET}",
+      "PYLOAD_URL=http://pyload:8000",
+      "PYLOAD_USER=${PYLOAD_USER}",
+      "PYLOAD_PASSWORD=${PYLOAD_PASSWORD}",
+      "SONARR_URL=http://sonarr:8989",
+      "SONARR_API_KEY=${SONARR_API_KEY}",
+      "RADARR_URL=http://radarr:7878",
+      "RADARR_API_KEY=${RADARR_API_KEY}",
+      "INTERNAL_API_KEY=${INTERNAL_API_KEY}",
+      "QBIT_URL=http://qbittorrent:8085",
+      "QBIT_USER=admin",
+      "QBIT_PASSWORD=${QBIT_PASSWORD}",
+    ],
+    volumes: [
+      `${mov}:/data/movies`,
+      `${tv}:/data/tv`,
+      `${music}:/data/music`,
+      `${anime}:/data/anime`,
+      "./downloads:/downloads",
+    ],
+    restart: "unless-stopped",
+    depends_on: ["jellyfin", "pyload"],
+  };
+
+  if (answers.localBuild) {
+    mcpServer.build = "./mcp-server";
+  } else {
+    mcpServer.image = GHCR_MCP_IMAGE;
+  }
+  services["mcp-server"] = mcpServer;
+
+  // ── PyLoad ────────────────────────────────────────────────────────────
+  services.pyload = {
+    image: "lscr.io/linuxserver/pyload-ng:latest",
+    container_name: "pyload",
+    networks: ["mediabox-net"],
+    ports: ["8001:8000"],
+    environment: lsEnv(answers),
+    volumes: ["./config/pyload:/config", "./downloads:/downloads"],
+    restart: "unless-stopped",
+  };
+
+  // ── Telegram Bot (optional) ───────────────────────────────────────────
+  if (answers.enableTelegram) {
+    const telegramBot: Record<string, any> = {
+      container_name: "telegram-bot",
+      networks: ["mediabox-net"],
+      environment: buildTelegramEnv(answers),
+      restart: "unless-stopped",
+      depends_on: ["mcp-server"],
+    };
+
+    if (answers.localBuild) {
+      telegramBot.build = "./mcp-telegram-client";
+    } else {
+      telegramBot.image = GHCR_TELEGRAM_IMAGE;
+    }
+    services["telegram-bot"] = telegramBot;
+  }
+
+  // ── Download Stack ────────────────────────────────────────────────────
+  services.qbittorrent = {
+    image: "lscr.io/linuxserver/qbittorrent:latest",
+    container_name: "qbittorrent",
+    networks: ["mediabox-net"],
+    ports: ["8085:8085", "6881:6881", "6881:6881/udp"],
+    environment: [...lsEnv(answers), "WEBUI_PORT=8085"],
+    volumes: ["./config/qbittorrent:/config", "./downloads:/downloads"],
+    restart: "unless-stopped",
+  };
+
+  services.flaresolverr = {
+    image: "ghcr.io/flaresolverr/flaresolverr:latest",
+    container_name: "flaresolverr",
+    networks: ["mediabox-net"],
+    ports: ["8191:8191"],
+    environment: ["LOG_LEVEL=info", "TZ=${TZ:-UTC}"],
+    restart: "unless-stopped",
+  };
+
+  services.prowlarr = {
+    image: "lscr.io/linuxserver/prowlarr:latest",
+    container_name: "prowlarr",
+    networks: ["mediabox-net"],
+    ports: ["9696:9696"],
+    environment: lsEnv(answers),
+    volumes: ["./config/prowlarr:/config"],
+    restart: "unless-stopped",
+  };
+
+  services.radarr = {
+    image: "lscr.io/linuxserver/radarr:latest",
+    container_name: "radarr",
+    networks: ["mediabox-net"],
+    ports: ["7878:7878"],
+    environment: lsEnv(answers),
+    volumes: [`./config/radarr:/config`, `${mov}:/movies`, "./downloads:/downloads"],
+    restart: "unless-stopped",
+    depends_on: ["qbittorrent", "prowlarr"],
+  };
+
+  services.sonarr = {
+    image: "lscr.io/linuxserver/sonarr:latest",
+    container_name: "sonarr",
+    networks: ["mediabox-net"],
+    ports: ["8989:8989"],
+    environment: lsEnv(answers),
+    volumes: [
+      "./config/sonarr:/config",
+      `${tv}:/tv`,
+      `${anime}:/anime`,
+      "./downloads:/downloads",
+    ],
+    restart: "unless-stopped",
+    depends_on: ["qbittorrent", "prowlarr"],
+  };
+
+  // ── Bazarr (optional) ─────────────────────────────────────────────────
+  if (answers.enableBazarr) {
+    services.bazarr = {
+      image: "lscr.io/linuxserver/bazarr:latest",
+      container_name: "bazarr",
+      networks: ["mediabox-net"],
+      ports: ["6767:6767"],
+      environment: lsEnv(answers),
+      volumes: [`./config/bazarr:/config`, `${mov}:/movies`, `${tv}:/tv`],
+      restart: "unless-stopped",
+    };
+  }
+
+  const compose = {
+    networks: { "mediabox-net": { driver: "bridge" } },
+    services,
+  };
+
+  const header = [
+    "###############################################################################",
+    "# Mediabox MCP — Docker Compose",
+    "# Generated by create-mediabox CLI",
+    "###############################################################################",
+    "",
+  ].join("\n");
+
+  return header + stringify(compose, { lineWidth: 0 });
+}
