@@ -96,9 +96,20 @@ When the user asks about audio tracks, subtitle languages, or file details of a 
 1. **Find the item:** media_query(action:"search", query, type:"Episode" or "Movie") or media_query(action:"details", showId) to get the file path.
 2. **Analyze the file:** optimize(action:"analyze", mediaPath) — this runs ffprobe and returns all audio tracks, subtitle tracks, codecs, and languages.
 
-The path from step 1 is a full path like "/data/anime/Dragon Ball/Season 01/...mkv". For optimize, use the path relative to the media volume: strip "/data/" prefix → "anime/Dragon Ball/Season 01/...mkv".
+The path from step 1 can be passed directly to optimize — both absolute paths ("/data/anime/Dragon Ball/...") and relative paths ("anime/Dragon Ball/...") work. No need to strip prefixes.
 
 Never tell the user you can't check audio/subtitle tracks — you always can via this two-step flow.
+
+## Pagination
+
+Tools that return large lists support pagination. When a response includes pagination info (page, totalPages, totalItems), check if there are more pages. If you need data from subsequent pages, call the tool again with the next page number.
+
+- **media_query(action:"details")**: For large series (many seasons/episodes), use seasonNumber to get one season at a time, or page/pageSize to paginate. Default is 50 episodes per page.
+- **media_query(action:"search")**: Use offset to paginate (offset=0 is first page, offset=50 for next, etc). Check pagination.hasMore.
+- **series(action:"status", view:"episodes")**: Use page/pageSize. Default 50 episodes per page.
+- **series(action:"status", view:"series")**: Paginated if you have many monitored series.
+
+When the user asks about a large series (e.g. Dragon Ball with 275+ episodes), fetch by season instead of all at once to avoid truncated responses.
 
 ## Maintenance
 
@@ -150,7 +161,7 @@ const VIRTUAL_TOOLS: Record<string, VirtualToolDef> = {
   media_query: {
     name: "media_query",
     description:
-      "Search or list Jellyfin content, or get details of a specific item. action:'search' to find/list media (omit query to list all). action:'details' for seasons/episodes of a series.",
+      "Search or list Jellyfin content, or get details of a specific item. action:'search' to find/list media (omit query to list all, use offset to paginate). action:'details' for seasons/episodes of a series (use seasonNumber to filter one season, page/pageSize to paginate episodes).",
     parameters: {
       type: "object",
       properties: {
@@ -164,7 +175,11 @@ const VIRTUAL_TOOLS: Record<string, VirtualToolDef> = {
           type: "string",
           description: "Jellyfin item ID (for details)",
         },
+        seasonNumber: { type: "number", description: "Filter details to this season only (recommended for large series)" },
         limit: { type: "number" },
+        offset: { type: "number", description: "Skip N results for search pagination" },
+        page: { type: "number", description: "Page number for details pagination (default 1)" },
+        pageSize: { type: "number", description: "Episodes per page for details (default 50)" },
       },
       required: ["action"],
     },
@@ -239,6 +254,8 @@ const VIRTUAL_TOOLS: Record<string, VirtualToolDef> = {
         seriesId: { type: "number", description: "Sonarr series ID or tvdbId (auto-resolved)" },
         seasonNumber: { type: "number" },
         episodeNumber: { type: "number", description: "Episode number (for releases/grab)" },
+        page: { type: "number", description: "Page number for episodes/series view (default 1)" },
+        pageSize: { type: "number", description: "Items per page for episodes/series view (default 50)" },
         episodeId: { type: "number" },
         guid: { type: "string" },
         indexerId: { type: "number" },
@@ -319,7 +336,7 @@ const VIRTUAL_TOOLS: Record<string, VirtualToolDef> = {
         action: { type: "string", enum: ["analyze", "optimize", "fix_subs"] },
         mediaPath: {
           type: "string",
-          description: "Path relative to media volume",
+          description: "Path to media (relative like 'anime/Show' or absolute like '/data/anime/Show' — both work)",
         },
         keepAudioLangs: {
           type: "array",
@@ -498,8 +515,18 @@ async function executeVirtualTool(
 
     case "media_query":
       if (action === "details")
-        return callMCPSmart("show_details", { showId: params.showId });
-      return callMCPSmart("search_media", params);
+        return callMCPSmart("show_details", {
+          showId: params.showId,
+          seasonNumber: params.seasonNumber,
+          page: params.page,
+          pageSize: params.pageSize,
+        });
+      return callMCPSmart("search_media", {
+        query: params.query,
+        type: params.type,
+        limit: params.limit,
+        offset: params.offset,
+      });
 
     case "library_ops":
       if (action === "scan")
@@ -531,6 +558,8 @@ async function executeVirtualTool(
           view: params.view || "series",
           seriesId: params.seriesId,
           seasonNumber: params.seasonNumber,
+          page: params.page,
+          pageSize: params.pageSize,
           limit: params.limit,
         });
       if (action === "remove")
