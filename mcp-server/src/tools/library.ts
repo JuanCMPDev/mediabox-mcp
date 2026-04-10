@@ -103,9 +103,15 @@ export function registerLibraryTools(server: McpServer): void {
     }
     if (action === "delete") {
       if (jellyfinItemId) {
-        const lookup = await jfApi(`/Items?ids=${jellyfinItemId}`);
+        const lookup = await jfApi(`/Items?ids=${jellyfinItemId}&Fields=Path`);
         const item = lookup.Items?.[0];
         if (!item) throw new Error("Item not found");
+
+        // Delete files from disk BEFORE removing from Jellyfin
+        if (item.Path) {
+          const dir = item.Type === "Series" || item.Type === "BoxSet" ? item.Path : path.dirname(item.Path);
+          await fs.rm(dir, { recursive: true, force: true });
+        }
 
         await jfApi(`/Items/${jellyfinItemId}`, "DELETE").catch(() => {});
 
@@ -123,11 +129,6 @@ export function registerLibraryTools(server: McpServer): void {
             const match = radarrMovies.find((m: any) => m.title === item.Name || item.Path?.includes(m.path));
             if (match) await radarrApi(`movie/${match.id}?deleteFiles=true`, "DELETE");
           } catch {}
-        }
-
-        if (item.Path) {
-          const dir = item.Type === "Series" || item.Type === "BoxSet" ? item.Path : path.dirname(item.Path);
-          await fs.rm(dir, { recursive: true, force: true }).catch(() => {});
         }
 
         await jfApi("/Library/Refresh", "POST");
