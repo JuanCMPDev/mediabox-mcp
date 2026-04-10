@@ -65,6 +65,8 @@ When choosing releases, use this priority (higher = better):
 
 Score >= 200 triggers immediate grab (bypasses the 15-min delay). Always prefer the highest-scoring release that meets quality and size requirements. Tiebreaker order: language score > quality > smallest size > most seeders.
 
+CRITICAL: NEVER grab a release with 0 seeders — it will never download. If all available releases have 0 seeders, tell the user no viable releases were found instead of grabbing a dead torrent.
+
 ## Download flows
 
 ### Adding and downloading series
