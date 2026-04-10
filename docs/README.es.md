@@ -17,12 +17,35 @@ En vez de navegar múltiples interfaces web, simplemente dices *"descarga la úl
 ## Requisitos
 
 - Docker y Docker Compose
+- Node.js >= 20
 - Un VPS o máquina local con al menos 4GB de RAM
-- Un dominio (para HTTPS y OAuth del MCP)
+- Un dominio (opcional, para HTTPS y OAuth del MCP)
 
 ## Instalación
 
-### 1. Clonar y configurar
+### Opción A: Setup automatizado (recomendado)
+
+```bash
+npx create-mediabox
+```
+
+El CLI interactivo va a:
+1. Preguntar tus preferencias (rutas de media, credenciales, timezone, integraciones opcionales)
+2. Generar los archivos de configuración e iniciar los contenedores Docker
+3. Auto-configurar todas las conexiones entre servicios (API keys, clientes de descarga, bibliotecas, etc.)
+
+Usa `--local-build` para compilar el servidor MCP y el bot de Telegram desde el código fuente en vez de descargar imágenes pre-compiladas.
+
+Usa `--generate-only` para generar los archivos sin iniciar Docker (útil para inspeccionar antes de ejecutar).
+
+Después del setup, el único paso manual es agregar tus indexadores de torrents en Prowlarr (`http://localhost:9696`).
+
+### Opción B: Setup manual
+
+<details>
+<summary>Clic para expandir los pasos de instalación manual</summary>
+
+#### 1. Clonar y configurar
 
 ```bash
 git clone https://github.com/JuanCMPDev/mediabox-mcp.git
@@ -30,103 +53,61 @@ cd mediabox-mcp
 cp .env.example .env
 ```
 
-Deja el `.env` casi vacío por ahora — irás llenando las API keys a medida que configures cada servicio.
-
-### 2. Levantar el stack
+#### 2. Levantar el stack
 
 ```bash
 docker compose up -d
 ```
 
-La primera ejecución construirá las imágenes del MCP server y el bot de Telegram. Todos los servicios arrancarán, pero aún no estarán conectados entre sí.
-
-### 3. Configurar Jellyfin
+#### 3. Configurar Jellyfin
 
 1. Abre `http://tu-servidor:8096`
-2. Completa el wizard — crea tu usuario admin, idioma, etc.
+2. Completa el wizard — crea tu usuario admin
 3. Agrega bibliotecas apuntando a `/data/movies`, `/data/tv`, `/data/anime`
 4. Ve a **Dashboard > API Keys > +** y crea una nueva API key
 5. Copia la key a tu `.env` como `JELLYFIN_API_KEY`
 
-### 4. Configurar qBittorrent
+#### 4. Configurar qBittorrent
 
 1. Abre `http://tu-servidor:8085`
 2. Login por defecto: `admin` / revisa los logs para la contraseña inicial:
    ```bash
    docker logs qbittorrent 2>&1 | grep "temporary password"
    ```
-3. Ve a **Settings > Web UI** y cambia la contraseña
-4. Ve a **Settings > Downloads** y configura el path de descarga como `/downloads`
-5. Copia tu nueva contraseña al `.env` como `QBIT_PASSWORD`
+3. Cambia la contraseña en **Settings > Web UI**
+4. Copia tu nueva contraseña al `.env` como `QBIT_PASSWORD`
 
-### 5. Configurar Prowlarr
+#### 5. Configurar Prowlarr
 
 1. Abre `http://tu-servidor:9696`
-2. Completa el wizard de configuración
-3. Ve a **Settings > Indexers** y agrega tus indexadores de torrents
-4. Ve a **Settings > Apps** y agrega conexiones para:
-   - **Sonarr:** URL `http://sonarr:8989`, API key de Sonarr (siguiente paso)
-   - **Radarr:** URL `http://radarr:7878`, API key de Radarr (siguiente paso)
-5. Ve a **Settings > Indexer Proxies > +** y agrega un proxy **FlareSolverr**:
-   - Tag: `flaresolverr`
+2. Agrega tus indexadores de torrents en **Settings > Indexers**
+3. Agrega Sonarr/Radarr en **Settings > Apps** (usa sus API keys de los siguientes pasos)
+4. Agrega el proxy FlareSolverr: **Settings > Indexer Proxies > +**
    - Host: `http://flaresolverr:8191`
-   - (En realidad es [ByParr](https://github.com/ThePhaseless/Byparr) corriendo como reemplazo compatible de FlareSolverr)
 
-### 6. Configurar Sonarr (Series/Anime)
+#### 6. Configurar Sonarr
 
 1. Abre `http://tu-servidor:8989`
-2. Ve a **Settings > General** — copia la API key al `.env` como `SONARR_API_KEY`
-3. Ve a **Settings > Media Management > Root Folders** y agrega:
-   - `/tv` para series
-   - `/anime` para anime
-4. Ve a **Settings > Download Clients > +** y agrega **qBittorrent**:
-   - Host: `qbittorrent`, Puerto: `8085`
-   - Usuario: `admin`, Contraseña: tu contraseña de qBit
+2. Copia la API key de **Settings > General** al `.env` como `SONARR_API_KEY`
+3. Agrega root folders: `/tv` y `/anime`
+4. Agrega qBittorrent como cliente de descarga (host: `qbittorrent`, port: `8085`)
 
-### 7. Configurar Radarr (Películas)
+#### 7. Configurar Radarr
 
 1. Abre `http://tu-servidor:7878`
-2. Ve a **Settings > General** — copia la API key al `.env` como `RADARR_API_KEY`
-3. Ve a **Settings > Media Management > Root Folders** y agrega `/movies`
-4. Ve a **Settings > Download Clients > +** y agrega **qBittorrent**:
-   - Host: `qbittorrent`, Puerto: `8085`
-   - Usuario: `admin`, Contraseña: tu contraseña de qBit
+2. Copia la API key de **Settings > General** al `.env` como `RADARR_API_KEY`
+3. Agrega root folder: `/movies`
+4. Agrega qBittorrent como cliente de descarga
 
-### 8. Sincronizar Prowlarr con Sonarr/Radarr
+#### 8. Configurar el servidor MCP
 
-Vuelve a Prowlarr (**Settings > Apps**) y llena las API keys que copiaste de Sonarr y Radarr. Haz clic en **Test** en cada una para confirmar la conexión.
-
-### 9. Configurar el servidor MCP
-
-Llena los valores restantes del `.env`:
-
-```env
-TZ=UTC
-
-JELLYFIN_API_KEY=<del paso 3>
-SONARR_API_KEY=<del paso 6>
-RADARR_API_KEY=<del paso 7>
-QBIT_PASSWORD=<del paso 4>
-
-MCP_PUBLIC_URL=https://tu-dominio.com
-MCP_AUTH_SECRET=<cualquier cadena aleatoria>
-INTERNAL_API_KEY=<cualquier cadena aleatoria>
-```
-
-Luego reinicia el stack:
+Llena tu `.env` y reinicia:
 
 ```bash
 docker compose up -d
 ```
 
-Verifica que el servidor MCP esté corriendo:
-
-```bash
-curl https://tu-dominio.com/health
-# → {"status":"ok","name":"mediabox-mcp","version":"0.4.0-beta"}
-```
-
-### 10. Conectar un cliente de IA
+#### 9. Conectar un cliente de IA
 
 **Claude Desktop / claude.ai:**
 
@@ -142,15 +123,16 @@ curl https://tu-dominio.com/health
 
 **Bot de Telegram (opcional):**
 
-1. Crea un bot con [@BotFather](https://t.me/BotFather) en Telegram
-2. Obtén una API key de [OpenRouter](https://openrouter.ai/) o [Google AI Studio](https://aistudio.google.com/)
-3. Agrega al `.env`:
-   ```env
-   TELEGRAM_BOT_TOKEN=<de BotFather>
-   OPENROUTER_API_KEY=<de OpenRouter>
-   ALLOWED_TELEGRAM_USERS=<tu ID de usuario de Telegram>
-   ```
-4. Reinicia: `docker compose up -d`
+Agrega al `.env`:
+```env
+TELEGRAM_BOT_TOKEN=<de BotFather>
+LLM_PROVIDER=openrouter
+LLM_MODEL=openai/gpt-4o
+OPENROUTER_API_KEY=<de OpenRouter>
+ALLOWED_TELEGRAM_USERS=<tu ID de Telegram>
+```
+
+</details>
 
 ## Estructura del Proyecto
 
@@ -158,25 +140,22 @@ curl https://tu-dominio.com/health
 mediabox-mcp/
 ├── docker-compose.yml          # Stack completo (9 servicios)
 ├── .env.example                # Plantilla de variables de entorno
+├── mediabox-cli/               # CLI de setup (npx create-mediabox)
+│   └── src/
+│       ├── index.ts            # Entry point, orquesta las 4 fases
+│       ├── wizard.ts           # Prompts interactivos
+│       ├── generator.ts        # Generación de archivos (.env, compose, qbit)
+│       ├── orchestrator.ts     # Docker compose + polling de readiness
+│       ├── configurator.ts     # Auto-config via APIs de servicios
+│       ├── templates/          # Plantillas de .env, docker-compose, qbittorrent
+│       └── services/           # Jellyfin, Sonarr, Radarr, Prowlarr, qBit
 ├── mcp-server/                 # Servidor MCP (TypeScript)
 │   └── src/
 │       ├── index.ts            # Express + transporte Streamable HTTP
 │       ├── config.ts           # Variables de entorno
 │       ├── auth.ts             # OAuth2 + auth por API key
 │       ├── helpers/            # Clientes API y utilidades
-│       │   ├── api.ts          # Jellyfin, Sonarr, Radarr
-│       │   ├── qbittorrent.ts  # qBittorrent (auth por cookie)
-│       │   ├── pyload.ts       # PyLoad (sesión + CSRF)
-│       │   ├── files.ts        # Archivos, extracción, ffmpeg
-│       │   └── jobs.ts         # Sistema de tareas en segundo plano
 │       └── tools/              # 25 herramientas MCP
-│           ├── register.ts     # Registro de herramientas
-│           ├── jellyfin.ts     # Estado, búsqueda, detalles
-│           ├── library.ts      # Archivos, renombrado, subtítulos
-│           ├── sonarr.ts       # Series (resolución automática de IDs)
-│           ├── radarr.ts       # Películas (prevención de duplicados)
-│           ├── downloads.ts    # PyLoad + gestión de cola
-│           └── maintenance.ts  # Optimización, limpieza, tareas
 └── mcp-telegram-client/        # Bot de Telegram (opcional)
     └── src/
         └── index.ts            # Grammy + OpenRouter/Gemini

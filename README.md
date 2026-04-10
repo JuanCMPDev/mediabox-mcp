@@ -23,6 +23,16 @@
 
 ---
 
+### Quick Start
+
+```bash
+npx create-mediabox
+```
+
+One command. Answer a few questions. The CLI sets up the full stack automatically — Docker containers, API keys, service connections, media libraries, everything.
+
+> Requires Docker, Docker Compose, and Node.js >= 20. Use `--local-build` to build images from source instead of pulling from registry.
+
 ### Architecture
 
 ```
@@ -43,7 +53,7 @@ Jellyfin   Sonarr    Radarr    qBittorrent   PyLoad
    │       Prowlarr  ◄───┘          │
    │        :9696                   │
    │          │                     │
-   │        ByParr                  │
+   │     FlareSolverr               │
    │        :8191                   │
    ▼                                ▼
 ┌──────────────────────────────────────────────────────────┐
@@ -63,16 +73,22 @@ Jellyfin   Sonarr    Radarr    qBittorrent   PyLoad
 | **Downloads** | `download_add` `download_direct` `download_status` `cancel_downloads` | Direct URLs, PyLoad, queue management, orphan cleanup |
 | **Maintenance** | `optimize_media` `cleanup_server` `check_jobs` | Strip tracks, clean server, monitor jobs |
 
-### Quick Start
+### What does the CLI do?
 
-```bash
-git clone https://github.com/JuanCMPDev/mediabox-mcp.git
-cd mediabox-mcp
-cp .env.example .env
-docker compose up -d
-```
+The `create-mediabox` CLI replaces ~15 manual setup steps with a single interactive wizard:
 
-Then follow the full setup guide in your language above.
+1. **Asks** for your preferences — media paths, passwords, timezone, optional Telegram bot
+2. **Generates** `.env`, `docker-compose.yml`, and pre-configures qBittorrent
+3. **Starts** all Docker containers and waits for each service to be ready
+4. **Auto-configures** the entire stack via service APIs:
+   - Extracts Sonarr/Radarr/Prowlarr API keys
+   - Runs Jellyfin setup wizard, creates admin user and API key
+   - Configures qBittorrent as download client in Sonarr/Radarr
+   - Adds root folders and syncs Prowlarr indexers
+   - Sets up FlareSolverr proxy and Jellyfin media libraries
+   - Sets web UI credentials across all services
+
+After setup, the only manual step is adding your torrent indexers in Prowlarr.
 
 ---
 
