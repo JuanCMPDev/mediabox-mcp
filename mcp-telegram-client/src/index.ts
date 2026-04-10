@@ -78,9 +78,12 @@ Score >= 200 triggers immediate grab (bypasses the 15-min delay). Always prefer 
 ### Adding and downloading movies
 Same pattern via movies tool (uses addTmdbId).
 
-### PyLoad (file hosters)
-- downloads(action:"add", urls) to enqueue.
+### PyLoad (file hosters: Mega, MediaFire, Google Drive, etc.)
+- downloads(action:"add", urls) to enqueue. Use PyLoad for Google Drive, Mega, MediaFire and other file hosters — NOT download_direct.
 - downloads(action:"organize", showName, seasonNumber, libraryFolder) to move completed downloads into the library.
+
+### Direct downloads (HTTP links, YouTube)
+- downloads(action:"direct", url) for direct HTTP links and YouTube/video sites only. Do NOT use for file hosters like Google Drive or Mega.
 
 ## Deletion
 
@@ -297,7 +300,7 @@ const VIRTUAL_TOOLS: Record<string, VirtualToolDef> = {
   downloads: {
     name: "downloads",
     description:
-      "Manage downloads. direct=download from direct URL/YouTube/Google Drive and organize into Jellyfin (best for HTTP links). add=send to PyLoad for file hosters (Mega, MediaFire). status=check PyLoad queue + download folders. organize=move completed to Jellyfin. delete_pyload=remove PyLoad packages. Sonarr/Radarr/qBit: list_queue, cancel, purge, clean_orphans.",
+      "Manage downloads. direct=download from direct HTTP URL or YouTube/video sites ONLY (never for Google Drive, Mega, MediaFire). add=send to PyLoad for file hosters (Google Drive, Mega, MediaFire, etc.). status=check PyLoad queue + download folders. organize=move completed to Jellyfin. delete_pyload=remove PyLoad packages. Sonarr/Radarr/qBit: list_queue, cancel, purge, clean_orphans.",
     parameters: {
       type: "object",
       properties: {
