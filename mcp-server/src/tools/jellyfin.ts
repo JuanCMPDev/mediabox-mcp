@@ -58,7 +58,7 @@ export function registerJellyfinTools(server: McpServer): void {
       offset: z.number().default(0).describe("Skip this many results (for pagination)"),
     },
   }, async ({ query, type, limit, offset }) => {
-    let ep = `/Items?Recursive=true&Limit=${limit}&StartIndex=${offset}`;
+    let ep = `/Items?Recursive=true&Limit=${limit}&StartIndex=${offset}&Fields=Path`;
     if (query) ep += `&searchTerm=${encodeURIComponent(query)}`;
     if (type) ep += `&IncludeItemTypes=${type}`;
     if (!query && !type) ep += `&IncludeItemTypes=Series,Movie`;
@@ -93,7 +93,7 @@ export function registerJellyfinTools(server: McpServer): void {
       // Collect all episodes from requested seasons
       const allEpisodes: { season: string; seasonNumber: number; episode: any }[] = [];
       for (const s of filteredSeasons) {
-        const eps = await jfApi(`/Shows/${showId}/Episodes?SeasonId=${s.Id}`);
+        const eps = await jfApi(`/Shows/${showId}/Episodes?SeasonId=${s.Id}&Fields=Path,MediaSources`);
         for (const e of eps.Items) {
           allEpisodes.push({
             season: s.Name,
