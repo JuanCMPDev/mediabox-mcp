@@ -50,41 +50,78 @@ export function registerJellyfinTools(server: McpServer): void {
 
   // 3. SEARCH MEDIA
   server.registerTool("search_media", {
-    description: "Search or list content in the Jellyfin library. Omit query to list all items of a type.",
+    description: "Search or list content in the Jellyfin library. Omit query to list all items of a type. Use offset to paginate through large result sets.",
     inputSchema: {
       query: z.string().optional().describe("Search term. Omit to list all."),
       type: z.enum(["Movie", "Series", "Episode", "Audio"]).optional().describe("Filter by type"),
       limit: z.number().default(50),
+      offset: z.number().default(0).describe("Skip this many results (for pagination)"),
     },
-  }, async ({ query, type, limit }) => {
-    let ep = `/Items?Recursive=true&Limit=${limit}`;
+  }, async ({ query, type, limit, offset }) => {
+    let ep = `/Items?Recursive=true&Limit=${limit}&StartIndex=${offset}`;
     if (query) ep += `&searchTerm=${encodeURIComponent(query)}`;
     if (type) ep += `&IncludeItemTypes=${type}`;
     if (!query && !type) ep += `&IncludeItemTypes=Series,Movie`;
     const data = await jfApi(ep);
-    return textResult({ total: data.TotalRecordCount, results: data.Items.map((i: any) => ({
+    const totalItems = data.TotalRecordCount;
+    return textResult({ total: totalItems, results: data.Items.map((i: any) => ({
       id: i.Id, name: i.Name, type: i.Type, year: i.ProductionYear, series: i.SeriesName || null, path: i.Path,
       episode: i.Type === "Episode" ? `S${String(i.ParentIndexNumber).padStart(2, "0")}E${String(i.IndexNumber).padStart(2, "0")}` : null,
-    }))});
+    })), pagination: { offset, limit, totalItems, hasMore: offset + limit < totalItems }});
   });
 
   // 4. SHOW DETAILS
   server.registerTool("show_details", {
-    description: "Get detailed info about a TV show including seasons and episodes",
+    description: "Get detailed info about a TV show including seasons and episodes. For large series, use seasonNumber to get one season at a time, or page/pageSize to paginate episodes.",
     inputSchema: {
       showId: z.string().describe("Jellyfin item ID"),
+      seasonNumber: z.number().optional().describe("Return only this season number (recommended for large series)"),
+      page: z.number().default(1).describe("Page number (1-based)"),
+      pageSize: z.number().default(50).describe("Episodes per page"),
     },
-  }, async ({ showId }) => {
+  }, async ({ showId, seasonNumber, page, pageSize }) => {
     const lookup = await jfApi(`/Items?ids=${showId}`);
     const show = lookup.Items?.[0];
     if (!show) throw new Error("Item not found");
     if (show.Type === "Series") {
       const seasons = await jfApi(`/Shows/${showId}/Seasons`);
-      const details = await Promise.all(seasons.Items.map(async (s: any) => {
+      const filteredSeasons = seasonNumber !== undefined
+        ? seasons.Items.filter((s: any) => s.IndexNumber === seasonNumber)
+        : seasons.Items;
+      if (seasonNumber !== undefined && !filteredSeasons.length) throw new Error(`Season ${seasonNumber} not found`);
+
+      // Collect all episodes from requested seasons
+      const allEpisodes: { season: string; seasonNumber: number; episode: any }[] = [];
+      for (const s of filteredSeasons) {
         const eps = await jfApi(`/Shows/${showId}/Episodes?SeasonId=${s.Id}`);
-        return { name: s.Name, number: s.IndexNumber, episodes: eps.Items.map((e: any) => ({ id: e.Id, number: e.IndexNumber, name: e.Name, hasSubtitles: e.HasSubtitles, path: e.Path })) };
-      }));
-      return textResult({ name: show.Name, year: show.ProductionYear, overview: show.Overview, genres: show.Genres, rating: show.CommunityRating, status: show.Status, seasons: details });
+        for (const e of eps.Items) {
+          allEpisodes.push({
+            season: s.Name,
+            seasonNumber: s.IndexNumber,
+            episode: { id: e.Id, number: e.IndexNumber, name: e.Name, hasSubtitles: e.HasSubtitles, path: e.Path },
+          });
+        }
+      }
+
+      const totalItems = allEpisodes.length;
+      const totalPages = Math.ceil(totalItems / pageSize);
+      const start = (page - 1) * pageSize;
+      const paged = allEpisodes.slice(start, start + pageSize);
+
+      // Group paged episodes by season
+      const seasonMap = new Map<number, { name: string; number: number; episodes: any[] }>();
+      for (const item of paged) {
+        if (!seasonMap.has(item.seasonNumber)) seasonMap.set(item.seasonNumber, { name: item.season, number: item.seasonNumber, episodes: [] });
+        seasonMap.get(item.seasonNumber)!.episodes.push(item.episode);
+      }
+
+      return textResult({
+        name: show.Name, year: show.ProductionYear, overview: show.Overview, genres: show.Genres,
+        rating: show.CommunityRating, status: show.Status,
+        totalSeasons: seasons.Items.length,
+        seasons: [...seasonMap.values()],
+        pagination: { page, pageSize, totalPages, totalItems },
+      });
     }
     return textResult({ name: show.Name, year: show.ProductionYear, overview: show.Overview, genres: show.Genres, rating: show.CommunityRating, path: show.Path });
   });

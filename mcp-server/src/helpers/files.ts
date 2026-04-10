@@ -57,5 +57,9 @@ export async function detectAndFixExtension(filePath: string): Promise<string> {
 
 export function resolvePath(p: string): string {
   if (p.startsWith("downloads")) return path.join(DOWNLOADS_PATH, p.replace(/^downloads\/?/, ""));
+  // Normalize absolute paths: strip MEDIA_PATH or DOWNLOADS_PATH prefix
+  if (p.startsWith(MEDIA_PATH + "/")) p = p.slice(MEDIA_PATH.length + 1);
+  else if (p === MEDIA_PATH) p = "";
+  else if (p.startsWith(DOWNLOADS_PATH + "/")) return path.join(DOWNLOADS_PATH, p.slice(DOWNLOADS_PATH.length + 1));
   return path.join(MEDIA_PATH, p);
 }

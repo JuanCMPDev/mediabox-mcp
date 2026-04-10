@@ -3,7 +3,7 @@ import { z } from "zod";
 import fs from "fs/promises";
 import path from "path";
 import { jfApi, sonarrApi, radarrApi, textResult } from "../helpers/api.js";
-import { execFileAsync } from "../helpers/files.js";
+import { execFileAsync, resolvePath } from "../helpers/files.js";
 import { jobs, startJob, estimateTime } from "../helpers/jobs.js";
 import { MEDIA_PATH, DOWNLOADS_PATH } from "../config.js";
 
@@ -12,14 +12,14 @@ export function registerMaintenanceTools(server: McpServer): void {
   server.registerTool("optimize_media", {
     description: "Analyze or strip unwanted audio/subtitle tracks from MKV files to save space. Works on single file or entire folder (batch).",
     inputSchema: {
-      mediaPath: z.string().describe("Path relative to media volume (file or folder, e.g. 'anime/Invincible (2021)')"),
+      mediaPath: z.string().describe("Path to media file or folder (e.g. 'anime/Invincible (2021)' or full path '/data/anime/Invincible (2021)')"),
       action: z.enum(["analyze", "optimize"]).default("analyze").describe("analyze = show tracks, optimize = strip unwanted tracks"),
       keepAudioLangs: z.array(z.string()).optional().describe("Audio languages to KEEP (e.g. ['spa', 'eng', 'jpn']). Others are removed. Omit to keep all."),
       keepSubLangs: z.array(z.string()).optional().describe("Subtitle languages to KEEP (e.g. ['spa', 'eng']). Omit to keep all."),
       removeAllSubs: z.boolean().default(false).describe("Remove ALL subtitle tracks"),
     },
   }, async ({ mediaPath, action, keepAudioLangs, keepSubLangs, removeAllSubs }) => {
-    const fullPath = path.join(MEDIA_PATH, mediaPath);
+    const fullPath = resolvePath(mediaPath);
     const stat = await fs.stat(fullPath);
     const mkvs: string[] = [];
     if (stat.isFile() && fullPath.endsWith(".mkv")) mkvs.push(fullPath);

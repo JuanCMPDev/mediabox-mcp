@@ -67,12 +67,18 @@ export function registerSonarrTools(server: McpServer): void {
       view: z.enum(["series", "episodes", "calendar", "missing", "queue", "history"]).default("series").describe("Use 'episodes' with seriesId to list all episodes of a series"),
       seriesId: z.number().optional().describe("Sonarr series ID (or tvdbId — auto-resolved). Required for 'episodes' view."),
       seasonNumber: z.number().optional().describe("Filter episodes by season number (for 'episodes' view)"),
+      page: z.number().default(1).describe("Page number (1-based, for episodes/series views)"),
+      pageSize: z.number().default(50).describe("Items per page (for episodes/series views)"),
       limit: z.number().default(20),
     },
-  }, async ({ view, seriesId, seasonNumber, limit }) => {
+  }, async ({ view, seriesId, seasonNumber, page, pageSize, limit }) => {
     if (view === "series") {
       const series = await sonarrApi("series");
-      return textResult(series.map((s: any) => ({ sonarrId: s.id, tvdbId: s.tvdbId, title: s.title, year: s.year, monitored: s.monitored, seasons: s.seasonCount, episodes: `${s.episodeFileCount}/${s.episodeCount}`, size: `${((s.statistics?.sizeOnDisk || 0) / 1073741824).toFixed(1)}GB`, root: s.rootFolderPath })));
+      const totalItems = series.length;
+      const totalPages = Math.ceil(totalItems / pageSize);
+      const start = (page - 1) * pageSize;
+      const paged = series.slice(start, start + pageSize);
+      return textResult({ series: paged.map((s: any) => ({ sonarrId: s.id, tvdbId: s.tvdbId, title: s.title, year: s.year, monitored: s.monitored, seasons: s.seasonCount, episodes: `${s.episodeFileCount}/${s.episodeCount}`, size: `${((s.statistics?.sizeOnDisk || 0) / 1073741824).toFixed(1)}GB`, root: s.rootFolderPath })), pagination: { page, pageSize, totalPages, totalItems } });
     }
     if (view === "episodes") {
       if (!seriesId) throw new Error("seriesId required for episodes view");
@@ -80,10 +86,13 @@ export function registerSonarrTools(server: McpServer): void {
       const episodes = await sonarrApi(`episode?seriesId=${resolved}`);
       let filtered = episodes;
       if (seasonNumber !== undefined) filtered = episodes.filter((e: any) => e.seasonNumber === seasonNumber);
+      const totalItems = filtered.length;
+      const totalPages = Math.ceil(totalItems / pageSize);
+      const start = (page - 1) * pageSize;
+      const paged = filtered.slice(start, start + pageSize);
       return textResult({
         seriesId: resolved,
-        totalEpisodes: filtered.length,
-        episodes: filtered.map((e: any) => ({
+        episodes: paged.map((e: any) => ({
           episodeId: e.id,
           season: e.seasonNumber,
           episode: e.episodeNumber,
@@ -92,6 +101,7 @@ export function registerSonarrTools(server: McpServer): void {
           hasFile: e.hasFile,
           monitored: e.monitored,
         })),
+        pagination: { page, pageSize, totalPages, totalItems },
       });
     }
     if (view === "calendar") {

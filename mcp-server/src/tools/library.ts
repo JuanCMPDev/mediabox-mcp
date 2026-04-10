@@ -148,7 +148,7 @@ export function registerLibraryTools(server: McpServer): void {
   server.registerTool("rename_episodes", {
     description: "Rename episode files to Jellyfin standard format. Searches recursively. You can pass jellyfinItemId instead of showPath — the tool resolves the path from Jellyfin automatically. Use search_media first to find the item ID if needed.",
     inputSchema: {
-      showPath: z.string().optional().describe("Path relative to media volume (e.g. 'anime/Samurai X'). Optional if jellyfinItemId is provided."),
+      showPath: z.string().optional().describe("Path to show folder (e.g. 'anime/Samurai X' or full path '/data/anime/Samurai X'). Optional if jellyfinItemId is provided."),
       jellyfinItemId: z.string().optional().describe("Jellyfin item ID — resolves the file path automatically"),
       showName: z.string().describe("Correct show name for renamed files (e.g. 'Rurouni Kenshin')"),
       seasonNumber: z.number().default(1),
@@ -163,7 +163,7 @@ export function registerLibraryTools(server: McpServer): void {
       showPath = path.relative(MEDIA_PATH, itemPath);
     }
     if (!showPath) throw new Error("Provide showPath or jellyfinItemId");
-    const fullPath = path.join(MEDIA_PATH, showPath);
+    const fullPath = resolvePath(showPath);
     const seasonPad = String(seasonNumber).padStart(2, "0");
     const seasonDir = path.join(fullPath, `Season ${seasonPad}`);
     const vids: { fullPath: string; name: string }[] = [];
@@ -184,11 +184,11 @@ export function registerLibraryTools(server: McpServer): void {
   server.registerTool("fix_subtitles", {
     description: "Convert ASS/SSA subtitles to SRT in MKV files to prevent transcoding. Works on single file or entire folder.",
     inputSchema: {
-      mediaPath: z.string().describe("Path relative to media volume"),
+      mediaPath: z.string().describe("Path to media file or folder (e.g. 'anime/Show' or full path '/data/anime/Show')"),
       dryRun: z.boolean().default(true),
     },
   }, async ({ mediaPath, dryRun }) => {
-    const fullPath = path.join(MEDIA_PATH, mediaPath);
+    const fullPath = resolvePath(mediaPath);
     const stat = await fs.stat(fullPath);
     const mkvs: string[] = [];
     if (stat.isFile() && fullPath.endsWith(".mkv")) mkvs.push(fullPath);
