@@ -777,7 +777,7 @@ async function callMCPToolWithTimeout(
     .filter((c) => c.type === "text" && c.text)
     .map((c) => c.text!)
     .join("\n");
-  if (text.length > 8000) text = text.slice(0, 8000) + "\n...(truncated)";
+  if (text.length > 30000) text = text.slice(0, 30000) + "\n...(truncated)";
   return text;
 }
 
@@ -1096,7 +1096,7 @@ async function handleChatOpenRouter(
   const history = getHistory(chatId);
   const { messages, tools } = buildOpenRouterMessages(history, selectedTools);
 
-  for (let i = 0; i < 10; i++) {
+  for (let i = 0; i < 20; i++) {
     let res;
     try {
       res = await openai!.chat.completions.create({
@@ -1188,7 +1188,7 @@ async function handleChatGemini(
   const history = getHistory(chatId);
   const geminiHistory = buildGeminiHistory(history);
 
-  for (let i = 0; i < 10; i++) {
+  for (let i = 0; i < 20; i++) {
     let res;
     try {
       res = await googleAI!.models.generateContent({
