@@ -8,11 +8,11 @@ const BASE = "http://localhost:8096";
  * Returns the generated API key for the MCP server.
  */
 export async function configureJellyfin(username: string, password: string): Promise<string> {
-  // Wait for Jellyfin's startup API to be fully initialized — the main HTTP
-  // server responds before the startup wizard endpoints are ready, so we poll
-  // /Startup/Configuration until it returns 200 or we're confident it's done.
+  // Jellyfin's HTTP server responds before the startup wizard endpoints are
+  // registered. Poll /Startup/Configuration until 200, then check /Users/Public
+  // to distinguish fresh install vs re-run.
   let wizardActive = false;
-  for (let attempt = 0; attempt < 10; attempt++) {
+  for (let attempt = 0; attempt < 20; attempt++) {
     try {
       const checkRes = await fetch(`${BASE}/Startup/Configuration`, {
         signal: AbortSignal.timeout(5000),
@@ -21,8 +21,6 @@ export async function configureJellyfin(username: string, password: string): Pro
         wizardActive = true;
         break;
       }
-      // 4xx means wizard is completed (re-run scenario)
-      if (checkRes.status >= 400 && checkRes.status < 500) break;
     } catch {
       // Connection error — Jellyfin startup API not ready yet
     }
@@ -30,9 +28,19 @@ export async function configureJellyfin(username: string, password: string): Pro
   }
 
   if (!wizardActive) {
-    log.warn("Jellyfin startup wizard already completed, authenticating...");
-    await waitForJellyfin();
-    return await authenticateAndCreateKey(username, password);
+    // Wizard never responded with 200 — check if users exist (re-run scenario)
+    // or if Jellyfin is genuinely stuck.
+    try {
+      const usersRes = await fetchWithRetry(`${BASE}/Users/Public`);
+      const users = (await usersRes.json()) as Array<{ Name: string }>;
+      if (users.length > 0) {
+        log.warn("Jellyfin startup wizard already completed, authenticating...");
+        return await authenticateAndCreateKey(username, password);
+      }
+    } catch {
+      // ignore — fall through to error
+    }
+    throw new Error("Jellyfin startup wizard not responding after 60s");
   }
 
   // All startup wizard steps use single-attempt POSTs (no retry on 5xx)
