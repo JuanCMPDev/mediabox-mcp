@@ -8,10 +8,28 @@ const BASE = "http://localhost:8096";
  * Returns the generated API key for the MCP server.
  */
 export async function configureJellyfin(username: string, password: string): Promise<string> {
-  // First, check if the startup wizard is still active via GET
-  const checkRes = await fetchWithRetry(`${BASE}/Startup/Configuration`);
-  if (!checkRes.ok) {
-    // Wizard already completed (re-run) — skip to auth
+  // Wait for Jellyfin's startup API to be fully initialized — the main HTTP
+  // server responds before the startup wizard endpoints are ready, so we poll
+  // /Startup/Configuration until it returns 200 or we're confident it's done.
+  let wizardActive = false;
+  for (let attempt = 0; attempt < 10; attempt++) {
+    try {
+      const checkRes = await fetch(`${BASE}/Startup/Configuration`, {
+        signal: AbortSignal.timeout(5000),
+      });
+      if (checkRes.ok) {
+        wizardActive = true;
+        break;
+      }
+      // 4xx means wizard is completed (re-run scenario)
+      if (checkRes.status >= 400 && checkRes.status < 500) break;
+    } catch {
+      // Connection error — Jellyfin startup API not ready yet
+    }
+    await sleep(3000);
+  }
+
+  if (!wizardActive) {
     log.warn("Jellyfin startup wizard already completed, authenticating...");
     await waitForJellyfin();
     return await authenticateAndCreateKey(username, password);

@@ -6,7 +6,7 @@ import { generateFiles } from "./generator.js";
 import { orchestrate } from "./orchestrator.js";
 import { autoConfigureServices } from "./configurator.js";
 
-const VERSION = "1.1.0";
+const VERSION = "1.1.1";
 
 async function main(): Promise<void> {
   const args = process.argv.slice(2);
