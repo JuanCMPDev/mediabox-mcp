@@ -36,20 +36,30 @@ function lsEnv(answers: WizardAnswers): string[] {
   return env;
 }
 
+/** In VPS mode, bind a port to 127.0.0.1 only (not exposed to the internet). */
+function port(mapping: string, vps: boolean): string {
+  return vps ? `127.0.0.1:${mapping}` : mapping;
+}
+
 export function generateDockerCompose(answers: WizardAnswers): string {
   const mov = ensureRelative(answers.mediaMovies);
   const tv = ensureRelative(answers.mediaTv);
   const anime = ensureRelative(answers.mediaAnime);
   const music = ensureRelative(answers.mediaMusic);
+  const vps = answers.deploymentMode === "vps";
 
   const services: Record<string, any> = {};
 
   // ── Jellyfin ──────────────────────────────────────────────────────────
+  const jellyfinPorts = [port("8096:8096", vps), port("8920:8920", vps)];
+  // Discovery ports only useful on local networks
+  if (!vps) jellyfinPorts.push("7359:7359/udp", "1900:1900/udp");
+
   services.jellyfin = {
     image: "lscr.io/linuxserver/jellyfin:latest",
     container_name: "jellyfin",
     networks: ["mediabox-net"],
-    ports: ["8096:8096", "8920:8920", "7359:7359/udp", "1900:1900/udp"],
+    ports: jellyfinPorts,
     environment: lsEnv(answers),
     volumes: [
       "./config/jellyfin:/config",
@@ -66,7 +76,7 @@ export function generateDockerCompose(answers: WizardAnswers): string {
   const mcpServer: Record<string, any> = {
     container_name: "mcp-server",
     networks: ["mediabox-net"],
-    ports: ["3000:3000"],
+    ports: [port("3000:3000", vps)],
     environment: [
       "TZ=${TZ:-UTC}",
       "JELLYFIN_URL=http://jellyfin:8096",
@@ -110,7 +120,7 @@ export function generateDockerCompose(answers: WizardAnswers): string {
     image: "lscr.io/linuxserver/pyload-ng:latest",
     container_name: "pyload",
     networks: ["mediabox-net"],
-    ports: ["8001:8000"],
+    ports: [port("8001:8000", vps)],
     environment: lsEnv(answers),
     volumes: ["./config/pyload:/config", "./downloads:/downloads"],
     restart: "unless-stopped",
@@ -139,7 +149,7 @@ export function generateDockerCompose(answers: WizardAnswers): string {
     image: "lscr.io/linuxserver/qbittorrent:latest",
     container_name: "qbittorrent",
     networks: ["mediabox-net"],
-    ports: ["8085:8085", "6881:6881", "6881:6881/udp"],
+    ports: [port("8085:8085", vps), "6881:6881", "6881:6881/udp"],
     environment: [...lsEnv(answers), "WEBUI_PORT=8085"],
     volumes: ["./config/qbittorrent:/config", "./downloads:/downloads"],
     restart: "unless-stopped",
@@ -149,7 +159,7 @@ export function generateDockerCompose(answers: WizardAnswers): string {
     image: "ghcr.io/flaresolverr/flaresolverr:latest",
     container_name: "flaresolverr",
     networks: ["mediabox-net"],
-    ports: ["8191:8191"],
+    ports: [port("8191:8191", vps)],
     environment: ["LOG_LEVEL=info", "TZ=${TZ:-UTC}"],
     restart: "unless-stopped",
   };
@@ -158,7 +168,7 @@ export function generateDockerCompose(answers: WizardAnswers): string {
     image: "lscr.io/linuxserver/prowlarr:latest",
     container_name: "prowlarr",
     networks: ["mediabox-net"],
-    ports: ["9696:9696"],
+    ports: [port("9696:9696", vps)],
     environment: lsEnv(answers),
     volumes: ["./config/prowlarr:/config"],
     restart: "unless-stopped",
@@ -168,7 +178,7 @@ export function generateDockerCompose(answers: WizardAnswers): string {
     image: "lscr.io/linuxserver/radarr:latest",
     container_name: "radarr",
     networks: ["mediabox-net"],
-    ports: ["7878:7878"],
+    ports: [port("7878:7878", vps)],
     environment: lsEnv(answers),
     volumes: [`./config/radarr:/config`, `${mov}:/movies`, "./downloads:/downloads"],
     restart: "unless-stopped",
@@ -179,7 +189,7 @@ export function generateDockerCompose(answers: WizardAnswers): string {
     image: "lscr.io/linuxserver/sonarr:latest",
     container_name: "sonarr",
     networks: ["mediabox-net"],
-    ports: ["8989:8989"],
+    ports: [port("8989:8989", vps)],
     environment: lsEnv(answers),
     volumes: [
       "./config/sonarr:/config",
@@ -197,10 +207,28 @@ export function generateDockerCompose(answers: WizardAnswers): string {
       image: "lscr.io/linuxserver/bazarr:latest",
       container_name: "bazarr",
       networks: ["mediabox-net"],
-      ports: ["6767:6767"],
+      ports: [port("6767:6767", vps)],
       environment: lsEnv(answers),
       volumes: [`./config/bazarr:/config`, `${mov}:/movies`, `${tv}:/tv`],
       restart: "unless-stopped",
+    };
+  }
+
+  // ── Caddy reverse proxy (VPS without existing proxy) ────────────────
+  const includeCaddy = vps && !answers.hasProxy;
+  if (includeCaddy) {
+    services.caddy = {
+      image: "caddy:2-alpine",
+      container_name: "caddy",
+      networks: ["mediabox-net"],
+      ports: ["80:80", "443:443", "443:443/udp"],
+      volumes: [
+        "./config/caddy/Caddyfile:/etc/caddy/Caddyfile:ro",
+        "./config/caddy/data:/data",
+        "./config/caddy/config:/config",
+      ],
+      restart: "unless-stopped",
+      depends_on: Object.keys(services),
     };
   }
 

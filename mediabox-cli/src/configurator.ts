@@ -219,6 +219,50 @@ function printSummary(
 
   console.log();
   log.header("Next Steps");
+
+  if (answers.deploymentMode === "vps" && answers.hasProxy) {
+    log.info("Configure your reverse proxy to route traffic to these containers:");
+    console.log();
+    const proxyRows: [string, string, string][] = [
+      ["Service", "Container target", "Internal port"],
+      ["Jellyfin", "jellyfin:8096", "8096"],
+      ["MCP Server", "mcp-server:3000", "3000"],
+      ["Sonarr", "sonarr:8989", "8989"],
+      ["Radarr", "radarr:7878", "7878"],
+      ["Prowlarr", "prowlarr:9696", "9696"],
+      ["qBittorrent", "qbittorrent:8085", "8085"],
+      ["PyLoad", "pyload:8000", "8000"],
+    ];
+    log.table(proxyRows);
+    console.log();
+    log.info(`Docker network: mediabox-net`);
+    log.info(`Ports are bound to 127.0.0.1 only (not exposed to the internet)`);
+    console.log();
+  }
+
+  if (answers.deploymentMode === "vps" && !answers.hasProxy && answers.baseDomain) {
+    const d = answers.baseDomain;
+    log.info("Caddy reverse proxy is running with automatic HTTPS:");
+    console.log();
+    const urlRows: [string, string, string][] = [
+      ["Service", "URL", "Status"],
+      ["MCP Server", `https://${d}`, "Ready"],
+      ["Jellyfin", `https://jellyfin.${d}`, serviceStatus.get("jellyfin") ? "Ready" : "Failed"],
+      ["Sonarr", `https://sonarr.${d}`, serviceStatus.get("sonarr") ? "Ready" : "Failed"],
+      ["Radarr", `https://radarr.${d}`, serviceStatus.get("radarr") ? "Ready" : "Failed"],
+      ["Prowlarr", `https://prowlarr.${d}`, serviceStatus.get("prowlarr") ? "Ready" : "Failed"],
+      ["qBittorrent", `https://qbit.${d}`, serviceStatus.get("qbittorrent") ? "Ready" : "Failed"],
+      ["PyLoad", `https://pyload.${d}`, serviceStatus.get("pyload") ? "Ready" : "Failed"],
+    ];
+    if (answers.enableBazarr) {
+      urlRows.push(["Bazarr", `https://bazarr.${d}`, "Ready"]);
+    }
+    log.table(urlRows);
+    console.log();
+    log.info("HTTPS certificates are managed automatically by Let's Encrypt");
+    console.log();
+  }
+
   log.info("1. Add indexers (torrent trackers) in Prowlarr → http://localhost:9696");
   if (answers.enableTelegram) {
     log.info("2. Test Telegram bot by sending /start to your bot");

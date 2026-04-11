@@ -1,6 +1,6 @@
 {
   "name": "create-mediabox",
-  "version": "1.0.1",
+  "version": "1.1.0",
   "description": "CLI wizard to auto-configure the Mediabox MCP self-hosted media server stack",
   "type": "module",
   "bin": {

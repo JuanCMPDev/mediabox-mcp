@@ -1,4 +1,10 @@
 export interface WizardAnswers {
+  // Deployment
+  deploymentMode: "local" | "vps";
+  baseDomain?: string;
+  hasProxy?: boolean;
+  letsEncryptEmail?: string;
+
   // System
   timezone: string;
 

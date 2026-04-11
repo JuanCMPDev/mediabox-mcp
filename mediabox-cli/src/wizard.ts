@@ -47,6 +47,47 @@ export async function runWizard(localBuild: boolean): Promise<WizardAnswers> {
   console.log(chalk.bold.cyan("🎬 Mediabox MCP — Setup Wizard"));
   console.log(chalk.dim("Configure your self-hosted media server stack\n"));
 
+  // ── Deployment Mode ─────────────────────────────────────────────────
+  const deploymentMode = await select({
+    message: "Where are you installing?",
+    choices: [
+      { value: "local" as const, name: "Local (home network)" },
+      { value: "vps" as const, name: "VPS / Cloud server" },
+    ],
+  });
+
+  let baseDomain: string | undefined;
+  let hasProxy: boolean | undefined;
+  let letsEncryptEmail: string | undefined;
+
+  if (deploymentMode === "vps") {
+    hasProxy = await confirm({
+      message: "Do you already have a reverse proxy? (Coolify, nginx, Traefik...)",
+      default: false,
+    });
+
+    baseDomain = await input({
+      message: "Base domain (e.g. mediabox.example.com)",
+      validate: (val) => {
+        if (!val.trim()) return "Domain is required for VPS deployment";
+        if (/^https?:\/\//.test(val)) return "Enter the domain without http:// or https://";
+        if (val.endsWith("/")) return "Remove the trailing slash";
+        return true;
+      },
+    });
+
+    if (!hasProxy) {
+      letsEncryptEmail = await input({
+        message: "Email for Let's Encrypt HTTPS certificates",
+        validate: (val) => {
+          if (!val.trim()) return "Email is required for Let's Encrypt";
+          if (!val.includes("@")) return "Enter a valid email address";
+          return true;
+        },
+      });
+    }
+  }
+
   // ── System ──────────────────────────────────────────────────────────
   const detectedTz = detectTimezone();
   const timezone = await search({
@@ -111,9 +152,13 @@ export async function runWizard(localBuild: boolean): Promise<WizardAnswers> {
   // ── MCP Server ──────────────────────────────────────────────────────
   console.log(chalk.dim("\n🌐 MCP Server Configuration"));
 
+  const mcpDefaultUrl = baseDomain
+    ? `https://${baseDomain}`
+    : "http://localhost:3000";
+
   const mcpPublicUrl = await input({
     message: "MCP public URL (for OAuth2 / client access)",
-    default: "http://localhost:3000",
+    default: mcpDefaultUrl,
     validate: (val) => {
       try {
         new URL(val);
@@ -192,6 +237,10 @@ export async function runWizard(localBuild: boolean): Promise<WizardAnswers> {
   const { uid, gid } = detectUidGid();
 
   return {
+    deploymentMode,
+    baseDomain,
+    hasProxy,
+    letsEncryptEmail,
     timezone,
     mediaMovies,
     mediaTv,

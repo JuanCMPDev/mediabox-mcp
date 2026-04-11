@@ -9,7 +9,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-1.0.0-blue" alt="Version">
+  <img src="https://img.shields.io/badge/version-1.1.0-blue" alt="Version">
   <img src="https://img.shields.io/badge/license-MIT-green" alt="License">
   <img src="https://img.shields.io/badge/docker-compose-2496ED?logo=docker&logoColor=white" alt="Docker">
   <img src="https://img.shields.io/badge/TypeScript-3178C6?logo=typescript&logoColor=white" alt="TypeScript">
@@ -31,35 +31,50 @@ npx create-mediabox
 
 One command. Answer a few questions. The CLI sets up the full stack automatically — Docker containers, API keys, service connections, media libraries, everything.
 
+Supports **Local** (home network) and **VPS** deployments. In VPS mode, choose to use your own reverse proxy or let the CLI include [Caddy](https://caddyserver.com/) with automatic HTTPS via Let's Encrypt.
+
 > Requires Docker, Docker Compose, and Node.js >= 20. Use `--local-build` to build images from source instead of pulling from registry.
 
 ### Architecture
 
 ```
-┌──────────────────────────────────────────────────────────┐
-│                     Your AI Client                       │
-│          (Claude / Telegram Bot / Any MCP Client)        │
-└──────────────────┬───────────────────────────────────────┘
-                   │ MCP Protocol (Streamable HTTP)
-                   ▼
-┌──────────────────────────────────────────────────────────┐
-│                   MCP Server (:3000)                     │
-│        25 tools · OAuth2 · Express · TypeScript          │
-└──┬──────────┬──────────┬──────────┬──────────┬───────────┘
-   ▼          ▼          ▼          ▼          ▼
-Jellyfin   Sonarr    Radarr    qBittorrent   PyLoad
- :8096     :8989     :7878      :8085        :8000
-   │          │          │          │
-   │       Prowlarr  ◄───┘          │
-   │        :9696                   │
-   │          │                     │
-   │     FlareSolverr               │
-   │        :8191                   │
-   ▼                                ▼
-┌──────────────────────────────────────────────────────────┐
-│                   Shared Media Volume                    │
-│           /data/movies · /data/tv · /data/anime          │
-└──────────────────────────────────────────────────────────┘
+                        Internet
+                           │
+              ┌────────────┼────────────┐
+              │     Reverse Proxy       │
+              │  (Caddy / nginx / etc)  │
+              │   :80 / :443 (HTTPS)    │
+              └────────────┬────────────┘
+                           │ mediabox-net
+┌──────────────────────────┼──────────────────────────────┐
+│                          ▼                              │
+│  ┌──────────────────────────────────────────────────┐   │
+│  │                Your AI Client                     │  │
+│  │      (Claude / Telegram Bot / Any MCP Client)     │  │
+│  └──────────────────┬───────────────────────────────┘   │
+│                     │ MCP Protocol (Streamable HTTP)     │
+│                     ▼                                   │
+│  ┌──────────────────────────────────────────────────┐   │
+│  │               MCP Server (:3000)                  │  │
+│  │     25 tools · OAuth2 · Express · TypeScript      │  │
+│  └──┬──────────┬──────────┬──────────┬──────────┬───┘   │
+│     ▼          ▼          ▼          ▼          ▼       │
+│  Jellyfin   Sonarr    Radarr    qBittorrent   PyLoad    │
+│   :8096     :8989     :7878      :8085        :8000     │
+│     │          │          │          │                   │
+│     │       Prowlarr  ◄───┘          │                  │
+│     │        :9696                   │                  │
+│     │          │                     │                  │
+│     │     FlareSolverr               │                  │
+│     │        :8191                   │                  │
+│     ▼                                ▼                  │
+│  ┌──────────────────────────────────────────────────┐   │
+│  │               Shared Media Volume                 │  │
+│  │       /data/movies · /data/tv · /data/anime       │  │
+│  └──────────────────────────────────────────────────┘   │
+└─────────────────────────────────────────────────────────┘
+  Local mode: ports exposed directly
+  VPS mode:   ports bound to 127.0.0.1 (+ optional Caddy)
 ```
 
 ### MCP Tools (25)
@@ -77,8 +92,8 @@ Jellyfin   Sonarr    Radarr    qBittorrent   PyLoad
 
 The `create-mediabox` CLI replaces ~15 manual setup steps with a single interactive wizard:
 
-1. **Asks** for your preferences — media paths, passwords, timezone, optional Telegram bot
-2. **Generates** `.env`, `docker-compose.yml`, and pre-configures qBittorrent
+1. **Asks** for your preferences — deployment mode (Local/VPS), media paths, passwords, timezone, optional Telegram bot
+2. **Generates** `.env`, `docker-compose.yml`, `Caddyfile` (VPS), and pre-configures qBittorrent
 3. **Starts** all Docker containers and waits for each service to be ready
 4. **Auto-configures** the entire stack via service APIs:
    - Extracts Sonarr/Radarr/Prowlarr API keys

@@ -30,9 +30,13 @@ npx create-mediabox
 ```
 
 El CLI interactivo va a:
-1. Preguntar tus preferencias (rutas de media, credenciales, timezone, integraciones opcionales)
+1. Preguntar tu modo de despliegue (**Local** o **VPS**), preferencias, credenciales, timezone e integraciones opcionales
 2. Generar los archivos de configuración e iniciar los contenedores Docker
 3. Auto-configurar todas las conexiones entre servicios (API keys, clientes de descarga, bibliotecas, etc.)
+
+**Modo VPS:** Cuando seleccionas VPS, el CLI pregunta si ya tienes un reverse proxy:
+- **Sí (Coolify, nginx, Traefik...):** Enlaza todos los puertos web a `127.0.0.1` solamente y muestra una tabla de rutas proxy para configurar tu proxy existente via la red Docker `mediabox-net`.
+- **No:** Incluye un reverse proxy [Caddy](https://caddyserver.com/) en el stack con HTTPS automático via Let's Encrypt. Cada servicio obtiene su propio subdominio (ej. `jellyfin.tudominio.com`, `sonarr.tudominio.com`).
 
 Usa `--local-build` para compilar el servidor MCP y el bot de Telegram desde el código fuente en vez de descargar imágenes pre-compiladas.
 
@@ -138,16 +142,16 @@ ALLOWED_TELEGRAM_USERS=<tu ID de Telegram>
 
 ```
 mediabox-mcp/
-├── docker-compose.yml          # Stack completo (9 servicios)
+├── docker-compose.yml          # Stack completo (9-10 servicios)
 ├── .env.example                # Plantilla de variables de entorno
 ├── mediabox-cli/               # CLI de setup (npx create-mediabox)
 │   └── src/
 │       ├── index.ts            # Entry point, orquesta las 4 fases
-│       ├── wizard.ts           # Prompts interactivos
-│       ├── generator.ts        # Generación de archivos (.env, compose, qbit)
+│       ├── wizard.ts           # Prompts interactivos (modo despliegue, credenciales)
+│       ├── generator.ts        # Generación de archivos (.env, compose, Caddyfile, qbit)
 │       ├── orchestrator.ts     # Docker compose + polling de readiness
 │       ├── configurator.ts     # Auto-config via APIs de servicios
-│       ├── templates/          # Plantillas de .env, docker-compose, qbittorrent
+│       ├── templates/          # Plantillas de .env, docker-compose, caddyfile, qbittorrent
 │       └── services/           # Jellyfin, Sonarr, Radarr, Prowlarr, qBit
 ├── mcp-server/                 # Servidor MCP (TypeScript)
 │   └── src/

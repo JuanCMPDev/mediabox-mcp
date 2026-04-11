@@ -4,6 +4,7 @@ import type { WizardAnswers } from "./types.js";
 import { generateEnv } from "./templates/env.js";
 import { generateDockerCompose } from "./templates/docker-compose.js";
 import { generateQbitConfig } from "./templates/qbittorrent.js";
+import { generateCaddyfile } from "./templates/caddyfile.js";
 import * as log from "./utils/logger.js";
 
 /**
@@ -31,6 +32,11 @@ export async function generateFiles(answers: WizardAnswers, outputDir: string): 
     dirs.push("config/bazarr");
   }
 
+  const includeCaddy = answers.deploymentMode === "vps" && !answers.hasProxy;
+  if (includeCaddy) {
+    dirs.push("config/caddy", "config/caddy/data", "config/caddy/config");
+  }
+
   for (const dir of dirs) {
     const fullPath = path.resolve(outputDir, dir);
     await mkdir(fullPath, { recursive: true });
@@ -52,4 +58,12 @@ export async function generateFiles(answers: WizardAnswers, outputDir: string): 
   const qbitConfPath = path.join(outputDir, "config", "qbittorrent", "qBittorrent", "qBittorrent.conf");
   await writeFile(qbitConfPath, qbitConf, "utf-8");
   log.success("Pre-configured qBittorrent password (PBKDF2 hash)");
+
+  // Generate Caddyfile for VPS without existing proxy
+  if (includeCaddy) {
+    const caddyContent = generateCaddyfile(answers);
+    const caddyPath = path.join(outputDir, "config", "caddy", "Caddyfile");
+    await writeFile(caddyPath, caddyContent, "utf-8");
+    log.success("Generated Caddyfile with HTTPS reverse proxy");
+  }
 }
