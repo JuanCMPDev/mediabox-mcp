@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="assets/logo.png" width="120" alt="Mediabox MCP">
+  <img src="https://raw.githubusercontent.com/JuanCMPDev/mediabox-mcp/master/assets/logo.png" width="120" alt="Mediabox MCP">
 </p>
 
 <h1 align="center">Mediabox MCP</h1>
@@ -13,12 +13,6 @@
   <img src="https://img.shields.io/badge/license-MIT-green" alt="License">
   <img src="https://img.shields.io/badge/docker-compose-2496ED?logo=docker&logoColor=white" alt="Docker">
   <img src="https://img.shields.io/badge/TypeScript-3178C6?logo=typescript&logoColor=white" alt="TypeScript">
-</p>
-
-<p align="center">
-  <a href="docs/README.en.md"><img src="https://img.shields.io/badge/docs-English-blue?style=for-the-badge" alt="English"></a>
-  &nbsp;
-  <a href="docs/README.es.md"><img src="https://img.shields.io/badge/docs-Español-red?style=for-the-badge" alt="Español"></a>
 </p>
 
 ---
