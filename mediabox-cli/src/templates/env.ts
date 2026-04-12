@@ -30,6 +30,10 @@ export function generateEnv(answers: WizardAnswers, keys?: Partial<DiscoveredKey
     `INTERNAL_API_KEY=${answers.internalApiKey}`,
   ];
 
+  if (answers.tunnelToken) {
+    lines.push("", "# Cloudflare Tunnel", `CLOUDFLARE_TUNNEL_TOKEN=${answers.tunnelToken}`);
+  }
+
   if (answers.enableTelegram) {
     lines.push(
       "",

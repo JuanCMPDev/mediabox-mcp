@@ -32,7 +32,7 @@ export async function generateFiles(answers: WizardAnswers, outputDir: string): 
     dirs.push("config/bazarr");
   }
 
-  const includeCaddy = answers.deploymentMode === "vps" && !answers.hasProxy;
+  const includeCaddy = answers.deploymentMode === "vps";
   if (includeCaddy) {
     dirs.push("config/caddy", "config/caddy/data", "config/caddy/config");
   }

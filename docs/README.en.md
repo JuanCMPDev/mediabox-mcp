@@ -30,13 +30,13 @@ npx create-mediabox
 ```
 
 The interactive CLI will:
-1. Ask for your deployment mode (**Local** or **VPS**), preferences, credentials, timezone, and optional integrations
+1. Ask for your deployment mode (**Local**, **VPS**, or **Tunnel**), preferences, credentials, timezone, and optional integrations
 2. Generate all config files and start Docker containers
 3. Auto-configure every service connection (API keys, download clients, libraries, etc.)
 
-**VPS mode:** When you select VPS, the CLI asks if you already have a reverse proxy:
-- **Yes (Coolify, nginx, Traefik...):** Binds all web UI ports to `127.0.0.1` only and prints a proxy routing table so you can configure your existing proxy to route traffic via the `mediabox-net` Docker network.
-- **No:** Includes a [Caddy](https://caddyserver.com/) reverse proxy in the stack with automatic HTTPS via Let's Encrypt. Each service gets its own subdomain (e.g. `jellyfin.yourdomain.com`, `sonarr.yourdomain.com`).
+**VPS mode:** Includes a [Caddy](https://caddyserver.com/) reverse proxy with automatic HTTPS via Let's Encrypt. All ports are bound to `127.0.0.1` and each service gets its own subdomain (e.g. `jellyfin.yourdomain.com`, `sonarr.yourdomain.com`).
+
+**Tunnel mode:** For home users behind NAT/CGNAT or without a public IP. Adds a [Cloudflare Tunnel](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/) container that creates an outbound connection to Cloudflare's network — no ports need to be opened on your router. Requires a free Cloudflare account and a domain. You configure the public hostnames in the [Zero Trust dashboard](https://one.dash.cloudflare.com/).
 
 Use `--local-build` to build the MCP server and Telegram bot from source instead of pulling pre-built images.
 

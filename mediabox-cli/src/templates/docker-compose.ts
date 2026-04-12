@@ -46,7 +46,7 @@ export function generateDockerCompose(answers: WizardAnswers): string {
   const tv = ensureRelative(answers.mediaTv);
   const anime = ensureRelative(answers.mediaAnime);
   const music = ensureRelative(answers.mediaMusic);
-  const vps = answers.deploymentMode === "vps";
+  const vps = answers.deploymentMode === "vps" || answers.deploymentMode === "tunnel";
 
   const services: Record<string, any> = {};
 
@@ -214,8 +214,8 @@ export function generateDockerCompose(answers: WizardAnswers): string {
     };
   }
 
-  // ── Caddy reverse proxy (VPS without existing proxy) ────────────────
-  const includeCaddy = vps && !answers.hasProxy;
+  // ── Caddy reverse proxy (VPS mode only) ─────────────────────────────
+  const includeCaddy = answers.deploymentMode === "vps";
   if (includeCaddy) {
     services.caddy = {
       image: "caddy:2-alpine",
@@ -229,6 +229,18 @@ export function generateDockerCompose(answers: WizardAnswers): string {
       ],
       restart: "unless-stopped",
       depends_on: Object.keys(services),
+    };
+  }
+
+  // ── Cloudflare Tunnel (tunnel mode) ──────────────────────────────────
+  if (answers.deploymentMode === "tunnel") {
+    services.cloudflared = {
+      image: "cloudflare/cloudflared:latest",
+      container_name: "cloudflared",
+      networks: ["mediabox-net"],
+      command: "tunnel --no-autoupdate run",
+      environment: ["TUNNEL_TOKEN=${CLOUDFLARE_TUNNEL_TOKEN}"],
+      restart: "unless-stopped",
     };
   }
 

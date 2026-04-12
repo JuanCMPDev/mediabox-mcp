@@ -1,9 +1,9 @@
 export interface WizardAnswers {
   // Deployment
-  deploymentMode: "local" | "vps";
+  deploymentMode: "local" | "vps" | "tunnel";
   baseDomain?: string;
-  hasProxy?: boolean;
   letsEncryptEmail?: string;
+  tunnelToken?: string;
 
   // System
   timezone: string;

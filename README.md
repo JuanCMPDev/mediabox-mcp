@@ -9,7 +9,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-1.1.2-blue" alt="Version">
+  <img src="https://img.shields.io/badge/version-1.2.0-blue" alt="Version">
   <img src="https://img.shields.io/badge/license-MIT-green" alt="License">
   <img src="https://img.shields.io/badge/docker-compose-2496ED?logo=docker&logoColor=white" alt="Docker">
   <img src="https://img.shields.io/badge/TypeScript-3178C6?logo=typescript&logoColor=white" alt="TypeScript">
@@ -31,7 +31,7 @@ npx create-mediabox
 
 One command. Answer a few questions. The CLI sets up the full stack automatically — Docker containers, API keys, service connections, media libraries, everything.
 
-Supports **Local** (home network) and **VPS** deployments. In VPS mode, choose to use your own reverse proxy or let the CLI include [Caddy](https://caddyserver.com/) with automatic HTTPS via Let's Encrypt.
+Supports **Local** (home network), **VPS** (with [Caddy](https://caddyserver.com/) and automatic HTTPS), and **Cloudflare Tunnel** (public access from home without opening ports) deployments.
 
 > Requires Docker, Docker Compose, and Node.js >= 20. Use `--local-build` to build images from source instead of pulling from registry.
 
@@ -73,8 +73,9 @@ Supports **Local** (home network) and **VPS** deployments. In VPS mode, choose t
 │  │       /data/movies · /data/tv · /data/anime       │  │
 │  └──────────────────────────────────────────────────┘   │
 └─────────────────────────────────────────────────────────┘
-  Local mode: ports exposed directly
-  VPS mode:   ports bound to 127.0.0.1 (+ optional Caddy)
+  Local mode:   ports exposed directly
+  VPS mode:     ports bound to 127.0.0.1 + Caddy reverse proxy
+  Tunnel mode:  ports bound to 127.0.0.1 + Cloudflare Tunnel
 ```
 
 ### MCP Tools (25)
@@ -92,7 +93,7 @@ Supports **Local** (home network) and **VPS** deployments. In VPS mode, choose t
 
 The `create-mediabox` CLI replaces ~15 manual setup steps with a single interactive wizard:
 
-1. **Asks** for your preferences — deployment mode (Local/VPS), media paths, passwords, timezone, optional Telegram bot
+1. **Asks** for your preferences — deployment mode (Local/VPS/Tunnel), media paths, passwords, timezone, optional Telegram bot
 2. **Generates** `.env`, `docker-compose.yml`, `Caddyfile` (VPS), and pre-configures qBittorrent
 3. **Starts** all Docker containers and waits for each service to be ready
 4. **Auto-configures** the entire stack via service APIs:

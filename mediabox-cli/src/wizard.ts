@@ -53,19 +53,15 @@ export async function runWizard(localBuild: boolean): Promise<WizardAnswers> {
     choices: [
       { value: "local" as const, name: "Local (home network)" },
       { value: "vps" as const, name: "VPS / Cloud server" },
+      { value: "tunnel" as const, name: "Local + Public access (Cloudflare Tunnel)" },
     ],
   });
 
   let baseDomain: string | undefined;
-  let hasProxy: boolean | undefined;
   let letsEncryptEmail: string | undefined;
+  let tunnelToken: string | undefined;
 
   if (deploymentMode === "vps") {
-    hasProxy = await confirm({
-      message: "Do you already have a reverse proxy? (Coolify, nginx, Traefik...)",
-      default: false,
-    });
-
     baseDomain = await input({
       message: "Base domain (e.g. mediabox.example.com)",
       validate: (val) => {
@@ -76,16 +72,32 @@ export async function runWizard(localBuild: boolean): Promise<WizardAnswers> {
       },
     });
 
-    if (!hasProxy) {
-      letsEncryptEmail = await input({
-        message: "Email for Let's Encrypt HTTPS certificates",
-        validate: (val) => {
-          if (!val.trim()) return "Email is required for Let's Encrypt";
-          if (!val.includes("@")) return "Enter a valid email address";
-          return true;
-        },
-      });
-    }
+    letsEncryptEmail = await input({
+      message: "Email for Let's Encrypt HTTPS certificates",
+      validate: (val) => {
+        if (!val.trim()) return "Email is required for Let's Encrypt";
+        if (!val.includes("@")) return "Enter a valid email address";
+        return true;
+      },
+    });
+  }
+
+  if (deploymentMode === "tunnel") {
+    baseDomain = await input({
+      message: "Base domain (e.g. mediabox.example.com)",
+      validate: (val) => {
+        if (!val.trim()) return "Domain is required for Cloudflare Tunnel";
+        if (/^https?:\/\//.test(val)) return "Enter the domain without http:// or https://";
+        if (val.endsWith("/")) return "Remove the trailing slash";
+        return true;
+      },
+    });
+
+    tunnelToken = await password({
+      message: "Cloudflare Tunnel token (from Zero Trust dashboard)",
+      mask: "*",
+      validate: (val) => val.length > 0 || "Tunnel token is required",
+    });
   }
 
   // ── System ──────────────────────────────────────────────────────────
@@ -239,8 +251,8 @@ export async function runWizard(localBuild: boolean): Promise<WizardAnswers> {
   return {
     deploymentMode,
     baseDomain,
-    hasProxy,
     letsEncryptEmail,
+    tunnelToken,
     timezone,
     mediaMovies,
     mediaTv,

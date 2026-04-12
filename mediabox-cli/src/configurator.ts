@@ -220,27 +220,7 @@ function printSummary(
   console.log();
   log.header("Next Steps");
 
-  if (answers.deploymentMode === "vps" && answers.hasProxy) {
-    log.info("Configure your reverse proxy to route traffic to these containers:");
-    console.log();
-    const proxyRows: [string, string, string][] = [
-      ["Service", "Container target", "Internal port"],
-      ["Jellyfin", "jellyfin:8096", "8096"],
-      ["MCP Server", "mcp-server:3000", "3000"],
-      ["Sonarr", "sonarr:8989", "8989"],
-      ["Radarr", "radarr:7878", "7878"],
-      ["Prowlarr", "prowlarr:9696", "9696"],
-      ["qBittorrent", "qbittorrent:8085", "8085"],
-      ["PyLoad", "pyload:8000", "8000"],
-    ];
-    log.table(proxyRows);
-    console.log();
-    log.info(`Docker network: mediabox-net`);
-    log.info(`Ports are bound to 127.0.0.1 only (not exposed to the internet)`);
-    console.log();
-  }
-
-  if (answers.deploymentMode === "vps" && !answers.hasProxy && answers.baseDomain) {
+  if (answers.deploymentMode === "vps" && answers.baseDomain) {
     const d = answers.baseDomain;
     log.info("Caddy reverse proxy is running with automatic HTTPS:");
     console.log();
@@ -260,6 +240,30 @@ function printSummary(
     log.table(urlRows);
     console.log();
     log.info("HTTPS certificates are managed automatically by Let's Encrypt");
+    console.log();
+  }
+
+  if (answers.deploymentMode === "tunnel" && answers.baseDomain) {
+    const d = answers.baseDomain;
+    log.info("Cloudflare Tunnel is configured. Set up these hostnames in Zero Trust dashboard:");
+    console.log();
+    const tunnelRows: [string, string, string][] = [
+      ["Service", "Public hostname", "Service URL"],
+      ["MCP Server", d, "http://mcp-server:3000"],
+      ["Jellyfin", `jellyfin.${d}`, "http://jellyfin:8096"],
+      ["Sonarr", `sonarr.${d}`, "http://sonarr:8989"],
+      ["Radarr", `radarr.${d}`, "http://radarr:7878"],
+      ["Prowlarr", `prowlarr.${d}`, "http://prowlarr:9696"],
+      ["qBittorrent", `qbit.${d}`, "http://qbittorrent:8085"],
+      ["PyLoad", `pyload.${d}`, "http://pyload:8000"],
+    ];
+    if (answers.enableBazarr) {
+      tunnelRows.push(["Bazarr", `bazarr.${d}`, "http://bazarr:6767"]);
+    }
+    log.table(tunnelRows);
+    console.log();
+    log.info("No ports need to be opened on your router");
+    log.info("HTTPS is managed automatically by Cloudflare");
     console.log();
   }
 

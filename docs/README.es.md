@@ -30,13 +30,13 @@ npx create-mediabox
 ```
 
 El CLI interactivo va a:
-1. Preguntar tu modo de despliegue (**Local** o **VPS**), preferencias, credenciales, timezone e integraciones opcionales
+1. Preguntar tu modo de despliegue (**Local**, **VPS**, o **Tunnel**), preferencias, credenciales, timezone e integraciones opcionales
 2. Generar los archivos de configuración e iniciar los contenedores Docker
 3. Auto-configurar todas las conexiones entre servicios (API keys, clientes de descarga, bibliotecas, etc.)
 
-**Modo VPS:** Cuando seleccionas VPS, el CLI pregunta si ya tienes un reverse proxy:
-- **Sí (Coolify, nginx, Traefik...):** Enlaza todos los puertos web a `127.0.0.1` solamente y muestra una tabla de rutas proxy para configurar tu proxy existente via la red Docker `mediabox-net`.
-- **No:** Incluye un reverse proxy [Caddy](https://caddyserver.com/) en el stack con HTTPS automático via Let's Encrypt. Cada servicio obtiene su propio subdominio (ej. `jellyfin.tudominio.com`, `sonarr.tudominio.com`).
+**Modo VPS:** Incluye un reverse proxy [Caddy](https://caddyserver.com/) con HTTPS automático via Let's Encrypt. Todos los puertos se enlazan a `127.0.0.1` y cada servicio obtiene su propio subdominio (ej. `jellyfin.tudominio.com`, `sonarr.tudominio.com`).
+
+**Modo Tunnel:** Para usuarios en casa detrás de NAT/CGNAT o sin IP pública. Agrega un contenedor [Cloudflare Tunnel](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/) que crea una conexión saliente hacia la red de Cloudflare — no necesitas abrir puertos en tu router. Requiere una cuenta gratuita de Cloudflare y un dominio. Los hostnames públicos se configuran en el [dashboard de Zero Trust](https://one.dash.cloudflare.com/).
 
 Usa `--local-build` para compilar el servidor MCP y el bot de Telegram desde el código fuente en vez de descargar imágenes pre-compiladas.
 
