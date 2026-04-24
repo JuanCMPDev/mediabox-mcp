@@ -1,10 +1,10 @@
-#!/usr/bin/env node
-
 import chalk from "chalk";
+import { deployStack, validateDeployConfig } from "@mediabox/core";
 import { runWizard } from "./wizard.js";
-import { generateFiles } from "./generator.js";
-import { orchestrate } from "./orchestrator.js";
-import { autoConfigureServices } from "./configurator.js";
+import { translateWizardAnswers } from "./config/translate.js";
+import { createCliEventSink } from "./events/cli-sink.js";
+import { DockerCliDeployer } from "./deployer/docker-cli-deployer.js";
+import { printSummary } from "./summary.js";
 import { VERSION } from "./utils/version.js";
 
 async function main(): Promise<void> {
@@ -14,7 +14,6 @@ async function main(): Promise<void> {
     printHelp();
     process.exit(0);
   }
-
   if (args.includes("--version") || args.includes("-v")) {
     console.log(VERSION);
     process.exit(0);
@@ -26,30 +25,52 @@ async function main(): Promise<void> {
 
   console.log();
   console.log(chalk.bold.cyan("╔══════════════════════════════════════════════════╗"));
-  console.log(chalk.bold.cyan("║          🎬  create-mediabox  v" + VERSION + "           ║"));
+  console.log(chalk.bold.cyan("║          🎬  create-mediabox  v" + VERSION + "        ║"));
   console.log(chalk.bold.cyan("║    Self-hosted media server in one command       ║"));
   console.log(chalk.bold.cyan("╚══════════════════════════════════════════════════╝"));
 
   try {
-    // Phase 1: Interactive wizard
+    // Phase 1: Interactive wizard → normalize into DeployConfig
     const answers = await runWizard(localBuild);
+    const config = translateWizardAnswers(answers);
 
-    // Phase 2: Generate files
-    await generateFiles(answers, outputDir);
+    const preValidation = validateDeployConfig(config);
+    if (preValidation.length > 0) {
+      console.log();
+      console.log(chalk.red.bold("Configuration invalid:"));
+      for (const msg of preValidation) console.log(chalk.red(`  - ${msg}`));
+      process.exit(1);
+    }
+
+    // Phase 2+: delegate end-to-end to @mediabox/core
+    const sink = createCliEventSink();
+    const deployer = new DockerCliDeployer();
+
+    const result = await deployStack({
+      config,
+      deployer,
+      workDir: outputDir,
+      onEvent: sink,
+      generateOnly,
+      jellyfinClientVersion: VERSION,
+    });
 
     if (generateOnly) {
       console.log();
       console.log(chalk.green.bold("Files generated successfully!"));
-      console.log(chalk.dim("Inspect .env, docker-compose.yml, and config/ in the current directory."));
-      console.log(chalk.dim("Run without --generate-only to start Docker and auto-configure services."));
-      process.exit(0);
+      console.log(
+        chalk.dim(
+          "Inspect .env, docker-compose.yml, and config/ in the current directory.",
+        ),
+      );
+      console.log(
+        chalk.dim("Run without --generate-only to start Docker and auto-configure."),
+      );
+      process.exit(result.ok ? 0 : 1);
     }
 
-    // Phase 3: Start Docker and wait for services
-    const serviceStatus = await orchestrate(outputDir);
-
-    // Phase 4: Auto-configure everything
-    await autoConfigureServices(answers, serviceStatus, outputDir);
+    printSummary(config, result);
+    process.exit(result.ok ? 0 : 1);
   } catch (err) {
     console.log();
     console.log(chalk.red.bold("Setup failed:"), (err as Error).message);

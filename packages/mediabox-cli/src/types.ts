@@ -1,3 +1,7 @@
+/**
+ * Raw output of the Inquirer-based interactive wizard.
+ * Translated to `@mediabox/core`'s DeployConfig by `src/config/translate.ts`.
+ */
 export interface WizardAnswers {
   // Deployment
   deploymentMode: "local" | "vps" | "tunnel";
@@ -42,22 +46,4 @@ export interface WizardAnswers {
 
   // Build mode
   localBuild: boolean;
-}
-
-export interface ServiceHealth {
-  name: string;
-  status: "pending" | "ready" | "failed";
-  checkType: "http" | "file";
-  /** URL for http checks, file path for file checks */
-  target: string;
-  timeoutMs: number;
-  /** For file checks: the XML tag to look for */
-  xmlTag?: string;
-}
-
-export interface DiscoveredKeys {
-  sonarrApiKey: string;
-  radarrApiKey: string;
-  prowlarrApiKey: string;
-  jellyfinApiKey: string;
 }
