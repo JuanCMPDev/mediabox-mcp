@@ -41,7 +41,7 @@ services:
   # MCP SERVER — AI tool server for media management
   # =========================================================================
   mcp-server:
-    build: ./mcp-server
+    build: ./packages/mcp-server
     container_name: mcp-server
     networks:
       - mediabox-net
@@ -99,7 +99,7 @@ services:
   # TELEGRAM BOT — MCP client with LLM integration (optional)
   # =========================================================================
   telegram-bot:
-    build: ./mcp-telegram-client
+    build: ./packages/mcp-telegram-client
     container_name: telegram-bot
     networks:
       - mediabox-net
