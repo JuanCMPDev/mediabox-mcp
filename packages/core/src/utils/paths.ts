@@ -5,7 +5,7 @@ import path from "node:path";
  * Docker Compose requires forward slashes even on Windows.
  */
 export function toPosix(p: string): string {
-  return p.split(path.sep).join(path.posix.sep);
+  return p.replace(/\\/g, "/");
 }
 
 /**
