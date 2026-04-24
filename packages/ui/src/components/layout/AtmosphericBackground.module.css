@@ -1,0 +1,78 @@
+.container {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  overflow: hidden;
+  background: var(--background);
+}
+
+.orb {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(120px);
+}
+
+/* Teal — top-left */
+.orb1 {
+  width: 55vw;
+  height: 55vw;
+  top: -12%;
+  left: -8%;
+  background: radial-gradient(circle, rgba(0, 184, 184, 0.18) 0%, transparent 70%);
+  animation: drift1 52s ease-in-out infinite;
+}
+
+/* Purple — top-right */
+.orb2 {
+  width: 42vw;
+  height: 42vw;
+  top: -6%;
+  right: -8%;
+  background: radial-gradient(circle, rgba(128, 0, 220, 0.13) 0%, transparent 70%);
+  animation: drift2 41s ease-in-out infinite;
+}
+
+/* Indigo — bottom-center */
+.orb3 {
+  width: 62vw;
+  height: 62vw;
+  bottom: -22%;
+  left: 18%;
+  background: radial-gradient(circle, rgba(30, 60, 200, 0.15) 0%, transparent 70%);
+  animation: drift3 58s ease-in-out infinite;
+}
+
+/* Dark teal — bottom-right */
+.orb4 {
+  width: 36vw;
+  height: 36vw;
+  bottom: -8%;
+  right: -4%;
+  background: radial-gradient(circle, rgba(0, 100, 155, 0.12) 0%, transparent 70%);
+  animation: drift4 46s ease-in-out infinite;
+}
+
+@keyframes drift1 {
+  0%,  100% { transform: translate(0, 0) scale(1); }
+  25%        { transform: translate(38px, -28px) scale(1.04); }
+  50%        { transform: translate(-22px, 48px) scale(0.97); }
+  75%        { transform: translate(28px, 18px) scale(1.02); }
+}
+
+@keyframes drift2 {
+  0%,  100% { transform: translate(0, 0) scale(1); }
+  33%        { transform: translate(-32px, 24px) scale(1.06); }
+  66%        { transform: translate(42px, -18px) scale(0.95); }
+}
+
+@keyframes drift3 {
+  0%,  100% { transform: translate(0, 0) scale(1); }
+  50%        { transform: translate(26px, -38px) scale(1.04); }
+}
+
+@keyframes drift4 {
+  0%,  100% { transform: translate(0, 0) scale(1); }
+  40%        { transform: translate(-28px, -22px) scale(1.05); }
+  80%        { transform: translate(18px, 28px) scale(0.97); }
+}

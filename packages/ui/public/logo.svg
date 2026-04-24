@@ -1,0 +1,61 @@
+<svg viewBox="0 0 500 520" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <!-- Teal gradient for top bevel faces -->
+    <linearGradient id="topBevel" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#2ec4a6"/>
+      <stop offset="100%" stop-color="#1aaa94"/>
+    </linearGradient>
+    <!-- Inner face gradient -->
+    <linearGradient id="innerFace" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#22b89e"/>
+      <stop offset="100%" stop-color="#18a48c"/>
+    </linearGradient>
+    <!-- Dark navy for side faces -->
+    <linearGradient id="leftSide" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#1a1a58"/>
+      <stop offset="100%" stop-color="#222268"/>
+    </linearGradient>
+    <linearGradient id="rightSide" x1="1" y1="0" x2="0" y2="0">
+      <stop offset="0%" stop-color="#1a1a58"/>
+      <stop offset="100%" stop-color="#222268"/>
+    </linearGradient>
+    <!-- Bottom bevel -->
+    <linearGradient id="bottomBevel" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#189080"/>
+      <stop offset="100%" stop-color="#1a9e8a"/>
+    </linearGradient>
+  </defs>
+
+  <!-- === OUTER HEXAGON FRAME (3D bevel effect) === -->
+  <!-- Outer hex points (R=210, center 250,260):
+       P0(250,50) P1(431.9,155) P2(431.9,365) P3(250,470) P4(68.1,365) P5(68.1,155) -->
+  <!-- Inner hex points (R=132, center 250,260):
+       Q0(250,128) Q1(364.3,194) Q2(364.3,326) Q3(250,392) Q4(135.7,326) Q5(135.7,194) -->
+
+  <!-- Face 5: Top-left bevel (teal) -->
+  <polygon points="68.1,155 250,50 250,128 135.7,194" fill="url(#topBevel)"/>
+
+  <!-- Face 0: Top-right bevel (teal) -->
+  <polygon points="250,50 431.9,155 364.3,194 250,128" fill="url(#topBevel)"/>
+
+  <!-- Face 4: Left bevel (dark navy) -->
+  <polygon points="68.1,155 135.7,194 135.7,326 68.1,365" fill="url(#leftSide)"/>
+
+  <!-- Face 1: Right bevel (dark navy) -->
+  <polygon points="431.9,155 431.9,365 364.3,326 364.3,194" fill="url(#rightSide)"/>
+
+  <!-- Face 3: Bottom-left bevel (darker teal) -->
+  <polygon points="68.1,365 250,470 250,392 135.7,326" fill="url(#bottomBevel)"/>
+
+  <!-- Face 2: Bottom-right bevel (darker teal) -->
+  <polygon points="431.9,365 250,470 250,392 364.3,326" fill="url(#bottomBevel)"/>
+
+  <!-- === INNER HEXAGON FACE === -->
+  <polygon points="250,128 364.3,194 364.3,326 250,392 135.7,326 135.7,194" fill="url(#innerFace)"/>
+
+  <!-- === PLAY BUTTON === -->
+  <!-- White circle (ring) -->
+  <circle cx="250" cy="260" r="82" fill="none" stroke="#ffffff" stroke-width="11"/>
+  <!-- Play triangle -->
+  <polygon points="232,222 232,298 285,260" fill="#ffffff"/>
+</svg>

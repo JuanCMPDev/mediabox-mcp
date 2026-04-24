@@ -1,0 +1,133 @@
+.widget {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  gap: var(--space-2);
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.headerTitle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--on-surface-variant);
+}
+
+.statusBadge {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #4caf77;
+  background: rgba(76, 175, 120, 0.12);
+  padding: 3px 8px;
+  border-radius: var(--radius-full);
+}
+
+.statusBadge.offline {
+  color: var(--error);
+  background: rgba(255, 180, 171, 0.12);
+}
+
+.dot {
+  width: 5px;
+  height: 5px;
+  border-radius: var(--radius-full);
+  background: currentColor;
+}
+
+/* Metrics grid */
+.metricsRow {
+  display: flex;
+  gap: var(--space-2);
+  flex: 1;
+  align-items: center;
+}
+
+.metric {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  flex: 1;
+}
+
+.ring {
+  position: relative;
+  width: 72px;
+  height: 72px;
+}
+
+.ringTrack {
+  fill: none;
+  stroke: rgba(255, 255, 255, 0.07);
+}
+
+.ringFill {
+  fill: none;
+  stroke-linecap: round;
+  transform: rotate(-90deg);
+  transform-origin: 50% 50%;
+  transition: stroke-dasharray 1s ease;
+}
+
+.ringFill.ok       { stroke: #adc6ff; }
+.ringFill.warning  { stroke: #ffc230; }
+.ringFill.critical { stroke: var(--error); }
+
+.ringValue {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--on-surface);
+  font-variant-numeric: tabular-nums;
+}
+
+.metricLabel {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--on-surface);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+/* Server info strip */
+.serverInfo {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-top: var(--space-1);
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.infoRow {
+  display: flex;
+  justify-content: space-between;
+  font-size: 12px;
+}
+
+.infoKey {
+  color: var(--on-surface-variant);
+  font-weight: 500;
+}
+
+.infoVal {
+  color: var(--on-surface);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+

@@ -1,0 +1,37 @@
+.row {
+  display: flex;
+  gap: 8px;
+  align-items: flex-end;
+}
+
+.input {
+  flex: 1;
+}
+
+.sendBtn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 42px;
+  height: 42px;
+  border-radius: var(--radius-lg);
+  background: linear-gradient(135deg, var(--primary-container), var(--tertiary-container));
+  color: var(--on-primary-fixed);
+  flex-shrink: 0;
+  transition: filter var(--transition-fast), transform var(--transition-fast);
+  box-shadow: 0 4px 16px rgba(77, 142, 255, 0.20);
+}
+
+.sendBtn:hover {
+  filter: brightness(1.12);
+  transform: scale(1.04);
+}
+
+.sendBtn:active {
+  transform: scale(0.96);
+}
+
+.sendBtn:disabled {
+  opacity: 0.4;
+  pointer-events: none;
+}

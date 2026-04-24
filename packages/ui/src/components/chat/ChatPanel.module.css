@@ -1,0 +1,68 @@
+.panel {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-bottom: var(--space-2);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+  flex-shrink: 0;
+}
+
+.headerLeft {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.headerTitle {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--on-surface);
+}
+
+.headerSub {
+  font-size: 12px;
+  color: var(--on-surface-variant);
+}
+
+.statusRow {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--on-surface-variant);
+}
+
+.statusDot {
+  width: 6px;
+  height: 6px;
+  border-radius: var(--radius-full);
+  background: #4caf77;
+  box-shadow: 0 0 5px rgba(76, 175, 120, 0.6);
+}
+
+/* Messages fill remaining space */
+.messages {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.inputArea {
+  padding-top: var(--space-2);
+  border-top: 1px solid rgba(255, 255, 255, 0.07);
+  flex-shrink: 0;
+}
+
+.hint {
+  text-align: center;
+  font-size: 11px;
+  color: var(--on-surface-muted);
+  margin-top: 8px;
+}
