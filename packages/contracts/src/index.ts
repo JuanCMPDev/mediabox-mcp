@@ -100,3 +100,27 @@ export interface ServiceEndpoint {
   status:       ServiceStatus;
   version?:     string;
 }
+
+// ── Chat streaming (Phase 2.3) ───────────────────────────────────────────────
+// Wire format between POST /api/chat/stream (mcp-server) and the browser UI.
+// Events are emitted as NDJSON: one JSON object per line.
+
+export type ChatEvent =
+  | { type: 'conversation'; id: string }
+  | { type: 'token';        text: string }
+  | { type: 'tool-start';   name: string; args: Record<string, unknown> }
+  | { type: 'tool-end';     name: string; ok: boolean; durationMs: number }
+  | { type: 'done';         fullText: string }
+  | { type: 'error';        message: string };
+
+/** Returned by GET /api/chat/info — tells the UI which provider/model is active. */
+export interface ChatInfo {
+  provider: string;
+  model:    string;
+}
+
+/** Simplified entry returned by GET /api/chat/:id/history — display-only. */
+export interface ChatHistoryEntry {
+  role:    'user' | 'assistant';
+  content: string;
+}
