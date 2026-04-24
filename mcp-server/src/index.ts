@@ -31,10 +31,10 @@ app.all("/mcp", authMiddleware, async (req: Request, res: Response) => {
   await transport.handleRequest(req, res, req.body);
 });
 
-app.get("/health", (_req, res) => { res.json({ status: "ok", name: "mediabox-mcp", version: "0.2.0" }); });
+app.get("/health", (_req, res) => { res.json({ status: "ok", name: "mediabox-mcp", version: "1.0.0" }); });
 
 app.listen(PORT, "0.0.0.0", () => {
-  console.log(`Mediabox MCP v0.2.0 running on port ${PORT}`);
+  console.log(`Mediabox MCP v1.0.0 running on port ${PORT}`);
   console.log(`Public URL: ${PUBLIC_URL}`);
   console.log(`Transport: POST ${PUBLIC_URL}/mcp`);
   console.log(`OAuth: ${PUBLIC_URL}/.well-known/oauth-authorization-server`);

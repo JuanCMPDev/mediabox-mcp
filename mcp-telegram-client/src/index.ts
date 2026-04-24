@@ -684,7 +684,7 @@ let reconnectAttempts = 0;
 
 async function connectMCP(): Promise<void> {
   console.log(`Connecting to MCP: ${MCP_URL}`);
-  const client = new Client({ name: "telegram-bot", version: "0.2.0" });
+  const client = new Client({ name: "telegram-bot", version: "0.3.0" });
   const headers: Record<string, string> = {};
   if (MCP_API_KEY) headers["Authorization"] = `Bearer ${MCP_API_KEY}`;
   const transport = new StreamableHTTPClientTransport(new URL(MCP_URL), {
