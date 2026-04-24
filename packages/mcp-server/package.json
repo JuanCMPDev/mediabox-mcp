@@ -1,0 +1,32 @@
+{
+  "name": "mediabox-mcp",
+  "version": "2.1.0-beta.0",
+  "description": "AI-powered MCP server for managing a self-hosted media stack",
+  "private": true,
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/JuanCMPDev/mediabox-mcp.git",
+    "directory": "packages/mcp-server"
+  },
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/index.js"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.12.1",
+    "cors": "^2.8.6",
+    "express": "^5.1.0",
+    "zod": "^3.24.4"
+  },
+  "devDependencies": {
+    "@types/cors": "^2.8.19",
+    "@types/express": "^5.0.2",
+    "@types/node": "^22.15.2",
+    "typescript": "^5.8.3"
+  }
+}

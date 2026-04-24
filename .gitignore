@@ -1,14 +1,18 @@
 # Dependencies & build output
 node_modules/
 dist/
+*.tsbuildinfo
 
 # Environment
 .env
 
 # Media & runtime data (local only)
-media/
-downloads/
-config/
+/media/
+/downloads/
+/config/
+/packages/*/config/
+/packages/*/downloads/
+/packages/*/media/
 Peliculas/
 Series/
 

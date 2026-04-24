@@ -1,0 +1,30 @@
+{
+  "name": "mcp-telegram-client",
+  "version": "2.1.0-beta.0",
+  "description": "Telegram bot client for the Mediabox MCP media management server",
+  "private": true,
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/JuanCMPDev/mediabox-mcp.git",
+    "directory": "packages/mcp-telegram-client"
+  },
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/index.js"
+  },
+  "dependencies": {
+    "@google/genai": "^1.47.0",
+    "@modelcontextprotocol/sdk": "^1.12.1",
+    "grammy": "^1.35.0",
+    "openai": "^4.86.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.15.2",
+    "typescript": "^5.8.3"
+  }
+}
