@@ -17,7 +17,8 @@
     "noFallthroughCasesInSwitch": true,
     "baseUrl": ".",
     "paths": {
-      "@/*": ["./src/*"]
+      "@/*": ["./src/*"],
+      "@mediabox/contracts": ["../contracts/src/index.ts"]
     }
   },
   "include": ["src"],

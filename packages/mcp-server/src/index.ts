@@ -7,6 +7,7 @@ import crypto from "crypto";
 import { PORT, PUBLIC_URL } from "./config.js";
 import { oauthProvider, authMiddleware } from "./auth.js";
 import { createMcpServer } from "./tools/register.js";
+import { dashboardRouter } from "./api/dashboard.js";
 import { VERSION } from "./version.js";
 
 const app = express();
@@ -33,6 +34,9 @@ app.all("/mcp", authMiddleware, async (req: Request, res: Response) => {
 });
 
 app.get("/health", (_req, res) => { res.json({ status: "ok", name: "mediabox-mcp", version: VERSION }); });
+
+// Dashboard REST API — consumed by @mediabox/ui; auth via INTERNAL_API_KEY or OAuth token
+app.use("/api/dashboard", authMiddleware, dashboardRouter);
 
 if (!process.env.INTERNAL_API_KEY) {
   console.warn("WARNING: INTERNAL_API_KEY is not set — generating ephemeral key. The Telegram bot will lose auth on every restart. Set INTERNAL_API_KEY in your .env file.");

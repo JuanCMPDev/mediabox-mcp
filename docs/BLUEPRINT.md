@@ -77,7 +77,3 @@ This roadmap breaks down the vision into manageable, strictly scoped Pull Reques
     *   **Requirements:** The agent wakes up periodically (e.g., weekly), runs `get_library_state` and disk checks, and sends a Telegram notification if action is needed (e.g., "Disk is 90% full. Should I delete old watched episodes?").
 
 ---
-
-## 4. Immediate Next Steps for Engineering
-1. Review and approve this blueprint.
-2. Begin execution on **Phase 1 (PR 1.1)** to ensure the architecture cleanly supports both the legacy CLI and the upcoming Desktop App.

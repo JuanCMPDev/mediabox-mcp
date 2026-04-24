@@ -66,6 +66,17 @@
   letter-spacing: 0.05em;
 }
 
+.errorState {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  flex: 1;
+  color: var(--on-surface-muted);
+  font-size: 13px;
+}
+
 /* Total size strip */
 .totalRow {
   display: flex;

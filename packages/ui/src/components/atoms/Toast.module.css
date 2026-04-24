@@ -1,0 +1,52 @@
+.container {
+  position: fixed;
+  bottom: calc(var(--service-dock-height) + 16px);
+  right: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  z-index: 200;
+  pointer-events: none;
+}
+
+.toast {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 10px 16px;
+  border-radius: var(--radius-lg);
+  font-size: 13px;
+  font-weight: 500;
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  box-shadow:
+    inset 1px 1px 0 rgba(255, 255, 255, 0.10),
+    0 8px 32px rgba(0, 0, 0, 0.40);
+  animation: slideIn 200ms ease forwards;
+  white-space: nowrap;
+  max-width: 360px;
+}
+
+.success {
+  background: rgba(16, 58, 32, 0.85);
+  color: #72f0a3;
+  border-color: rgba(114, 240, 163, 0.20);
+}
+
+.error {
+  background: rgba(58, 10, 10, 0.88);
+  color: var(--error);
+  border-color: rgba(255, 180, 171, 0.20);
+}
+
+.info {
+  background: rgba(10, 22, 58, 0.85);
+  color: var(--primary);
+  border-color: rgba(173, 198, 255, 0.18);
+}
+
+@keyframes slideIn {
+  from { opacity: 0; transform: translateX(16px); }
+  to   { opacity: 1; transform: translateX(0); }
+}

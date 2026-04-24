@@ -158,12 +158,81 @@
   transition: width 1s linear;
 }
 
-/* Controls */
+/* Admin area — controls + inline panels */
+.adminArea {
+  margin-top: 10px;
+}
+
 .controls {
   display: flex;
   align-items: center;
   gap: 8px;
-  margin-top: 10px;
+}
+
+/* Inline admin panels (confirm-kill, send-message, show-info) */
+.inlinePanel {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  padding: 10px 12px;
+  background: rgba(0, 0, 0, 0.25);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: var(--radius-lg);
+  animation: fadeIn 150ms ease;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(-4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.confirmText {
+  font-size: 13px;
+  color: var(--on-surface);
+}
+
+.confirmText strong {
+  color: var(--primary);
+}
+
+.inlineBtns {
+  display: flex;
+  gap: 6px;
+  justify-content: flex-end;
+}
+
+.inlineRow {
+  display: flex;
+  justify-content: space-between;
+  font-size: 11px;
+}
+
+.infoKey {
+  color: var(--on-surface-variant);
+}
+
+.infoVal {
+  color: var(--on-surface);
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  font-size: 11px;
+}
+
+.dismissBtn {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  color: var(--on-surface-variant);
+  align-self: flex-end;
+  padding: 3px 6px;
+  border-radius: var(--radius-sm);
+  transition: background var(--transition-fast);
+}
+
+.dismissBtn:hover {
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--on-surface);
 }
 
 /* Empty state */
