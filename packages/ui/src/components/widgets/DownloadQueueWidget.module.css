@@ -1,0 +1,229 @@
+.widget {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-width: 0;
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: var(--space-2);
+  flex-shrink: 0;
+}
+
+.headerLeft {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--on-surface-variant);
+}
+
+.countBadge {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--primary);
+  background: rgba(173, 198, 255, 0.10);
+  padding: 2px 7px;
+  border-radius: var(--radius-full);
+}
+
+/* List */
+.list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  overflow-y: auto;
+  flex: 1;
+  min-height: 0;
+}
+
+.item {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding: 10px 12px;
+  border-radius: var(--radius);
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  transition: background var(--transition-fast);
+  /* Critical: allow children to shrink below content width so ellipsis triggers */
+  min-width: 0;
+}
+
+.item:hover {
+  background: rgba(255, 255, 255, 0.07);
+}
+
+.itemTop {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  justify-content: space-between;
+  min-width: 0;
+}
+
+.itemName {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--on-surface);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+.itemRight {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+/* Action buttons — show on item hover */
+.actions {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  opacity: 0;
+  transition: opacity var(--transition-fast);
+}
+
+.item:hover .actions {
+  opacity: 1;
+}
+
+.actionBtn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: var(--radius-sm);
+  color: var(--on-surface-variant);
+  transition: background var(--transition-fast), color var(--transition-fast);
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.actionBtn:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.10);
+  color: var(--on-surface);
+}
+
+.actionBtn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.actionDanger { color: var(--error); }
+.actionDanger:hover:not(:disabled) { background: rgba(255, 180, 171, 0.12); color: var(--error); }
+
+/* Inline delete confirmation */
+.confirmRow {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.confirmLabel {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--error);
+  white-space: nowrap;
+  margin-right: 2px;
+}
+
+.statusBadge {
+  flex-shrink: 0;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  padding: 2px 7px;
+  border-radius: var(--radius-full);
+  white-space: nowrap;
+}
+
+.statusBadge.downloading {
+  color: var(--primary);
+  background: rgba(173, 198, 255, 0.12);
+}
+
+.statusBadge.seeding {
+  color: #4caf77;
+  background: rgba(76, 175, 120, 0.12);
+}
+
+.statusBadge.paused {
+  color: var(--on-surface-variant);
+  background: rgba(255, 255, 255, 0.07);
+}
+
+.statusBadge.completed {
+  color: var(--tertiary);
+  background: rgba(192, 193, 255, 0.12);
+}
+
+.statusBadge.error {
+  color: var(--error);
+  background: rgba(255, 180, 171, 0.12);
+}
+
+.errorState {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  flex: 1;
+  color: var(--on-surface-muted);
+  font-size: 13px;
+}
+
+/* Progress bar */
+.progressTrack {
+  height: 3px;
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: var(--radius-full);
+  overflow: hidden;
+}
+
+.progressFill {
+  height: 100%;
+  border-radius: var(--radius-full);
+  transition: width 0.5s ease;
+}
+
+.progressFill.downloading { background: linear-gradient(90deg, var(--primary), var(--tertiary)); }
+.progressFill.seeding     { background: #4caf77; }
+.progressFill.paused      { background: var(--outline); }
+.progressFill.completed   { background: var(--tertiary-container); }
+.progressFill.error       { background: var(--error); }
+
+.itemMeta {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: 11px;
+  color: var(--on-surface-variant);
+  font-variant-numeric: tabular-nums;
+  min-width: 0;
+}
+
+.size {
+  font-weight: 500;
+  color: var(--on-surface);
+}
+
+.metaRight {
+  color: var(--on-surface-variant);
+  white-space: nowrap;
+  flex-shrink: 0;
+}

@@ -1,0 +1,12 @@
+.list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  overflow-y: auto;
+  flex: 1;
+  min-height: 0;
+  padding: var(--glass-padding);
+  /* Fade-out at top to indicate scroll history */
+  mask-image: linear-gradient(to bottom, transparent 0%, black 40px);
+  -webkit-mask-image: linear-gradient(to bottom, transparent 0%, black 40px);
+}

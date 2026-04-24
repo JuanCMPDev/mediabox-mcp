@@ -21,6 +21,12 @@ jobs:
       - name: Install workspaces
         run: npm ci
 
+      - name: Build @mediabox/contracts
+        run: npm run build -w @mediabox/contracts
+
+      - name: Build @mediabox/chat-core
+        run: npm run build -w @mediabox/chat-core
+
       - name: Build @mediabox/core
         run: npm run build -w @mediabox/core
 

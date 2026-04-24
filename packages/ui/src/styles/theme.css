@@ -1,0 +1,127 @@
+/* ─── Mediabox OS Design System — design.md tokens → CSS custom properties ─── */
+
+:root {
+  /* ── Surface family ─────────────────────────────────────────── */
+  --surface:                    #0b1326;
+  --surface-dim:                #0b1326;
+  --surface-bright:             #31394d;
+  --surface-container-lowest:   #060e20;
+  --surface-container-low:      #131b2e;
+  --surface-container:          #171f33;
+  --surface-container-high:     #222a3d;
+  --surface-container-highest:  #2d3449;
+  --on-surface:                 #dae2fd;
+  --on-surface-variant:         #c2c6d6;
+  --inverse-surface:            #dae2fd;
+  --inverse-on-surface:         #283044;
+  --surface-variant:            #2d3449;
+  --surface-tint:               #adc6ff;
+
+  /* ── Outline ─────────────────────────────────────────────────── */
+  --outline:                    #8c909f;
+  --outline-variant:            #424754;
+
+  /* ── Primary ─────────────────────────────────────────────────── */
+  --primary:                    #adc6ff;
+  --on-primary:                 #002e6a;
+  --primary-container:          #4d8eff;
+  --on-primary-container:       #00285d;
+  --inverse-primary:            #005ac2;
+  --primary-fixed:              #d8e2ff;
+  --primary-fixed-dim:          #adc6ff;
+  --on-primary-fixed:           #001a42;
+  --on-primary-fixed-variant:   #004395;
+
+  /* ── Secondary ───────────────────────────────────────────────── */
+  --secondary:                  #b9c8de;
+  --on-secondary:               #233143;
+  --secondary-container:        #39485a;
+  --on-secondary-container:     #a7b6cc;
+  --secondary-fixed:            #d4e4fa;
+  --secondary-fixed-dim:        #b9c8de;
+  --on-secondary-fixed:         #0d1c2d;
+  --on-secondary-fixed-variant: #39485a;
+
+  /* ── Tertiary ────────────────────────────────────────────────── */
+  --tertiary:                   #c0c1ff;
+  --on-tertiary:                #1000a9;
+  --tertiary-container:         #8083ff;
+  --on-tertiary-container:      #0d0096;
+  --tertiary-fixed:             #e1e0ff;
+  --tertiary-fixed-dim:         #c0c1ff;
+  --on-tertiary-fixed:          #07006c;
+  --on-tertiary-fixed-variant:  #2f2ebe;
+
+  /* ── Error ───────────────────────────────────────────────────── */
+  --error:                      #ffb4ab;
+  --on-error:                   #690005;
+  --error-container:            #93000a;
+  --on-error-container:         #ffdad6;
+
+  /* ── Background ──────────────────────────────────────────────── */
+  --background:                 #0b1326;
+  --on-background:              #dae2fd;
+
+  /* ── Glass system ─────────────────────────────────────────────── */
+  --glass-blur-panel:           28px;
+  --glass-blur-floating:        60px;
+  --glass-tint:                 rgba(255, 255, 255, 0.06);
+  --glass-border:               rgba(255, 255, 255, 0.10);
+  --glass-inner-light:          rgba(255, 255, 255, 0.08);
+
+  /* Panel bg: surface-container #171f33 at 65% alpha */
+  --glass-bg-panel:             rgba(23, 31, 51, 0.65);
+  /* Floating bg: surface-container-lowest #060e20 at 78% — modals, context menus */
+  --glass-bg-floating:          rgba(6, 14, 32, 0.78);
+  /* Sidebar bg: surface-container-low #131b2e at 72% */
+  --glass-bg-sidebar:           rgba(19, 27, 46, 0.72);
+
+  /* ── Elevation shadows ───────────────────────────────────────── */
+  --shadow-panel:
+    inset 1px 1px 0 rgba(255, 255, 255, 0.10),
+    0 4px 32px rgba(0, 0, 0, 0.28);
+  --shadow-floating:
+    inset 1px 1px 0 rgba(255, 255, 255, 0.14),
+    0 20px 60px -10px rgba(173, 198, 255, 0.15),
+    0 8px 32px rgba(0, 0, 0, 0.40);
+
+  /* ── Radii ───────────────────────────────────────────────────── */
+  --radius-sm:   0.25rem;  /* 4px  */
+  --radius:      0.5rem;   /* 8px  — standard */
+  --radius-md:   0.75rem;  /* 12px */
+  --radius-lg:   1rem;     /* 16px */
+  --radius-xl:   1.5rem;   /* 24px — glass panels */
+  --radius-full: 9999px;
+
+  /* ── Spacing (8px base unit) ─────────────────────────────────── */
+  --space-1:  8px;
+  --space-2:  16px;
+  --space-3:  24px;
+  --space-4:  32px;
+  --space-5:  40px;
+  --space-6:  48px;
+  --space-8:  64px;
+  --container-padding: 32px;
+  --gutter:            16px;
+  --glass-padding:     24px;
+
+  /* ── Typography ──────────────────────────────────────────────── */
+  --font-sans: "Plus Jakarta Sans", system-ui, -apple-system, sans-serif;
+
+  /* ── Sidebar & layout dims ───────────────────────────────────── */
+  --sidebar-width:        240px;
+  --topbar-height:         48px;
+  --service-dock-height:   64px;
+
+  /* ── Readability tokens ──────────────────────────────────────── */
+  /* Brighter variant for secondary text that needs to stay legible
+   * against glass backgrounds. Rule: never stack opacity on top of
+   * --on-surface-variant — use --on-surface-muted if you need softer. */
+  --on-surface-muted:    rgba(218, 226, 253, 0.55);
+  --on-surface-strong:   var(--on-surface);
+
+  /* ── Transitions ─────────────────────────────────────────────── */
+  --transition-fast:   150ms ease;
+  --transition-base:   200ms ease;
+  --transition-slow:   300ms cubic-bezier(0.4, 0, 0.2, 1);
+}

@@ -7,6 +7,9 @@ import crypto from "crypto";
 import { PORT, PUBLIC_URL } from "./config.js";
 import { oauthProvider, authMiddleware } from "./auth.js";
 import { createMcpServer } from "./tools/register.js";
+import { dashboardRouter } from "./api/dashboard.js";
+import { chatRouter }      from "./api/chat.js";
+import { chatProviderInfo } from "./chat/provider.js";
 import { VERSION } from "./version.js";
 
 const app = express();
@@ -34,6 +37,12 @@ app.all("/mcp", authMiddleware, async (req: Request, res: Response) => {
 
 app.get("/health", (_req, res) => { res.json({ status: "ok", name: "mediabox-mcp", version: VERSION }); });
 
+// Dashboard REST API — consumed by @mediabox/ui
+app.use("/api/dashboard", authMiddleware, dashboardRouter);
+
+// Chat API — LLM + MCP tool-calling via NDJSON stream
+app.use("/api/chat", authMiddleware, chatRouter);
+
 if (!process.env.INTERNAL_API_KEY) {
   console.warn("WARNING: INTERNAL_API_KEY is not set — generating ephemeral key. The Telegram bot will lose auth on every restart. Set INTERNAL_API_KEY in your .env file.");
 }
@@ -43,4 +52,11 @@ app.listen(PORT, "0.0.0.0", () => {
   console.log(`Public URL: ${PUBLIC_URL}`);
   console.log(`Transport: POST ${PUBLIC_URL}/mcp`);
   console.log(`OAuth: ${PUBLIC_URL}/.well-known/oauth-authorization-server`);
+
+  const llm = chatProviderInfo();
+  if (llm) {
+    console.log(`Chat: ${PUBLIC_URL}/api/chat/stream (${llm.provider}/${llm.model})`);
+  } else {
+    console.log(`Chat: disabled — set OPENROUTER_API_KEY or GOOGLE_AI_API_KEY to enable`);
+  }
 });

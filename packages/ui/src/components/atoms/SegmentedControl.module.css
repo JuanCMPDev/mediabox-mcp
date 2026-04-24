@@ -1,0 +1,32 @@
+.track {
+  display: inline-flex;
+  background: rgba(0, 0, 0, 0.30);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: var(--radius-full);
+  padding: 3px;
+  position: relative;
+  gap: 2px;
+}
+
+.option {
+  position: relative;
+  z-index: 1;
+  padding: 6px 16px;
+  border-radius: var(--radius-full);
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--on-surface-variant);
+  transition: color var(--transition-base), background var(--transition-slow);
+  white-space: nowrap;
+}
+
+.option:hover {
+  color: var(--on-surface);
+}
+
+.option.active {
+  background: rgba(255, 255, 255, 0.10);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  color: var(--on-surface);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.3);
+}

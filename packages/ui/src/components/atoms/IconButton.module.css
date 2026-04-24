@@ -1,0 +1,32 @@
+.btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: var(--radius);
+  color: var(--on-surface-variant);
+  transition: background var(--transition-fast), color var(--transition-fast);
+  flex-shrink: 0;
+}
+
+.btn:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--on-surface);
+}
+
+.btn:active {
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.btn.active {
+  color: var(--primary);
+  background: rgba(173, 198, 255, 0.10);
+}
+
+/* Larger variant for dock */
+.lg {
+  width: 44px;
+  height: 44px;
+  border-radius: var(--radius-md);
+}

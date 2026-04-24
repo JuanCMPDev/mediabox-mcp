@@ -1,0 +1,30 @@
+{
+  "name": "@mediabox/chat-core",
+  "version": "2.1.0-beta.0",
+  "description": "Shared LLM + MCP tool-calling engine for Mediabox chat. Consumed by mcp-server (REST) and will replace mcp-telegram-client logic in Phase 2.3e.",
+  "private": true,
+  "license": "MIT",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types":  "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": ["dist"],
+  "scripts": {
+    "build": "tsc"
+  },
+  "dependencies": {
+    "@google/genai": "^1.47.0",
+    "@mediabox/contracts": "*",
+    "@modelcontextprotocol/sdk": "^1.12.1",
+    "openai": "^4.86.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "typescript": "^5.8.0"
+  }
+}

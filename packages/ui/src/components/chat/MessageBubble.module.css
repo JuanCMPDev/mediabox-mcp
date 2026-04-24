@@ -1,0 +1,88 @@
+.wrapper {
+  display: flex;
+  gap: 10px;
+  align-items: flex-end;
+  max-width: 80%;
+}
+
+/* User messages — right side */
+.wrapper.user {
+  margin-left: auto;
+  flex-direction: row-reverse;
+}
+
+.avatar {
+  width: 28px;
+  height: 28px;
+  border-radius: var(--radius-full);
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.avatar.assistant {
+  background: linear-gradient(135deg, var(--primary-container), var(--tertiary-container));
+  color: var(--on-primary);
+}
+
+.avatar.user {
+  background: rgba(255, 255, 255, 0.10);
+  color: var(--on-surface-variant);
+}
+
+.bubble {
+  padding: 10px 14px;
+  border-radius: var(--radius-lg);
+  font-size: 14px;
+  line-height: 1.55;
+  user-select: text;
+  -webkit-user-select: text;
+  word-break: break-word;
+}
+
+/* Assistant bubble — glass */
+.bubble.assistant {
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  color: var(--on-surface);
+  border-bottom-left-radius: var(--radius-sm);
+}
+
+/* User bubble — gradient */
+.bubble.user {
+  background: linear-gradient(135deg, var(--primary-container), var(--on-primary-fixed-variant));
+  color: var(--primary-fixed);
+  border-bottom-right-radius: var(--radius-sm);
+}
+
+.bubble strong {
+  font-weight: 700;
+}
+
+/* Typewriter cursor while the LLM is streaming */
+.bubble.streaming::after {
+  content: '▋';
+  opacity: 1;
+  animation: blink 0.9s step-end infinite;
+  margin-left: 2px;
+  color: var(--primary);
+  font-size: 0.85em;
+}
+
+@keyframes blink {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0; }
+}
+
+.timestamp {
+  font-size: 10px;
+  color: var(--on-surface-variant);
+  opacity: 0.5;
+  padding: 0 4px;
+  white-space: nowrap;
+  flex-shrink: 0;
+  align-self: flex-end;
+}

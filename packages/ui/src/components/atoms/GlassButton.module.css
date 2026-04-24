@@ -1,0 +1,70 @@
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 10px 20px;
+  border-radius: var(--radius-full);
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1;
+  transition: all var(--transition-base);
+  white-space: nowrap;
+}
+
+/* Primary — gradient fill */
+.primary {
+  background: linear-gradient(135deg, var(--primary-container), var(--tertiary-container));
+  color: var(--on-primary-fixed);
+  box-shadow: 0 4px 20px rgba(77, 142, 255, 0.25);
+}
+
+.primary:hover {
+  filter: brightness(1.12);
+  box-shadow: 0 6px 24px rgba(77, 142, 255, 0.40);
+  transform: translateY(-1px);
+}
+
+.primary:active {
+  transform: translateY(0);
+  filter: brightness(0.95);
+}
+
+/* Secondary — ghost glass */
+.secondary {
+  background: rgba(255, 255, 255, 0.07);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: var(--on-surface);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+.secondary:hover {
+  background: rgba(255, 255, 255, 0.12);
+  border-color: rgba(255, 255, 255, 0.20);
+}
+
+.secondary:active {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+/* Icon-only sizing */
+.iconOnly {
+  padding: 10px;
+  border-radius: var(--radius-full);
+}
+
+/* Sizes */
+.sm {
+  padding: 7px 14px;
+  font-size: 13px;
+}
+
+.sm.iconOnly {
+  padding: 7px;
+}
+
+.lg {
+  padding: 13px 28px;
+  font-size: 15px;
+}

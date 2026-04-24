@@ -31,12 +31,14 @@ This roadmap breaks down the vision into manageable, strictly scoped Pull Reques
 ### Phase 1: Core Decoupling (The Engine)
 *Objective: Separate presentation (inquirer prompts) from business logic to allow a web/desktop UI to trigger the setup process.*
 
-*   **PR 1.1: Extract Orchestrator to `@mediabox/core`**
+*   **PR 1.1: Extract Orchestrator to `@mediabox/core`** ✅ **COMPLETED** (2026-04-23, `2.1.0-beta.0`)
     *   **Scope:** Move the Docker Compose generation (`generator.ts`), configuration logic (`configurator.ts`), and Jellyfin API setup (`services/jellyfin.ts`) into a new package (`packages/core`).
     *   **Requirements:** The core must export a clean asynchronous API (e.g., `async function deployStack(config: Config): Promise<Result>`). It must not depend on `chalk`, `ora`, or `@inquirer`.
-*   **PR 1.2: Refactor `mediabox-cli` to consume `@mediabox/core`**
+    *   **Outcome:** Monorepo restructured under `packages/*` with npm workspaces. `@mediabox/core` exposes `deployStack()` + pure generators + event-stream `DeployEvent` model + `Deployer` interface. Introduced normalized `DeployConfig` domain type (replaces UI-shaped `WizardAnswers` at the core boundary). 58 Vitest tests across generators, utilities, validator, and translator. Zero dependencies on `chalk`/`ora`/`@inquirer` in core.
+*   **PR 1.2: Refactor `mediabox-cli` to consume `@mediabox/core`** ✅ **COMPLETED** (folded into PR 1.1)
     *   **Scope:** Update the existing CLI wizard to import and call the new `@mediabox/core` API.
     *   **Requirements:** The CLI must function exactly as before, acting merely as a terminal frontend for the Core.
+    *   **Outcome:** `create-mediabox` is now a thin frontend: `wizard → translate → validate → deployStack`. `DockerCliDeployer` implements the `Deployer` interface via `execa` + `node:fs`. `createCliEventSink()` maps `DeployEvent` → `ora` spinners / `chalk` lines with phase-header detection. tsup bundles `@mediabox/core` into a single 442 KB ESM file — tarball ships clean at 98 kB with no workspace references.
 
 ### Phase 2: Web Dashboard Foundation (The UI)
 *Objective: Build the visual layer that will eventually live inside the desktop app.*
@@ -75,7 +77,3 @@ This roadmap breaks down the vision into manageable, strictly scoped Pull Reques
     *   **Requirements:** The agent wakes up periodically (e.g., weekly), runs `get_library_state` and disk checks, and sends a Telegram notification if action is needed (e.g., "Disk is 90% full. Should I delete old watched episodes?").
 
 ---
-
-## 4. Immediate Next Steps for Engineering
-1. Review and approve this blueprint.
-2. Begin execution on **Phase 1 (PR 1.1)** to ensure the architecture cleanly supports both the legacy CLI and the upcoming Desktop App.

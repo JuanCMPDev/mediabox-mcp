@@ -1,0 +1,99 @@
+.topbar {
+  grid-area: topbar;
+  display: flex;
+  align-items: center;
+  padding: 0 var(--glass-padding);
+  height: var(--topbar-height);
+  /* Tauri drag region — buttons inside must have no-drag override */
+  -webkit-app-region: drag;
+  app-region: drag;
+  position: relative;
+  z-index: 30;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  background: rgba(11, 19, 38, 0.40);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+}
+
+.left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  -webkit-app-region: no-drag;
+  app-region: no-drag;
+}
+
+.breadcrumb {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--on-surface-variant);
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.breadcrumbCurrent {
+  color: var(--on-surface);
+  font-weight: 600;
+}
+
+.center {
+  flex: 1;
+  /* Pure drag zone — no interactive content */
+}
+
+.right {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  -webkit-app-region: no-drag;
+  app-region: no-drag;
+}
+
+.clock {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--on-surface-variant);
+  font-variant-numeric: tabular-nums;
+}
+
+.statusDot {
+  width: 7px;
+  height: 7px;
+  border-radius: var(--radius-full);
+  background: #4caf77;
+  box-shadow: 0 0 6px rgba(76, 175, 120, 0.7);
+  flex-shrink: 0;
+}
+
+.statusDot.offline {
+  background: var(--error);
+  box-shadow: 0 0 6px rgba(255, 180, 171, 0.5);
+}
+
+.statusLabel {
+  font-size: 13px;
+  color: var(--on-surface-variant);
+}
+
+/* Traffic-light window controls stub (for Tauri) */
+.windowControls {
+  display: flex;
+  gap: 6px;
+}
+
+.wc {
+  width: 12px;
+  height: 12px;
+  border-radius: var(--radius-full);
+  opacity: 0.4;
+  transition: opacity var(--transition-fast);
+}
+
+.wc:hover {
+  opacity: 1;
+}
+
+.wc.close   { background: #ff5f57; }
+.wc.min     { background: #ffbd2e; }
+.wc.max     { background: #28c840; }

@@ -1,0 +1,21 @@
+{
+  "name": "@mediabox/contracts",
+  "version": "2.1.0-beta.0",
+  "description": "Shared API contract types for @mediabox/mcp-server and @mediabox/ui. No runtime code.",
+  "private": true,
+  "license": "MIT",
+  "type": "module",
+  "main": "./dist/index.d.ts",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "scripts": {
+    "build": "tsc"
+  },
+  "devDependencies": {
+    "typescript": "^5.8.0"
+  }
+}

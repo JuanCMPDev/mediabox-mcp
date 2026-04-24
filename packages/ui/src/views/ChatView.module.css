@@ -1,0 +1,11 @@
+.view {
+  height: 100%;
+  padding: var(--container-padding);
+  display: flex;
+  flex-direction: column;
+}
+
+.panel {
+  flex: 1;
+  min-height: 0;
+}

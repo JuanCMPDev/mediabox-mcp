@@ -1,0 +1,35 @@
+.view {
+  height: 100%;
+  padding: var(--container-padding);
+  display: grid;
+  grid-template-columns: repeat(12, 1fr);
+  grid-template-rows: 1fr 1fr;
+  gap: var(--gutter);
+  overflow: hidden;
+}
+
+/* Row 1 */
+.nowPlaying {
+  grid-column: span 8;
+  grid-row: 1;
+  min-height: 0;
+}
+
+.serverHealth {
+  grid-column: span 4;
+  grid-row: 1;
+  min-height: 0;
+}
+
+/* Row 2 */
+.downloadQueue {
+  grid-column: span 8;
+  grid-row: 2;
+  min-height: 0;
+}
+
+.librarySummary {
+  grid-column: span 4;
+  grid-row: 2;
+  min-height: 0;
+}

@@ -1,0 +1,65 @@
+.card {
+  position: relative;
+  background: var(--glass-bg-panel);
+  backdrop-filter: blur(var(--glass-blur-panel));
+  -webkit-backdrop-filter: blur(var(--glass-blur-panel));
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-xl);
+  padding: var(--glass-padding);
+  box-shadow: var(--shadow-panel);
+  overflow: hidden;
+}
+
+/* Top-left light catch — simulates a light source above-left */
+.card::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: linear-gradient(
+    135deg,
+    rgba(255, 255, 255, 0.07) 0%,
+    rgba(255, 255, 255, 0.01) 40%,
+    transparent 70%
+  );
+  pointer-events: none;
+  z-index: 0;
+}
+
+.card > * {
+  position: relative;
+  z-index: 1;
+}
+
+/* Elevation 3 — floating (modals, dock) */
+.level3 {
+  backdrop-filter: blur(var(--glass-blur-floating));
+  -webkit-backdrop-filter: blur(var(--glass-blur-floating));
+  box-shadow: var(--shadow-floating);
+}
+
+.level3::before {
+  background: linear-gradient(
+    135deg,
+    rgba(255, 255, 255, 0.10) 0%,
+    rgba(255, 255, 255, 0.02) 40%,
+    transparent 70%
+  );
+}
+
+.noPadding {
+  padding: 0;
+}
+
+.interactive {
+  cursor: pointer;
+  transition: background var(--transition-base), transform var(--transition-base);
+}
+
+.interactive:hover {
+  background: rgba(23, 31, 51, 0.75);
+}
+
+.interactive:active {
+  transform: scale(0.99);
+}
