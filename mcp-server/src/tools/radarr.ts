@@ -94,4 +94,48 @@ export function registerRadarrTools(server: McpServer): void {
     await radarrApi("release", "POST", { guid, indexerId });
     return textResult({ message: "Release sent to download client", replaced: movieId ? true : undefined });
   });
+
+  server.registerTool("movie_import", {
+    description: "Import manual downloads into Radarr library. action='list' shows detected mappings, action='import' applies them. Use this for PyLoad or other manual movie downloads.",
+    inputSchema: {
+      action: z.enum(["list", "import"]).default("list"),
+      folder: z.string().describe("Folder in downloads to import from (e.g. 'downloads/Movie Title')"),
+      movieId: z.number().optional().describe("Force import for this Radarr movie ID"),
+      files: z.array(z.object({
+        path: z.string(),
+        movieId: z.number(),
+        quality: z.object({ quality: z.object({ id: z.number() }) }).optional(),
+      })).optional().describe("Selected file mappings (for action='import')"),
+    },
+  }, async ({ action, folder, movieId, files }) => {
+    const fullFolder = resolvePath(folder);
+    if (action === "list") {
+      const ep = `manualimport?folder=${encodeURIComponent(fullFolder)}${movieId ? `&movieId=${movieId}` : ""}`;
+      const results = await radarrApi(ep);
+      return textResult(results.map((r: any) => ({
+        path: r.path.replace(DOWNLOADS_PATH, "downloads"),
+        movie: r.movie?.title,
+        movieId: r.movie?.id,
+        quality: r.quality?.quality?.name,
+        rejection: r.rejections?.[0]?.reason,
+      })));
+    }
+    if (!files?.length) throw new Error("files mapping required for import");
+    await radarrApi("manualimport", "POST", { files, importMode: "move" });
+    return textResult({ message: `Imported ${files.length} movie(s) into Radarr` });
+  });
+
+  server.registerTool("movie_rescan", {
+    description: "Force Radarr to rescan movie folders or a specific movie for new files.",
+    inputSchema: {
+      movieId: z.number().optional().describe("Radarr movie ID. If omitted, rescans all movies."),
+    },
+  }, async ({ movieId }) => {
+    const cmd = movieId ? { name: "RescanMovie", movieIds: [movieId] } : { name: "RescanMovie" };
+    await radarrApi("command", "POST", cmd);
+    return textResult({ message: `Rescan command sent${movieId ? ` for movie ${movieId}` : ""}` });
+  });
 }
+
+import { resolvePath } from "../helpers/files.js";
+import { DOWNLOADS_PATH } from "../config.js";

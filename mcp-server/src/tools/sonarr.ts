@@ -195,4 +195,49 @@ export function registerSonarrTools(server: McpServer): void {
     await sonarrApi("release", "POST", { guid, indexerId });
     return textResult({ message: "Release sent to download client", replaced: episodeId ? true : undefined });
   });
+
+  server.registerTool("series_import", {
+    description: "Import manual downloads into Sonarr library. action='list' shows detected mappings, action='import' applies them. This is the best way to track files from PyLoad or manual downloads.",
+    inputSchema: {
+      action: z.enum(["list", "import"]).default("list"),
+      folder: z.string().describe("Folder in downloads to import from (e.g. 'downloads/Show Name')"),
+      seriesId: z.number().optional().describe("Force import for this Sonarr series ID"),
+      files: z.array(z.object({
+        path: z.string(),
+        episodeIds: z.array(z.number()),
+        quality: z.object({ quality: z.object({ id: z.number() }) }).optional(),
+      })).optional().describe("Selected file mappings (for action='import')"),
+    },
+  }, async ({ action, folder, seriesId, files }) => {
+    const fullFolder = resolvePath(folder);
+    if (action === "list") {
+      const ep = `manualimport?folder=${encodeURIComponent(fullFolder)}${seriesId ? `&seriesId=${seriesId}` : ""}`;
+      const results = await sonarrApi(ep);
+      return textResult(results.map((r: any) => ({
+        path: r.path.replace(DOWNLOADS_PATH, "downloads"),
+        series: r.series?.title,
+        episodes: r.episodes?.map((e: any) => `S${String(e.seasonNumber).padStart(2, "0")}E${String(e.episodeNumber).padStart(2, "0")}`),
+        episodeIds: r.episodes?.map((e: any) => e.id),
+        quality: r.quality?.quality?.name,
+        rejection: r.rejections?.[0]?.reason,
+      })));
+    }
+    if (!files?.length) throw new Error("files mapping required for import");
+    await sonarrApi("manualimport", "POST", { files, importMode: "move" });
+    return textResult({ message: `Imported ${files.length} file(s) into Sonarr` });
+  });
+
+  server.registerTool("series_rescan", {
+    description: "Force Sonarr to rescan a series folder for new files.",
+    inputSchema: {
+      seriesId: z.number().describe("Sonarr series ID or tvdbId"),
+    },
+  }, async ({ seriesId }) => {
+    const resolved = await resolveSeriesId(seriesId);
+    await sonarrApi("command", "POST", { name: "RescanSeries", seriesId: resolved });
+    return textResult({ message: `Rescan command sent for series ${resolved}` });
+  });
 }
+
+import { resolvePath } from "../helpers/files.js";
+import { DOWNLOADS_PATH } from "../config.js";

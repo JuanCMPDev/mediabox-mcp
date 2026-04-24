@@ -7,7 +7,7 @@ import { registerDownloadTools } from "./downloads.js";
 import { registerMaintenanceTools } from "./maintenance.js";
 
 export function createMcpServer(): McpServer {
-  const server = new McpServer({ name: "mediabox-mcp", version: "2.0.0-beta.0" });
+  const server = new McpServer({ name: "mediabox-mcp", version: "2.0.0-beta.1" });
   registerJellyfinTools(server);
   registerLibraryTools(server);
   registerSonarrTools(server);

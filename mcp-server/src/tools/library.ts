@@ -165,9 +165,10 @@ export function registerLibraryTools(server: McpServer): void {
       jellyfinItemId: z.string().optional().describe("Jellyfin item ID — resolves the file path automatically"),
       showName: z.string().describe("Correct show name for renamed files (e.g. 'Rurouni Kenshin')"),
       seasonNumber: z.number().default(1),
+      startEpisodeNumber: z.number().default(1).describe("Starting episode number for the sequence (default 1)"),
       dryRun: z.boolean().default(true).describe("Preview changes without applying"),
     },
-  }, async ({ showPath, jellyfinItemId, showName, seasonNumber, dryRun }) => {
+  }, async ({ showPath, jellyfinItemId, showName, seasonNumber, startEpisodeNumber, dryRun }) => {
     if (!showPath && jellyfinItemId) {
       const lookup = await jfApi(`/Items?ids=${jellyfinItemId}`);
       const item = lookup.Items?.[0];
@@ -184,13 +185,67 @@ export function registerLibraryTools(server: McpServer): void {
     await find(fullPath);
     if (!vids.length) return textResult({ message: "No video files found", path: showPath });
     vids.sort((a, b) => extractEpisodeNumber(a.name) - extractEpisodeNumber(b.name));
-    const renames = vids.map((v, i) => ({ from: v.fullPath.replace(fullPath + "/", ""), to: `${showName} - S${seasonPad}E${String(i + 1).padStart(2, "0")}${path.extname(v.name)}` }));
+    const renames = vids.map((v, i) => ({ from: v.fullPath.replace(fullPath + "/", ""), to: `${showName} - S${seasonPad}E${String(startEpisodeNumber + i).padStart(2, "0")}${path.extname(v.name)}` }));
     if (!dryRun) {
       await fs.mkdir(seasonDir, { recursive: true });
-      for (let i = 0; i < vids.length; i++) await moveFile(vids[i].fullPath, path.join(seasonDir, renames[i].to));
+      for (let i = 0; i < vids.length; i++) {
+        const destPath = path.join(seasonDir, renames[i].to);
+        const exists = await fs.stat(destPath).catch(() => null);
+        if (exists && exists.isFile()) {
+          throw new Error(`Collision detected: ${destPath} already exists. Aborting rename to prevent data loss.`);
+        }
+        await moveFile(vids[i].fullPath, destPath);
+      }
       await jfApi("/Library/Refresh", "POST");
     }
     return textResult({ mode: dryRun ? "DRY RUN" : "APPLIED", files: vids.length, renames });
+    });
+
+    server.registerTool("get_library_state", {
+    description: "Unified view of media status. Checks if a show/movie exists in Jellyfin, Sonarr/Radarr, and if it's being downloaded. Perfect for finding gaps.",
+    inputSchema: {
+      query: z.string().describe("Search term (e.g. 'Dragon Ball', 'Inception')"),
+      type: z.enum(["Series", "Movie"]).default("Series"),
+    },
+    }, async ({ query, type }) => {
+    const results: any = { query, type, jellyfin: null, arr: null, queue: [] };
+
+    // 1. Jellyfin
+    try {
+      const jf = await jfApi(`/Items?searchTerm=${encodeURIComponent(query)}&IncludeItemTypes=${type === "Series" ? "Series" : "Movie"}&Recursive=true&Fields=Path,ProviderIds`);
+      results.jellyfin = jf.Items?.map((i: any) => ({ id: i.Id, name: i.Name, year: i.ProductionYear, hasFile: !!i.Path }));
+    } catch {}
+
+    // 2. Arrs
+    if (type === "Series") {
+      try {
+        const series = await sonarrApi("series");
+        const match = series.find((s: any) => s.title.toLowerCase().includes(query.toLowerCase()));
+        if (match) {
+          results.arr = {
+            id: match.id, title: match.title, status: match.status, monitored: match.monitored,
+            episodes: `${match.episodeFileCount}/${match.episodeCount}`, path: match.path,
+          };
+          const q = await sonarrApi("queue");
+          results.queue = (q.records || []).filter((r: any) => r.seriesId === match.id).map((r: any) => ({ status: r.status, progress: r.sizeleft ? `${((1 - r.sizeleft / r.size) * 100).toFixed(0)}%` : "?" }));
+        }
+      } catch {}
+    } else {
+      try {
+        const movies = await radarrApi("movie");
+        const match = movies.find((m: any) => m.title.toLowerCase().includes(query.toLowerCase()));
+        if (match) {
+          results.arr = {
+            id: match.id, title: match.title, status: match.status, monitored: match.monitored,
+            hasFile: match.hasFile, path: match.path,
+          };
+          const q = await radarrApi("queue");
+          results.queue = (q.records || []).filter((r: any) => r.movieId === match.id).map((r: any) => ({ status: r.status, progress: r.sizeleft ? `${((1 - r.sizeleft / r.size) * 100).toFixed(0)}%` : "?" }));
+        }
+      } catch {}
+    }
+
+    return textResult(results);
   });
 
   // 8. FIX SUBTITLES

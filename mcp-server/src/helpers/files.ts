@@ -19,9 +19,22 @@ export function isVideoFile(f: string) { return VIDEO_EXT.has(path.extname(f).to
 export function isArchiveFile(f: string) { return ARCHIVE_EXT.has(path.extname(f).toLowerCase()); }
 
 export function extractEpisodeNumber(filename: string): number {
-  for (const p of [/S\d+E(\d+)/i, /(\d+)x(\d+)/i, /E(\d+)/i, /^(\d+)/]) {
+  // Try common patterns: S01E05, 1x05, E05, etc.
+  // We prioritize patterns that are less likely to be part of a year or resolution
+  for (const p of [
+    /[Ss]\d+[Ee](\d+)/,           // S01E05
+    /(\d+)x(\d+)/,                // 1x05
+    /[Ee][Pp](\d+)/,              // EP05
+    /[_ \-][Ee](\d+)[_ \-]/,      // - E05 -
+    /[_ \-](\d+)[_ \-]/,          // - 05 -
+    /^[ \[]*(\d+)[ \]]*[_ \-]/,   // [05] - or 05 - at start
+    / (\d+) /,                    // " 05 "
+  ]) {
     const m = filename.match(p);
-    if (m) { const n = parseInt(m[m.length === 3 ? 2 : 1]); if (n > 0 && n < 1000) return n; }
+    if (m) {
+      const n = parseInt(m[m.length === 3 ? 2 : 1]);
+      if (!isNaN(n) && n >= 0 && n < 2000) return n;
+    }
   }
   return 9999;
 }

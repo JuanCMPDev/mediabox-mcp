@@ -13,14 +13,15 @@ export function registerJellyfinTools(server: McpServer): void {
       jfApi("/System/Info"), jfApi("/Sessions"), jfApi("/Library/VirtualFolders"), jfApi("/Users"),
     ]);
 
+    // Optimize: fetch aggregate counts instead of full recursive item lists
     const libraryStats = await Promise.all(folders.map(async (f: any) => {
       try {
-        const items = await jfApi(`/Items?ParentId=${f.ItemId}&Recursive=true&IncludeItemTypes=Series,Movie,Episode&Fields=BasicSyncInfo`);
-        const series = items.Items?.filter((i: any) => i.Type === "Series").length || 0;
-        const movies = items.Items?.filter((i: any) => i.Type === "Movie").length || 0;
-        const episodes = items.Items?.filter((i: any) => i.Type === "Episode").length || 0;
-        return { name: f.Name, type: f.CollectionType, paths: f.Locations, series, movies, episodes };
-      } catch { return { name: f.Name, type: f.CollectionType, paths: f.Locations }; }
+        const counts = await jfApi(`/Items/Counts?ParentId=${f.ItemId}`);
+        return { name: f.Name, type: f.CollectionType, paths: f.Locations, series: counts.SeriesCount || 0, movies: counts.MovieCount || 0, episodes: counts.EpisodeCount || 0 };
+      } catch {
+        // Fallback for older JF versions or errors
+        return { name: f.Name, type: f.CollectionType, paths: f.Locations };
+      }
     }));
 
     let disk = "";
@@ -50,24 +51,26 @@ export function registerJellyfinTools(server: McpServer): void {
 
   // 3. SEARCH MEDIA
   server.registerTool("search_media", {
-    description: "Search or list content in the Jellyfin library. Omit query to list all items of a type. Use offset to paginate through large result sets.",
+    description: "Search or list content in the Jellyfin library. Omit query to list all items of a type. Supports pagination.",
     inputSchema: {
       query: z.string().optional().describe("Search term. Omit to list all."),
       type: z.enum(["Movie", "Series", "Episode", "Audio"]).optional().describe("Filter by type"),
-      limit: z.number().default(50),
-      offset: z.number().default(0).describe("Skip this many results (for pagination)"),
+      page: z.number().default(1).describe("Page number (1-based)"),
+      pageSize: z.number().default(50).describe("Items per page"),
     },
-  }, async ({ query, type, limit, offset }) => {
-    let ep = `/Items?Recursive=true&Limit=${limit}&StartIndex=${offset}&Fields=Path`;
+  }, async ({ query, type, page, pageSize }) => {
+    const offset = (page - 1) * pageSize;
+    let ep = `/Items?Recursive=true&Limit=${pageSize}&StartIndex=${offset}&Fields=Path`;
     if (query) ep += `&searchTerm=${encodeURIComponent(query)}`;
     if (type) ep += `&IncludeItemTypes=${type}`;
     if (!query && !type) ep += `&IncludeItemTypes=Series,Movie`;
     const data = await jfApi(ep);
     const totalItems = data.TotalRecordCount;
+    const totalPages = Math.ceil(totalItems / pageSize);
     return textResult({ total: totalItems, results: data.Items.map((i: any) => ({
       id: i.Id, name: i.Name, type: i.Type, year: i.ProductionYear, series: i.SeriesName || null, path: i.Path,
       episode: i.Type === "Episode" ? `S${String(i.ParentIndexNumber).padStart(2, "0")}E${String(i.IndexNumber).padStart(2, "0")}` : null,
-    })), pagination: { offset, limit, totalItems, hasMore: offset + limit < totalItems }});
+    })), pagination: { page, pageSize, totalPages, totalItems, hasMore: page < totalPages }});
   });
 
   // 4. SHOW DETAILS

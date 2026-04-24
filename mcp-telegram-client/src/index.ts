@@ -165,7 +165,7 @@ const VIRTUAL_TOOLS: Record<string, VirtualToolDef> = {
   media_query: {
     name: "media_query",
     description:
-      "Search or list Jellyfin content, or get details of a specific item. action:'search' to find/list media (omit query to list all, use offset to paginate). action:'details' for seasons/episodes of a series (use seasonNumber to filter one season, page/pageSize to paginate episodes).",
+      "Search or list Jellyfin content, or get details of a specific item. action:'search' to find/list media (omit query to list all, use page/pageSize to paginate). action:'details' for seasons/episodes of a series (use seasonNumber to filter one season, page/pageSize to paginate episodes).",
     parameters: {
       type: "object",
       properties: {
@@ -180,10 +180,8 @@ const VIRTUAL_TOOLS: Record<string, VirtualToolDef> = {
           description: "Jellyfin item ID (for details)",
         },
         seasonNumber: { type: "number", description: "Filter details to this season only (recommended for large series)" },
-        limit: { type: "number" },
-        offset: { type: "number", description: "Skip N results for search pagination" },
-        page: { type: "number", description: "Page number for details pagination (default 1)" },
-        pageSize: { type: "number", description: "Episodes per page for details (default 50)" },
+        page: { type: "number", description: "Page number for pagination (default 1)" },
+        pageSize: { type: "number", description: "Items per page for pagination (default 50)" },
       },
       required: ["action"],
     },
@@ -528,8 +526,8 @@ async function executeVirtualTool(
       return callMCPSmart("search_media", {
         query: params.query,
         type: params.type,
-        limit: params.limit,
-        offset: params.offset,
+        page: params.page,
+        pageSize: params.pageSize,
       });
 
     case "library_ops":
@@ -684,7 +682,7 @@ let reconnectAttempts = 0;
 
 async function connectMCP(): Promise<void> {
   console.log(`Connecting to MCP: ${MCP_URL}`);
-  const client = new Client({ name: "telegram-bot", version: "2.0.0-beta.0" });
+  const client = new Client({ name: "telegram-bot", version: "2.0.0-beta.1" });
   const headers: Record<string, string> = {};
   if (MCP_API_KEY) headers["Authorization"] = `Bearer ${MCP_API_KEY}`;
   const transport = new StreamableHTTPClientTransport(new URL(MCP_URL), {

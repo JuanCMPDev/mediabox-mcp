@@ -10,6 +10,8 @@ import { execFileAsync, moveFile, isVideoFile, isArchiveFile, extractArchive, de
 import { startJob, jobs } from "../helpers/jobs.js";
 import { MEDIA_PATH, DOWNLOADS_PATH } from "../config.js";
 
+export const SUBTITLE_EXT = new Set([".srt", ".ass", ".ssa", ".vtt", ".sub", ".idx"]);
+
 export function registerDownloadTools(server: McpServer): void {
   // -------------------------------------------------------------------------
   // DOWNLOAD ADD — Add URLs to PyLoad
@@ -76,7 +78,7 @@ export function registerDownloadTools(server: McpServer): void {
 
       // Also show any running organize jobs
       const activeJobs: any[] = [];
-      jobs.forEach((j) => { if (j.type === "organize_downloads") activeJobs.push({ id: j.id, status: j.status, message: j.message }); });
+      jobs.forEach((j) => { if (j.type === "organize_downloads" && j.status === "running") activeJobs.push({ id: j.id, status: j.status, message: j.message }); });
 
       // Build real-time download map from statusDownloads
       const dlMap = new Map(activeDownloads.map((d: any) => [d.package_id, d]));
@@ -171,29 +173,67 @@ export function registerDownloadTools(server: McpServer): void {
           for (const v of vids) {
             const vStat = await fs.stat(v).catch(() => null);
             if (!vStat || vStat.size < MIN_VIDEO_SIZE) { skipped.push(`${path.basename(v)} (too small: ${vStat ? Math.round(vStat.size / 1024) + 'KB' : '0'})`); continue; }
+            const ext = path.extname(v).toLowerCase();
             const destName = isMovie
-              ? `${showName}${path.extname(v)}`
-              : `${showName} - S${seasonPad}E${String(startEp + epCounter++).padStart(2, "0")}${path.extname(v)}`;
+              ? `${showName}${ext}`
+              : `${showName} - S${seasonPad}E${String(startEp + epCounter++).padStart(2, "0")}${ext}`;
             await moveFile(v, path.join(destDir, destName));
             results.push(destName);
+
+            // Look for matching subtitle files in the same extraction dir
+            const baseName = path.basename(v, ext);
+            const parentDir = path.dirname(v);
+            for (const f of await fs.readdir(parentDir)) {
+              if (f.startsWith(baseName) && SUBTITLE_EXT.has(path.extname(f).toLowerCase())) {
+                const subDest = isMovie ? `${showName}${path.extname(f)}` : `${showName} - S${seasonPad}E${String(startEp + epCounter - 1).padStart(2, "0")}${path.extname(f)}`;
+                await moveFile(path.join(parentDir, f), path.join(destDir, subDest));
+              }
+            }
           }
           await fs.unlink(fixed).catch(() => {});
           await fs.rm(extractDir, { recursive: true, force: true }).catch(() => {});
         } else if (isVideoFile(fixed)) {
           const fStat = await fs.stat(fixed).catch(() => null);
           if (!fStat || fStat.size < MIN_VIDEO_SIZE) { skipped.push(`${path.basename(fixed)} (too small: ${fStat ? Math.round(fStat.size / 1024) + 'KB' : '0'})`); continue; }
+          const ext = path.extname(fixed).toLowerCase();
           const destName = isMovie
-            ? `${showName}${path.extname(fixed)}`
-            : `${showName} - S${seasonPad}E${String(startEp + epCounter++).padStart(2, "0")}${path.extname(fixed)}`;
+            ? `${showName}${ext}`
+            : `${showName} - S${seasonPad}E${String(startEp + epCounter++).padStart(2, "0")}${ext}`;
           await moveFile(fixed, path.join(destDir, destName));
           results.push(destName);
+
+          // Look for matching subtitle files in the same source dir
+          const baseName = path.basename(fixed, ext);
+          const parentDir = path.dirname(fixed);
+          for (const f of await fs.readdir(parentDir)) {
+            if (f.startsWith(baseName) && SUBTITLE_EXT.has(path.extname(f).toLowerCase())) {
+              const subDest = isMovie ? `${showName}${path.extname(f)}` : `${showName} - S${seasonPad}E${String(startEp + epCounter - 1).padStart(2, "0")}${path.extname(f)}`;
+              await moveFile(path.join(parentDir, f), path.join(destDir, subDest));
+            }
+          }
         }
       }
 
       if (!results.length) { j.message = `No valid video files found${skipped.length ? `. Skipped: ${skipped.join(', ')}` : ''}`; j.status = "failed"; return; }
       await fs.rm(searchDir, { recursive: true, force: true }).catch(() => {});
       await jfApi("/Library/Refresh", "POST");
-      j.message = `Done — ${results.length} file(s) added to ${libraryFolder}/${showName}`;
+
+      // Trigger Rescan in Sonarr/Radarr if possible
+      if (libraryFolder === "movies") {
+        try {
+          const movies = await radarrApi("movie");
+          const match = movies.find((m: any) => m.title.toLowerCase().includes(showName.toLowerCase()) || m.path.toLowerCase().includes(showName.toLowerCase()));
+          if (match) await radarrApi("command", "POST", { name: "RescanMovie", movieIds: [match.id] });
+        } catch {}
+      } else {
+        try {
+          const series = await sonarrApi("series");
+          const match = series.find((s: any) => s.title.toLowerCase().includes(showName.toLowerCase()) || s.path.toLowerCase().includes(showName.toLowerCase()));
+          if (match) await sonarrApi("command", "POST", { name: "RescanSeries", seriesId: match.id });
+        } catch {}
+      }
+
+      j.message = `Done — ${results.length} file(s) added to ${libraryFolder}/${showName} (Library rescan triggered)`;
       j.result = { destination: destDir, files: results };
     });
 
@@ -263,20 +303,42 @@ export function registerDownloadTools(server: McpServer): void {
           j.message = `Extracting ${path.basename(fixed)}...`;
           const vids = await extractArchive(fixed, extractDir);
           for (const v of vids.sort()) {
+            const ext = path.extname(v).toLowerCase();
             const destName = isMovie
-              ? `${showName}${path.extname(v)}`
-              : `${showName} - S${seasonPad}E${String((episodeNumber || 1) + epCounter++).padStart(2, "0")}${path.extname(v)}`;
+              ? `${showName}${ext}`
+              : `${showName} - S${seasonPad}E${String((episodeNumber || 1) + epCounter++).padStart(2, "0")}${ext}`;
             await moveFile(v, path.join(destDir, destName));
             results.push(destName);
+
+            // Subtitles
+            const baseName = path.basename(v, ext);
+            const pDir = path.dirname(v);
+            for (const f of await fs.readdir(pDir)) {
+              if (f.startsWith(baseName) && SUBTITLE_EXT.has(path.extname(f).toLowerCase())) {
+                const subDest = isMovie ? `${showName}${path.extname(f)}` : `${showName} - S${seasonPad}E${String((episodeNumber || 1) + epCounter - 1).padStart(2, "0")}${path.extname(f)}`;
+                await moveFile(path.join(pDir, f), path.join(destDir, subDest));
+              }
+            }
           }
           await fs.unlink(fixed).catch(() => {});
           await fs.rm(extractDir, { recursive: true, force: true }).catch(() => {});
         } else if (isVideoFile(fixed)) {
+          const ext = path.extname(fixed).toLowerCase();
           const destName = isMovie
-            ? `${showName}${path.extname(fixed)}`
-            : `${showName} - S${seasonPad}E${String((episodeNumber || 1) + epCounter++).padStart(2, "0")}${path.extname(fixed)}`;
+            ? `${showName}${ext}`
+            : `${showName} - S${seasonPad}E${String((episodeNumber || 1) + epCounter++).padStart(2, "0")}${ext}`;
           await moveFile(fixed, path.join(destDir, destName));
           results.push(destName);
+
+          // Subtitles
+          const baseName = path.basename(fixed, ext);
+          const pDir = path.dirname(fixed);
+          for (const f of await fs.readdir(pDir)) {
+            if (f.startsWith(baseName) && SUBTITLE_EXT.has(path.extname(f).toLowerCase())) {
+              const subDest = isMovie ? `${showName}${path.extname(f)}` : `${showName} - S${seasonPad}E${String((episodeNumber || 1) + epCounter - 1).padStart(2, "0")}${path.extname(f)}`;
+              await moveFile(path.join(pDir, f), path.join(destDir, subDest));
+            }
+          }
         } else {
           // Non-video file (subtitle, nfo, etc.) — move as-is
           await moveFile(fixed, path.join(destDir, path.basename(fixed)));
