@@ -1,7 +1,7 @@
 // ── Public API of @mediabox/chat-core ────────────────────────────────────────
 
 // Core engine
-export { streamChat }           from './engine.js';
+export { streamChat, runChat }  from './engine.js';
 
 // MCP caller factory
 export { createMcpCaller }      from './mcp-client.js';

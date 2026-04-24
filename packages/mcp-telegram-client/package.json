@@ -18,10 +18,9 @@
     "start": "node dist/index.js"
   },
   "dependencies": {
-    "@google/genai": "^1.47.0",
+    "@mediabox/chat-core": "*",
     "@modelcontextprotocol/sdk": "^1.12.1",
-    "grammy": "^1.35.0",
-    "openai": "^4.86.0"
+    "grammy": "^1.35.0"
   },
   "devDependencies": {
     "@types/node": "^22.15.2",

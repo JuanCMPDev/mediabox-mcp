@@ -99,3 +99,18 @@ function raceTimeout<T>(p: Promise<T>, ms: number, msg: string): Promise<T> {
     new Promise<never>((_, r) => setTimeout(() => r(new Error(msg)), ms)),
   ]);
 }
+
+/**
+ * Non-streaming wrapper around streamChat(): consumes the event stream and
+ * returns the final natural-language response as a single string.
+ * For clients that can't render progressive output (e.g. Telegram bot).
+ */
+export async function runChat(opts: StreamChatOptions): Promise<string> {
+  let accumulated = '';
+  for await (const evt of streamChat(opts)) {
+    if (evt.type === 'token') accumulated += evt.text;
+    if (evt.type === 'done')  return evt.fullText;
+    if (evt.type === 'error') return `⚠ ${evt.message}`;
+  }
+  return accumulated || '(sin respuesta)';
+}

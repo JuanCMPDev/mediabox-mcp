@@ -8,21 +8,31 @@ interface MessageBubbleProps {
 export function MessageBubble({ message }: MessageBubbleProps) {
   const isUser = message.role === 'user';
 
+  const bubbleClass = [
+    styles.bubble,
+    isUser ? styles.user : styles.assistant,
+    message.isStreaming && !isUser ? styles.streaming : '',
+  ]
+    .filter(Boolean)
+    .join(' ');
+
   return (
     <div className={[styles.wrapper, isUser ? styles.user : ''].filter(Boolean).join(' ')}>
       <div className={[styles.avatar, isUser ? styles.user : styles.assistant].join(' ')}>
         {isUser ? 'U' : 'M'}
       </div>
-      <div className={[styles.bubble, isUser ? styles.user : styles.assistant].join(' ')}>
-        <BubbleContent content={message.content} />
+      <div className={bubbleClass}>
+        {message.content ? <BubbleContent content={message.content} /> : null}
       </div>
-      <span className={styles.timestamp}>{formatTime(message.timestamp)}</span>
+      {!message.isStreaming && (
+        <span className={styles.timestamp}>{formatTime(message.timestamp)}</span>
+      )}
     </div>
   );
 }
 
 function BubbleContent({ content }: { content: string }) {
-  // Basic markdown: **bold** support
+  // Minimal markdown: **bold** only — full renderer in Phase 3
   const parts = content.split(/(\*\*[^*]+\*\*)/g);
   return (
     <>

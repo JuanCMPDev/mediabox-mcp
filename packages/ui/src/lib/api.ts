@@ -4,6 +4,8 @@ import type {
   Download,
   LibraryStats,
   ServiceEndpoint,
+  ChatInfo,
+  ChatHistoryEntry,
 } from '@mediabox/contracts';
 
 const BASE = import.meta.env.VITE_API_URL || 'http://localhost:3000';
@@ -67,5 +69,16 @@ export const api = {
   },
   deleteDownload(hash: string, deleteFiles = false) {
     return del(`/api/dashboard/downloads/qbit/${hash}?deleteFiles=${deleteFiles}`);
+  },
+
+  // ── Chat ───────────────────────────────────────────────────────────────────
+  chatInfo(): Promise<ChatInfo> {
+    return get('/api/chat/info');
+  },
+  chatHistory(conversationId: string): Promise<ChatHistoryEntry[]> {
+    return get(`/api/chat/${conversationId}/history`);
+  },
+  clearChat(conversationId: string) {
+    return del(`/api/chat/${conversationId}`);
   },
 };

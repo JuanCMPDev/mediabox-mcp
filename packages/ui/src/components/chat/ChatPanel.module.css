@@ -19,6 +19,12 @@
   gap: 10px;
 }
 
+.headerRight {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
 .headerTitle {
   font-size: 15px;
   font-weight: 600;
@@ -30,21 +36,68 @@
   color: var(--on-surface-variant);
 }
 
-.statusRow {
+/* Clear button */
+.clearBtn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border-radius: var(--radius);
+  color: var(--on-surface-variant);
+  transition: background var(--transition-fast), color var(--transition-fast);
+}
+
+.clearBtn:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.07);
+  color: var(--on-surface);
+}
+
+.clearBtn:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+
+/* Clear confirmation inline */
+.confirmRow {
   display: flex;
   align-items: center;
   gap: 6px;
   font-size: 12px;
+  animation: fadeIn 150ms ease;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+.confirmLabel {
   color: var(--on-surface-variant);
 }
 
-.statusDot {
-  width: 6px;
-  height: 6px;
-  border-radius: var(--radius-full);
-  background: #4caf77;
-  box-shadow: 0 0 5px rgba(76, 175, 120, 0.6);
+.confirmYes,
+.confirmNo {
+  padding: 3px 8px;
+  border-radius: var(--radius-sm);
+  font-size: 12px;
+  font-weight: 600;
+  transition: background var(--transition-fast);
 }
+
+.confirmYes {
+  color: var(--error);
+  background: rgba(255, 180, 171, 0.10);
+}
+
+.confirmYes:hover { background: rgba(255, 180, 171, 0.20); }
+
+.confirmNo {
+  color: var(--on-surface-variant);
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.confirmNo:hover { background: rgba(255, 255, 255, 0.10); }
 
 /* Messages fill remaining space */
 .messages {
@@ -52,6 +105,12 @@
   min-height: 0;
   display: flex;
   flex-direction: column;
+}
+
+/* Active tool chip — shown between messages and input while LLM calls a tool */
+.toolRow {
+  padding: 6px 0 2px;
+  flex-shrink: 0;
 }
 
 .inputArea {
@@ -65,4 +124,5 @@
   font-size: 11px;
   color: var(--on-surface-muted);
   margin-top: 8px;
+  min-height: 14px;
 }

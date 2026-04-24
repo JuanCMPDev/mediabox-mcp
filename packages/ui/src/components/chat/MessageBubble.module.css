@@ -62,6 +62,21 @@
   font-weight: 700;
 }
 
+/* Typewriter cursor while the LLM is streaming */
+.bubble.streaming::after {
+  content: '▋';
+  opacity: 1;
+  animation: blink 0.9s step-end infinite;
+  margin-left: 2px;
+  color: var(--primary);
+  font-size: 0.85em;
+}
+
+@keyframes blink {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0; }
+}
+
 .timestamp {
   font-size: 10px;
   color: var(--on-surface-variant);
