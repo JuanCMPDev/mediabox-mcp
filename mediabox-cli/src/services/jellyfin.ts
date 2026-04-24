@@ -115,7 +115,7 @@ async function authenticateAndCreateKey(username: string, password: string): Pro
     headers: {
       "Content-Type": "application/json",
       "X-Emby-Authorization":
-        'MediaBrowser Client="Mediabox CLI", Device="CLI", DeviceId="mediabox-setup", Version="1.0.0"',
+        'MediaBrowser Client="Mediabox CLI", Device="CLI", DeviceId="mediabox-setup", Version="0.2.0"',
     },
     body: JSON.stringify({ Username: username, Pw: password }),
     retries: 5,

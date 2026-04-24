@@ -1,6 +1,6 @@
 {
   "name": "mediabox-mcp",
-  "version": "1.0.0",
+  "version": "0.2.0",
   "description": "AI-powered MCP server for managing a self-hosted media stack",
   "type": "module",
   "scripts": {
