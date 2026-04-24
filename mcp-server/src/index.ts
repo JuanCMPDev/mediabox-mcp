@@ -7,6 +7,7 @@ import crypto from "crypto";
 import { PORT, PUBLIC_URL } from "./config.js";
 import { oauthProvider, authMiddleware } from "./auth.js";
 import { createMcpServer } from "./tools/register.js";
+import { VERSION } from "./version.js";
 
 const app = express();
 app.set("trust proxy", 2);
@@ -31,10 +32,14 @@ app.all("/mcp", authMiddleware, async (req: Request, res: Response) => {
   await transport.handleRequest(req, res, req.body);
 });
 
-app.get("/health", (_req, res) => { res.json({ status: "ok", name: "mediabox-mcp", version: "2.0.0-beta.1" }); });
+app.get("/health", (_req, res) => { res.json({ status: "ok", name: "mediabox-mcp", version: VERSION }); });
+
+if (!process.env.INTERNAL_API_KEY) {
+  console.warn("WARNING: INTERNAL_API_KEY is not set — generating ephemeral key. The Telegram bot will lose auth on every restart. Set INTERNAL_API_KEY in your .env file.");
+}
 
 app.listen(PORT, "0.0.0.0", () => {
-  console.log(`Mediabox MCP v2.0.0-beta.1 running on port ${PORT}`);
+  console.log(`Mediabox MCP v${VERSION} running on port ${PORT}`);
   console.log(`Public URL: ${PUBLIC_URL}`);
   console.log(`Transport: POST ${PUBLIC_URL}/mcp`);
   console.log(`OAuth: ${PUBLIC_URL}/.well-known/oauth-authorization-server`);

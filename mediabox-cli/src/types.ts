@@ -19,7 +19,6 @@ export interface WizardAnswers {
 
   // MCP Server
   mcpPublicUrl: string;
-  mcpAuthSecret: string;
   internalApiKey: string;
 
   // Jellyfin

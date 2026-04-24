@@ -1,0 +1,57 @@
+name: CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+
+jobs:
+  build:
+    name: Typecheck & Build
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        package:
+          - { name: mcp-server, dir: mcp-server }
+          - { name: mcp-telegram-client, dir: mcp-telegram-client }
+          - { name: create-mediabox, dir: mediabox-cli }
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: ${{ matrix.package.dir }}/package-lock.json
+
+      - name: Install (${{ matrix.package.name }})
+        run: npm ci
+        working-directory: ${{ matrix.package.dir }}
+
+      - name: Build (${{ matrix.package.name }})
+        run: npm run build
+        working-directory: ${{ matrix.package.dir }}
+
+  audit:
+    name: Security Audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Audit mcp-server
+        run: npm audit --audit-level=high
+        working-directory: mcp-server
+
+      - name: Audit mcp-telegram-client
+        run: npm audit --audit-level=high
+        working-directory: mcp-telegram-client
+
+      - name: Audit create-mediabox
+        run: npm audit --audit-level=high
+        working-directory: mediabox-cli

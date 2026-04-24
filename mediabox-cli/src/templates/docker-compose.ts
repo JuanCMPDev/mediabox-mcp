@@ -1,9 +1,10 @@
 import { stringify } from "yaml";
 import type { WizardAnswers } from "../types.js";
 import { ensureRelative } from "../utils/paths.js";
+import { VERSION } from "../utils/version.js";
 
-const GHCR_MCP_IMAGE = "ghcr.io/juancmpdev/mediabox-mcp:latest";
-const GHCR_TELEGRAM_IMAGE = "ghcr.io/juancmpdev/mediabox-telegram:latest";
+const GHCR_MCP_IMAGE = `ghcr.io/juancmpdev/mediabox-mcp:\${IMAGE_TAG:-${VERSION}}`;
+const GHCR_TELEGRAM_IMAGE = `ghcr.io/juancmpdev/mediabox-telegram:\${IMAGE_TAG:-${VERSION}}`;
 
 /** Environment array for the Telegram bot — varies by LLM provider */
 function buildTelegramEnv(answers: WizardAnswers): string[] {
@@ -84,7 +85,6 @@ export function generateDockerCompose(answers: WizardAnswers): string {
       "MEDIA_PATH=/data",
       "PORT=3000",
       "PUBLIC_URL=${MCP_PUBLIC_URL}",
-      "MCP_AUTH_SECRET=${MCP_AUTH_SECRET}",
       "PYLOAD_URL=http://pyload:8000",
       "PYLOAD_USER=${PYLOAD_USER}",
       "PYLOAD_PASSWORD=${PYLOAD_PASSWORD}",

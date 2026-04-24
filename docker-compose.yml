@@ -54,7 +54,6 @@ services:
       - MEDIA_PATH=/data
       - PORT=3000
       - PUBLIC_URL=${MCP_PUBLIC_URL}
-      - MCP_AUTH_SECRET=${MCP_AUTH_SECRET}
       - PYLOAD_URL=http://pyload:8000
       - PYLOAD_USER=${PYLOAD_USER:-pyload}
       - PYLOAD_PASSWORD=${PYLOAD_PASSWORD:-pyload}

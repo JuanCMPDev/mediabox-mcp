@@ -1,4 +1,5 @@
 import type { WizardAnswers, DiscoveredKeys } from "../types.js";
+import { VERSION } from "../utils/version.js";
 
 /**
  * Generate the .env file content from wizard answers.
@@ -26,8 +27,8 @@ export function generateEnv(answers: WizardAnswers, keys?: Partial<DiscoveredKey
     "",
     "# MCP Server",
     `MCP_PUBLIC_URL=${answers.mcpPublicUrl}`,
-    `MCP_AUTH_SECRET=${answers.mcpAuthSecret}`,
     `INTERNAL_API_KEY=${answers.internalApiKey}`,
+    `IMAGE_TAG=${VERSION}`,
   ];
 
   if (answers.tunnelToken) {

@@ -1,5 +1,6 @@
 import { fetchWithRetry, pollUntilReady, sleep } from "../utils/http.js";
 import * as log from "../utils/logger.js";
+import { VERSION } from "../utils/version.js";
 
 const BASE = "http://localhost:8096";
 
@@ -115,7 +116,7 @@ async function authenticateAndCreateKey(username: string, password: string): Pro
     headers: {
       "Content-Type": "application/json",
       "X-Emby-Authorization":
-        'MediaBrowser Client="Mediabox CLI", Device="CLI", DeviceId="mediabox-setup", Version="2.0.0-beta.1"',
+        `MediaBrowser Client="Mediabox CLI", Device="CLI", DeviceId="mediabox-setup", Version="${VERSION}"`,
     },
     body: JSON.stringify({ Username: username, Pw: password }),
     retries: 5,

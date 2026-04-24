@@ -5,8 +5,7 @@ import { runWizard } from "./wizard.js";
 import { generateFiles } from "./generator.js";
 import { orchestrate } from "./orchestrator.js";
 import { autoConfigureServices } from "./configurator.js";
-
-const VERSION = "1.2.0";
+import { VERSION } from "./utils/version.js";
 
 async function main(): Promise<void> {
   const args = process.argv.slice(2);

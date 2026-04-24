@@ -181,12 +181,6 @@ export async function runWizard(localBuild: boolean): Promise<WizardAnswers> {
     },
   });
 
-  const autoSecret = randomHex(32);
-  const mcpAuthSecret = await input({
-    message: "MCP auth secret (auto-generated)",
-    default: autoSecret,
-  });
-
   const autoApiKey = randomHex(32);
   const internalApiKey = await input({
     message: "Internal API key (auto-generated)",
@@ -260,7 +254,6 @@ export async function runWizard(localBuild: boolean): Promise<WizardAnswers> {
     mediaMusic,
     qbitPassword,
     mcpPublicUrl,
-    mcpAuthSecret,
     internalApiKey,
     jellyfinUser,
     jellyfinPassword,
