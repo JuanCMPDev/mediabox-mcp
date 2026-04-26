@@ -9,8 +9,8 @@ src-tauri/binaries/*
 # Keep these committed so CI does not need a square source image.
 # src-tauri/icons/
 
-# Tauri runtime
-src-tauri/Cargo.lock
+# Cargo.lock is committed — Tauri produces a distributable binary,
+# so we want reproducible dep versions across machines and CI.
 
 # Build outputs
 dist/
