@@ -1,9 +1,8 @@
 import chalk from "chalk";
-import { deployStack, validateDeployConfig } from "@mediabox/core";
+import { deployStack, validateDeployConfig, DockerCliDeployer } from "@mediabox/core";
 import { runWizard } from "./wizard.js";
 import { translateWizardAnswers } from "./config/translate.js";
 import { createCliEventSink } from "./events/cli-sink.js";
-import { DockerCliDeployer } from "./deployer/docker-cli-deployer.js";
 import { printSummary } from "./summary.js";
 import { VERSION } from "./utils/version.js";
 

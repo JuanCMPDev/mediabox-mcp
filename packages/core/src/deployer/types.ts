@@ -33,9 +33,9 @@ export interface HealthCheck {
 
 /**
  * The Deployer interface isolates all side effects (Docker CLI, filesystem,
- * health polling) from the pure core. `DockerCliDeployer` (in mediabox-cli)
- * implements this via execa + node:fs. A future TauriDeployer will implement
- * it via Tauri commands; a RemoteDeployer via SSH.
+ * health polling) from the pure core. `DockerCliDeployer` (./docker-cli.ts)
+ * implements this via execa + node:fs. A future RemoteDeployer would do the
+ * same over SSH.
  */
 export interface Deployer {
   /** Pull images from GHCR (or build from source if localBuild). */

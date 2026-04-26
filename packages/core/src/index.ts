@@ -25,6 +25,7 @@ export type {
   HealthCheck,
   DeployResult,
 } from "./deployer/types.js";
+export { DockerCliDeployer } from "./deployer/docker-cli.js";
 
 // Generators — pure, no IO
 export { generateDockerCompose } from "./generators/docker-compose.js";

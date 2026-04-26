@@ -10,7 +10,9 @@
     "dev": "node scripts/build-sidecar.mjs && tauri dev",
     "bundle": "tauri build",
     "icons": "node scripts/prep-icon.mjs && tauri icon ./.icon-square.png",
-    "sidecar": "node scripts/build-sidecar.mjs"
+    "sidecar": "node scripts/build-sidecar.mjs",
+    "smoke:execa": "node scripts/smoke-execa.mjs",
+    "smoke:execa-compiled": "node scripts/run-smoke-compiled.mjs"
   },
   "dependencies": {
     "@tauri-apps/api": "^2.1.0",
