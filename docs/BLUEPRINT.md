@@ -40,17 +40,23 @@ This roadmap breaks down the vision into manageable, strictly scoped Pull Reques
     *   **Requirements:** The CLI must function exactly as before, acting merely as a terminal frontend for the Core.
     *   **Outcome:** `create-mediabox` is now a thin frontend: `wizard → translate → validate → deployStack`. `DockerCliDeployer` implements the `Deployer` interface via `execa` + `node:fs`. `createCliEventSink()` maps `DeployEvent` → `ora` spinners / `chalk` lines with phase-header detection. tsup bundles `@mediabox/core` into a single 442 KB ESM file — tarball ships clean at 98 kB with no workspace references.
 
-### Phase 2: Web Dashboard Foundation (The UI)
+### Phase 2: Web Dashboard Foundation (The UI) ✅ **COMPLETED** (2026-04-24)
 *Objective: Build the visual layer that will eventually live inside the desktop app.*
 
-*   **PR 2.1: Initialize `@mediabox/ui` and Dashboard Layout**
+*   **PR 2.1: Initialize `@mediabox/ui` and Dashboard Layout** ✅ **COMPLETED**
     *   **Scope:** Scaffold a React application (prefer Vanilla CSS for lightweight performance). Create the main layout: Sidebar (Status, Library, Settings) and Main Content Area.
     *   **Requirements:** Must be completely decoupled from the backend initially (use mock data for disk space, active sessions, and queues).
-*   **PR 2.2: Connect UI to MCP Server (`server_status` & `get_library_state`)**
+    *   **Outcome:** `@mediabox/ui` scaffolded with Vite 5 + React 18 + Vanilla CSS Modules. Glassmorphism design system fully implemented from `docs/design.md` (all tokens as CSS vars, 3-level elevation, atmospheric background with animated orbs). Atomic components (GlassCard, GlassButton, GlassInput, SegmentedControl, IconButton). AppShell with TopBar + Sidebar + ServiceDock. 4 dashboard widgets (NowPlaying, ServerHealth, DownloadQueue, LibrarySummary). Chat panel with mock typewriter simulation. Tauri-ready (drag regions, hidden scrollbars, no text selection).
+*   **PR 2.2: Connect UI to MCP Server** ✅ **COMPLETED**
     *   **Scope:** Implement API calls from the UI to the local `mcp-server` (or the underlying services) to replace mock data with real-time server telemetry.
     *   **Requirements:** Display unified download progress (qBit + PyLoad) and real disk usage.
-*   **PR 2.3: Native MCP Chat Interface**
+    *   **Outcome:** New `@mediabox/contracts` package for wire-format types. `mcp-server` exposes `/api/dashboard/*` REST endpoints (health, sessions, downloads, library, services) sharing logic with MCP tools via `fetchers/`. Auth via `INTERNAL_API_KEY` bearer. UI consumes with React Query (polling: 2s downloads, 3s sessions, 5s health, 15s services, 60s library). All widgets handle loading/error states with glass skeleton shimmer. `ServiceDock` status pings 7 services (Jellyfin/Sonarr/Radarr/Prowlarr/qBit/PyLoad/FlareSolverr + optional Bazarr).
+*   **PR 2.2.5: Admin Actions** ✅ **COMPLETED**
+    *   **Scope:** Write endpoints for session/download administration from the dashboard.
+    *   **Outcome:** `POST /sessions/:id/stop`, `POST /sessions/:id/message`, `POST /downloads/qbit/:hash/{pause,resume}`, `DELETE /downloads/qbit/:hash`. Glass toast system (success/error/info, auto-dismiss 3.5s). NowPlayingWidget with inline admin panel (Info / Kill Stream confirmation / Send Message form). DownloadQueue items with pause/resume/delete actions and inline delete confirmation (with/without files).
+*   **PR 2.3: Native MCP Chat Interface** ✅ **COMPLETED**
     *   **Scope:** Build a chat component in the UI that communicates with the LLM and the local MCP server, mirroring the Telegram experience but natively in the browser.
+    *   **Outcome:** New `@mediabox/chat-core` package extracts LLM + MCP tool-calling engine (system prompt, 8 virtual tools, keyword-based tool selection, provider abstraction for OpenRouter + Gemini, streaming tool-call loop, unified ChatMessage history). `mcp-server` adds `POST /api/chat/stream` (NDJSON over fetch), `GET /api/chat/info`, `GET /api/chat/:id/history`, `DELETE /api/chat/:id`. Loopback MCP client connects to its own `/mcp` endpoint. UI has `useChat` hook with streaming state + localStorage conversation rehidration, `ActiveToolChip` (animated pill while tool runs), typewriter cursor on streaming bubbles, inline Clear confirmation. As part of 2.3e, the Telegram bot was refactored to consume `@mediabox/chat-core` (1406 → 227 lines, -83.9%) — zero duplication with the browser chat.
 
 ### Phase 3: The Tauri Desktop App (The Shell)
 *Objective: Wrap the UI and Core into a distributable desktop application.*
