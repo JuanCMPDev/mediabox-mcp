@@ -1,0 +1,58 @@
+.gate {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+}
+
+.card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-md, 16px);
+  padding: var(--space-2xl, 48px);
+  background: var(--surface-1, rgba(255, 255, 255, 0.04));
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  border: 1px solid var(--border-1, rgba(255, 255, 255, 0.08));
+  border-radius: var(--radius-xl, 24px);
+  min-width: 340px;
+}
+
+.spinner {
+  width: 32px;
+  height: 32px;
+  border: 2px solid var(--border-1, rgba(255, 255, 255, 0.12));
+  border-top-color: var(--accent, #60a5fa);
+  border-radius: 50%;
+  animation: bootSpin 0.8s linear infinite;
+}
+
+.title {
+  font-family: var(--font-sans);
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--text-primary, #ffffff);
+  margin: 0;
+}
+
+.titleError {
+  composes: title;
+  color: var(--danger, #f87171);
+}
+
+.subtitle {
+  font-family: var(--font-sans);
+  font-size: 13px;
+  font-weight: 400;
+  color: var(--text-secondary, rgba(255, 255, 255, 0.6));
+  margin: 0;
+  text-align: center;
+  max-width: 280px;
+}
+
+@keyframes bootSpin {
+  to { transform: rotate(360deg); }
+}

@@ -1,0 +1,40 @@
+[package]
+name = "mediabox-desktop"
+version = "2.1.0"
+description = "Mediabox OS — desktop shell"
+authors = ["Juan Carlos M P"]
+edition = "2021"
+rust-version = "1.77"
+
+# Required for `tauri::generate_context!()` to find the source file
+# and for the lib to be linked into both the desktop and (future) mobile builds.
+[lib]
+name = "mediabox_desktop_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+tauri-plugin-shell = "2"
+tauri-plugin-dialog = "2"
+tauri-plugin-fs = "2"
+tauri-plugin-process = "2"
+
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+# Random port + token for sidecar bootstrap
+portpicker = "0.1"
+rand = "0.8"
+
+# Async + sync primitives
+tokio = { version = "1", features = ["sync", "rt", "rt-multi-thread", "macros"] }
+
+log = "0.4"
+
+# Future-proof for hot-reload across mobile entry point
+[features]
+default = []
+custom-protocol = ["tauri/custom-protocol"]

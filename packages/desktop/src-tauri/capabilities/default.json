@@ -1,0 +1,12 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "Default capabilities for the Mediabox desktop shell. Custom #[tauri::command] handlers (get_runtime_config) are allowed by default; only plugin commands require explicit permissions here.",
+  "windows": ["main"],
+  "permissions": [
+    "core:default",
+    "dialog:default",
+    "fs:default",
+    "process:default"
+  ]
+}

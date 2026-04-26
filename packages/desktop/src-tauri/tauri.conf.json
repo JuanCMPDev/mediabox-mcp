@@ -1,0 +1,53 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Mediabox OS",
+  "version": "2.1.0",
+  "identifier": "dev.mediabox.os",
+  "build": {
+    "beforeDevCommand": "npm --prefix ../.. run dev:ui",
+    "beforeBuildCommand": "",
+    "devUrl": "http://localhost:5173",
+    "frontendDist": "../../ui/dist"
+  },
+  "app": {
+    "windows": [
+      {
+        "label": "main",
+        "title": "Mediabox OS",
+        "width": 1440,
+        "height": 900,
+        "minWidth": 1100,
+        "minHeight": 700,
+        "decorations": false,
+        "transparent": false,
+        "center": true,
+        "resizable": true,
+        "fullscreen": false
+      }
+    ],
+    "security": {
+      "csp": null
+    }
+  },
+  "bundle": {
+    "active": true,
+    "createUpdaterArtifacts": false,
+    "targets": ["msi", "nsis", "dmg", "appimage", "deb"],
+    "category": "Utility",
+    "shortDescription": "Self-hosted media stack OS",
+    "longDescription": "Visually orchestrate your self-hosted media stack (Jellyfin, Sonarr, Radarr, qBittorrent, PyLoad) with a built-in AI assistant.",
+    "publisher": "Mediabox",
+    "homepage": "https://github.com/JuanCMPDev/mediabox-mcp",
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ],
+    "externalBin": ["binaries/mediabox-mcp"],
+    "resources": [],
+    "copyright": "© 2026 Mediabox"
+  },
+  "plugins": {}
+}

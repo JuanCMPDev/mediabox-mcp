@@ -8,16 +8,19 @@ import type {
   ChatHistoryEntry,
 } from '@mediabox/contracts';
 
-const BASE = import.meta.env.VITE_API_URL || 'http://localhost:3000';
-const KEY  = import.meta.env.VITE_INTERNAL_API_KEY || '';
+import { getRuntimeConfig } from './runtime-config';
 
-const HEADERS = () => ({
-  Authorization:  `Bearer ${KEY}`,
-  'Content-Type': 'application/json',
-});
+const HEADERS = () => {
+  const { internalApiKey } = getRuntimeConfig();
+  return {
+    Authorization:  `Bearer ${internalApiKey}`,
+    'Content-Type': 'application/json',
+  };
+};
 
 async function get<T>(path: string): Promise<T> {
-  const res = await fetch(`${BASE}${path}`, {
+  const { apiUrl } = getRuntimeConfig();
+  const res = await fetch(`${apiUrl}${path}`, {
     headers: HEADERS(),
     signal: AbortSignal.timeout(10_000),
   });
@@ -26,7 +29,8 @@ async function get<T>(path: string): Promise<T> {
 }
 
 async function post(path: string, body?: unknown): Promise<void> {
-  const res = await fetch(`${BASE}${path}`, {
+  const { apiUrl } = getRuntimeConfig();
+  const res = await fetch(`${apiUrl}${path}`, {
     method: 'POST',
     headers: HEADERS(),
     body:   body ? JSON.stringify(body) : undefined,
@@ -36,7 +40,8 @@ async function post(path: string, body?: unknown): Promise<void> {
 }
 
 async function del(path: string): Promise<void> {
-  const res = await fetch(`${BASE}${path}`, {
+  const { apiUrl } = getRuntimeConfig();
+  const res = await fetch(`${apiUrl}${path}`, {
     method:  'DELETE',
     headers: HEADERS(),
     signal:  AbortSignal.timeout(10_000),
