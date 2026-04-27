@@ -53,3 +53,12 @@ export function useServices() {
     retry: 1,
   });
 }
+
+export function useSetupInfo() {
+  return useQuery({
+    queryKey: ['setup-info'],
+    queryFn:  api.setupInfo,
+    refetchInterval: 30_000,
+    retry: 1,
+  });
+}

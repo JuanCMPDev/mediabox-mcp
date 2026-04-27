@@ -1,6 +1,7 @@
 import { ExternalLink } from 'lucide-react';
 import styles from './ServiceDock.module.css';
 import type { ServiceEndpoint, ServiceId } from '@/lib/types';
+import { openExternal } from '@/lib/tauri-bridge';
 
 interface Brand {
   iconUrl: string;
@@ -27,7 +28,7 @@ interface ServiceDockProps {
 export function ServiceDock({ services }: ServiceDockProps) {
   function handleOpen(svc: ServiceEndpoint) {
     if (svc.status === 'offline') return;
-    window.open(svc.url, '_blank', 'noopener,noreferrer');
+    void openExternal(svc.url);
   }
 
   return (

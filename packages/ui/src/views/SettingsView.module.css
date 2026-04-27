@@ -1,58 +1,310 @@
 .view {
-  height: 100%;
-  padding: var(--container-padding);
   display: flex;
   flex-direction: column;
-  gap: var(--gutter);
+  gap: var(--space-3);
+  padding: var(--space-3);
+  max-width: 920px;
+  margin: 0 auto;
+  width: 100%;
 }
 
 .header {
-  font-size: 24px;
-  font-weight: 700;
-  color: var(--on-surface);
-  letter-spacing: -0.01em;
-  flex-shrink: 0;
-}
-
-.placeholder {
-  flex: 1;
   display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 16px;
-  color: var(--on-surface-variant);
-  opacity: 0.5;
-}
-
-.icon {
-  width: 64px;
-  height: 64px;
-  border-radius: var(--radius-xl);
-  background: rgba(255, 255, 255, 0.06);
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: var(--space-3);
+  margin-bottom: var(--space-1);
 }
 
 .title {
-  font-size: 18px;
-  font-weight: 600;
+  font: 700 24px var(--font-sans);
+  color: var(--on-surface);
+  margin: 0;
+  letter-spacing: -0.01em;
 }
 
 .subtitle {
-  font-size: 14px;
-  text-align: center;
-  max-width: 320px;
+  font: 14px var(--font-sans);
+  color: var(--on-surface-variant);
+  margin: 4px 0 0 0;
+  line-height: 1.5;
+  max-width: 640px;
+}
+
+/* ── Section card ──────────────────────────────────────────────────────────── */
+
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.sectionHeader {
+  border-bottom: 1px solid var(--glass-border);
+  padding-bottom: var(--space-2);
+}
+
+.sectionTitle {
+  font: 600 12px var(--font-sans);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--on-surface-muted);
+  margin: 0;
+}
+
+.sectionSubtitle {
+  font: 12px var(--font-sans);
+  color: var(--on-surface-muted);
+  margin: 4px 0 0 0;
+  line-height: 1.5;
+}
+
+.sectionBody {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+/* ── Read-only rows ────────────────────────────────────────────────────────── */
+
+.row {
+  display: grid;
+  grid-template-columns: 200px 1fr;
+  gap: var(--space-2);
+  align-items: baseline;
+}
+
+.dt {
+  font: 500 13px var(--font-sans);
+  color: var(--on-surface-variant);
+  margin: 0;
+}
+
+.dd {
+  font: 400 13px var(--font-sans);
+  color: var(--on-surface);
+  margin: 0;
+  word-break: break-all;
+}
+
+.mono {
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Consolas, monospace;
+  font-size: 12px;
+}
+
+/* ── Editable form rows ────────────────────────────────────────────────────── */
+
+.formField {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.label {
+  font: 500 13px var(--font-sans);
+  color: var(--on-surface);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.labelHint {
+  font: 11px var(--font-sans);
+  color: var(--on-surface-muted);
+  font-weight: 400;
+}
+
+.labelWarn {
+  font: 11px var(--font-sans);
+  color: #ffb86b;
+  font-weight: 500;
+}
+
+.hint {
+  font: 11px var(--font-sans);
+  color: var(--on-surface-muted);
+}
+
+.hint code,
+.hintBox code {
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Consolas, monospace;
+  font-size: 11px;
+  background: rgba(255, 255, 255, 0.06);
+  padding: 1px 5px;
+  border-radius: var(--radius-sm);
+}
+
+.hintBox {
+  font: 12px var(--font-sans);
+  color: var(--on-surface-muted);
+  background: var(--glass-tint);
+  padding: 10px 12px;
+  border-radius: var(--radius-md);
+  line-height: 1.6;
+  display: block;
+}
+
+.errorText {
+  font: 11px var(--font-sans);
+  color: var(--error);
+}
+
+/* ── Password input (eye toggle + save inline) ────────────────────────────── */
+
+.passwordRow {
+  display: flex;
+  gap: var(--space-1);
+  align-items: stretch;
+}
+
+.passwordInput {
+  position: relative;
+  flex: 1;
+}
+
+.eyeBtn {
+  position: absolute;
+  right: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  background: transparent;
+  border: none;
+  color: var(--on-surface-muted);
+  cursor: pointer;
+  padding: 4px;
+  display: flex;
+}
+
+.eyeBtn:hover {
+  color: var(--on-surface);
+}
+
+/* ── Save bar ──────────────────────────────────────────────────────────────── */
+
+.saveBar {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: var(--space-2);
+  padding-top: var(--space-1);
+  border-top: 1px solid var(--glass-border);
+  margin-top: var(--space-1);
+}
+
+.dirty {
+  font: 12px var(--font-sans);
+  color: #ffb86b;
+}
+
+.spin {
+  animation: settings-spin 0.9s linear infinite;
+}
+
+@keyframes settings-spin {
+  to { transform: rotate(360deg); }
+}
+
+/* ── Service rows ──────────────────────────────────────────────────────────── */
+
+.serviceRow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 10px 12px;
+  background: var(--glass-tint);
+  border-radius: var(--radius-md);
+}
+
+.serviceMain {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.serviceName {
+  font: 500 13px var(--font-sans);
+  color: var(--on-surface);
+  flex-shrink: 0;
+  width: 110px;
+}
+
+.serviceUser {
+  font: 12px var(--font-sans);
+  color: var(--on-surface-muted);
+  flex-shrink: 0;
+}
+
+.serviceUser strong {
+  color: var(--on-surface);
+  font-weight: 500;
+}
+
+.serviceUrl {
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Consolas, monospace;
+  font-size: 11px;
+  color: var(--primary);
+  background: rgba(173, 198, 255, 0.08);
+  padding: 1px 6px;
+  border-radius: var(--radius-sm);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.serviceBadges {
+  display: flex;
+  gap: 4px;
+  flex-shrink: 0;
 }
 
 .badge {
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.06em;
+  font: 600 10px var(--font-sans);
+  letter-spacing: 0.04em;
   text-transform: uppercase;
-  color: var(--tertiary);
-  background: rgba(192, 193, 255, 0.10);
-  padding: 4px 10px;
-  border-radius: var(--radius-full);
+  padding: 2px 6px;
+  border-radius: var(--radius-sm);
+  white-space: nowrap;
+}
+
+.badge_ok {
+  background: rgba(76, 175, 120, 0.15);
+  color: #6fcc94;
+}
+
+.badge_warn {
+  background: rgba(255, 189, 46, 0.15);
+  color: #ffd76b;
+}
+
+/* ── Action rows ───────────────────────────────────────────────────────────── */
+
+.actionsRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+}
+
+/* ── Tiny icon button ──────────────────────────────────────────────────────── */
+
+.iconBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius);
+  background: var(--glass-tint);
+  color: var(--on-surface-variant);
+  cursor: pointer;
+  transition: background var(--transition-fast), color var(--transition-fast);
+  flex-shrink: 0;
+}
+
+.iconBtn:hover {
+  background: var(--glass-inner-light);
+  color: var(--on-surface);
 }
