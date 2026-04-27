@@ -1,10 +1,10 @@
-/* ─── /api/setup — Desktop Wizard + Settings Admin (Phase 3.2) ──────────────
+/* ─── /api/setup — Desktop Wizard + Settings Admin ──────────────────────────
  *
- * Wizard endpoints (Tier-0, set by deploy):
+ * Wizard endpoints (Tier-0):
  *   POST /api/setup/start              — kick off a deploy, NDJSON stream
  *   GET  /api/setup/status             — is a deploy in progress?
  *
- * Settings admin endpoints (Tier A — change runtime config without re-deploy):
+ * Tier-A admin endpoints (edit runtime config without re-deploy):
  *   GET  /api/setup/info               — sanitised config snapshot
  *   GET  /api/setup/env-raw            — raw .env (UI masks secrets)
  *   PATCH /api/setup/env               — partial update of allowlisted keys
@@ -12,6 +12,9 @@
  *   POST /api/setup/stack/restart      — restart all containers
  *   POST /api/setup/stack/stop         — stop all containers
  *   POST /api/setup/stack/start        — start all containers
+ *
+ * Tier-B admin endpoints (per-service integration):
+ *   GET  /api/setup/logs/:service      — live NDJSON tail of container logs
  *
  * Auth: every route under /api/setup/* sits behind authMiddleware.
  * ──────────────────────────────────────────────────────────────────────── */
@@ -40,6 +43,10 @@ import {
   stackStart,
   StackUnavailableError,
 } from "../helpers/docker-compose.js";
+import {
+  streamServiceLogs,
+  LOG_SERVICE_ALLOWLIST,
+} from "../helpers/log-stream.js";
 
 export const setupRouter = Router();
 
@@ -392,6 +399,30 @@ setupRouter.post("/stack/start", async (_req: Request, res: Response): Promise<v
   } catch (err) {
     handleStackError(err, res);
   }
+});
+
+// ── GET /logs/:service ────────────────────────────────────────────────────────
+// Streams `docker compose logs -f --tail=N <service>` as NDJSON LogEvents.
+// Reconnects kill the previous child for the same service automatically.
+
+setupRouter.get("/logs/:service", (req: Request, res: Response): void => {
+  const { service } = req.params as { service: string };
+  const tail = Math.min(Math.max(parseInt((req.query["tail"] as string) || "200", 10), 1), 2000);
+
+  if (!LOG_SERVICE_ALLOWLIST.has(service)) {
+    res.status(400).json({
+      error: `Unknown service "${service}". Allowed: ${[...LOG_SERVICE_ALLOWLIST].join(", ")}.`,
+    });
+    return;
+  }
+
+  res.setHeader("Content-Type", "application/x-ndjson");
+  res.setHeader("Transfer-Encoding", "chunked");
+  res.setHeader("Cache-Control", "no-cache");
+  res.setHeader("X-Accel-Buffering", "no");
+  res.flushHeaders();
+
+  streamServiceLogs(service, res, tail);
 });
 
 function handleStackError(err: unknown, res: Response): void {

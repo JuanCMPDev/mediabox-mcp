@@ -101,6 +101,14 @@ export interface ServiceEndpoint {
   version?:     string;
 }
 
+// ── Live container log streaming (Phase 3.3) ────────────────────────────────
+// Wire format for GET /api/setup/logs/:service (mcp-server → UI).
+// Events are emitted as NDJSON: one JSON object per line.
+
+export type LogEvent =
+  | { type: 'log';    line: string; ts: string }
+  | { type: 'closed'; reason: 'eof' | 'killed' | 'error'; message?: string };
+
 // ── Chat streaming (Phase 2.3) ───────────────────────────────────────────────
 // Wire format between POST /api/chat/stream (mcp-server) and the browser UI.
 // Events are emitted as NDJSON: one JSON object per line.
