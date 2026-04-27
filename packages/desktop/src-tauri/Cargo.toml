@@ -32,6 +32,9 @@ rand = "0.8"
 # Async + sync primitives
 tokio = { version = "1", features = ["sync", "rt", "rt-multi-thread", "macros"] }
 
+# SQLite WAL probe for workdir compatibility check
+rusqlite = { version = "0.31", features = ["bundled"] }
+
 log = "0.4"
 
 # Future-proof for hot-reload across mobile entry point

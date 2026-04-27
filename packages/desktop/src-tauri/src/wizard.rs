@@ -11,7 +11,7 @@
 //! from `@mediabox/core` and streams `DeployEvent`s as NDJSON). The
 //! webview hits that endpoint directly — Rust does not proxy it.
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::Command;
 
 use serde::{Deserialize, Serialize};
@@ -195,6 +195,182 @@ pub async fn default_stack_dir(app: AppHandle) -> Result<String, String> {
         .join(STACK_SUBDIR)
         .to_string_lossy()
         .to_string())
+}
+
+// ─── Workdir probe ───────────────────────────────────────────────────────────
+
+/// Result returned by `probe_workdir`. The UI uses this to decide whether to
+/// block the "Continuar" button (hard block) or show a soft warning.
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WorkdirProbe {
+    /// `true` if a SQLite database in WAL mode could be written and read back.
+    /// *arr services use WAL; 9P bind-mounts under Docker Desktop + WSL2 break
+    /// the shared-memory locking required, causing SQLITE_CANTOPEN at startup.
+    pub sqlite_compatible: bool,
+    /// File system name reported by the OS (e.g. "NTFS", "ReFS", "ext4",
+    /// "9p"). `None` when the platform detection is not implemented.
+    pub fs_type: Option<String>,
+    /// `true` when the path lives on the system drive. On Windows this is a
+    /// simple `drive_letter == 'C'` heuristic; on other platforms always true.
+    pub is_system_drive: bool,
+    /// The actual path that was probed (deepest existing ancestor of `path`).
+    pub probed_path: String,
+    /// Human-readable reason for `sqlite_compatible = false`. `None` on success.
+    pub error: Option<String>,
+}
+
+/// Walk upward until we find a directory that already exists.
+/// The wizard destination often doesn't exist yet; we probe the nearest
+/// ancestor to test the actual filesystem rather than failing immediately.
+fn deepest_existing(path: &Path) -> PathBuf {
+    let mut current = path.to_path_buf();
+    loop {
+        if current.exists() {
+            return current;
+        }
+        match current.parent() {
+            Some(p) => current = p.to_path_buf(),
+            None    => return current,
+        }
+    }
+}
+
+/// Returns the FS name for the volume that `path` resides on.
+fn get_fs_type(path: &Path) -> Option<String> {
+    #[cfg(windows)]
+    {
+        let s = path.to_string_lossy();
+        // Support both "C:\..." and "\\?\C:\..." extended paths.
+        let root = if s.starts_with(r"\\?\") {
+            format!("{}\\", &s[4..7])
+        } else if s.len() >= 2 && s.as_bytes()[1] == b':' {
+            format!("{}\\", &s[..2])
+        } else {
+            return None;
+        };
+        let out = Command::new("fsutil")
+            .args(["fsinfo", "volumeinfo", &root])
+            .output()
+            .ok()?;
+        let text = String::from_utf8_lossy(&out.stdout);
+        for line in text.lines() {
+            if line.to_ascii_lowercase().contains("file system name") {
+                return line.split(':').nth(1).map(|s| s.trim().to_string());
+            }
+        }
+        None
+    }
+    #[cfg(target_os = "linux")]
+    {
+        let path_str = path.to_string_lossy();
+        let content = std::fs::read_to_string("/proc/mounts").ok()?;
+        let mut best_mp = "";
+        let mut best_fs = "";
+        for line in content.lines() {
+            let mut parts = line.split_whitespace();
+            let _ = parts.next(); // device
+            let mp = parts.next().unwrap_or("");
+            let fs = parts.next().unwrap_or("");
+            if path_str.starts_with(mp) && mp.len() > best_mp.len() {
+                best_mp = mp;
+                best_fs = fs;
+            }
+        }
+        if best_fs.is_empty() { None } else { Some(best_fs.to_string()) }
+    }
+    #[cfg(not(any(windows, target_os = "linux")))]
+    {
+        let _ = path;
+        None
+    }
+}
+
+fn is_system_drive(path: &Path) -> bool {
+    #[cfg(windows)]
+    {
+        let first = path.to_string_lossy().chars().next().unwrap_or(' ');
+        first.to_ascii_uppercase() == 'C'
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = path;
+        true
+    }
+}
+
+/// Open a SQLite database in WAL mode and perform a write+read cycle to
+/// verify that the underlying filesystem honours the locking protocol.
+///
+/// Returns `(compatible, error_description)`.
+fn probe_sqlite_wal(probe_dir: &Path) -> (bool, Option<String>) {
+    use rusqlite::Connection;
+
+    let db_path = probe_dir.join("probe.db");
+    let conn = match Connection::open(&db_path) {
+        Err(e) => return (false, Some(format!("open db: {e}"))),
+        Ok(c)  => c,
+    };
+
+    let mode: String = match conn.query_row("PRAGMA journal_mode=WAL", [], |r| r.get(0)) {
+        Err(e) => return (false, Some(format!("WAL pragma: {e}"))),
+        Ok(m)  => m,
+    };
+
+    if mode != "wal" {
+        return (false, Some(format!(
+            "journal_mode={mode} (wal required — FS may not support POSIX advisory locks)"
+        )));
+    }
+
+    if let Err(e) = conn.execute_batch(
+        "CREATE TABLE _probe (x INTEGER); INSERT INTO _probe VALUES (1);"
+    ) {
+        return (false, Some(format!("write test: {e}")));
+    }
+
+    (true, None)
+}
+
+/// Probe whether the filesystem at `path` is compatible with SQLite WAL mode.
+/// Called by the wizard's workdir picker so users are warned before deploying
+/// to a filesystem that will cause *arr services to crash on startup.
+#[tauri::command]
+pub async fn probe_workdir(path: String) -> Result<WorkdirProbe, String> {
+    let requested   = PathBuf::from(&path);
+    let probed      = deepest_existing(&requested);
+    let fs_type     = get_fs_type(&probed);
+    let sys_drive   = is_system_drive(&probed);
+    let probed_path = probed.to_string_lossy().into_owned();
+
+    // Create an isolated temp directory so the probe doesn't leave artefacts
+    // in a partially-initialised stack dir.
+    let probe_name  = format!(
+        ".mediabox-probe-{:x}",
+        rand::random::<u32>()
+    );
+    let probe_dir = probed.join(&probe_name);
+
+    if let Err(e) = std::fs::create_dir_all(&probe_dir) {
+        return Ok(WorkdirProbe {
+            sqlite_compatible: false,
+            fs_type,
+            is_system_drive: sys_drive,
+            probed_path,
+            error: Some(format!("Could not create probe directory: {e}")),
+        });
+    }
+
+    let (ok, err) = probe_sqlite_wal(&probe_dir);
+    let _ = std::fs::remove_dir_all(&probe_dir); // best-effort cleanup
+
+    Ok(WorkdirProbe {
+        sqlite_compatible: ok,
+        fs_type,
+        is_system_drive: sys_drive,
+        probed_path,
+        error: err,
+    })
 }
 
 /// Opens a native folder picker. Returns the chosen path, or `None` if the

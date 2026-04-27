@@ -39,6 +39,7 @@ pub fn run() {
             wizard::reset_app_state,
             wizard::default_stack_dir,
             wizard::pick_directory,
+            wizard::probe_workdir,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
