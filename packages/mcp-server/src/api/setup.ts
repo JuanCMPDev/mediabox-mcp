@@ -49,6 +49,12 @@ import {
   streamServiceLogs,
   LOG_SERVICE_ALLOWLIST,
 } from "../helpers/log-stream.js";
+import {
+  rotateArrApiKey,
+  ARR_SERVICES,
+  ArrKeyRotationError,
+  type ArrService,
+} from "../helpers/arr-key-rotation.js";
 
 export const setupRouter = Router();
 
@@ -506,6 +512,33 @@ setupRouter.post("/apply-updates", async (_req: Request, res: Response): Promise
     res.json({ ok: true });
   } catch (err) {
     handleStackError(err, res);
+  }
+});
+
+// ── POST /regenerate-api-key ──────────────────────────────────────────────────
+// Rotates the ApiKey in `config/<service>/config.xml` for sonarr/radarr/prowlarr.
+// Stops the container, edits config.xml, patches .env, restarts the container.
+// The new key is NOT returned to the client — it lives in .env and the sidecar
+// must be restarted to pick it up.
+
+setupRouter.post("/regenerate-api-key", async (req: Request, res: Response): Promise<void> => {
+  const { service } = (req.body ?? {}) as { service?: string };
+
+  if (!service || !ARR_SERVICES.includes(service as ArrService)) {
+    res.status(400).json({ error: `service must be one of: ${ARR_SERVICES.join(", ")}` });
+    return;
+  }
+
+  try {
+    await rotateArrApiKey(service as ArrService);
+    res.json({ ok: true, restartRequired: ["sidecar"] });
+  } catch (err) {
+    if (err instanceof ArrKeyRotationError) {
+      const status = err.stage === "preflight" ? 400 : 500;
+      res.status(status).json({ error: err.message, stage: err.stage });
+      return;
+    }
+    res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
   }
 });
 
