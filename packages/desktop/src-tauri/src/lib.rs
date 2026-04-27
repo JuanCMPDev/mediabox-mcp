@@ -1,10 +1,12 @@
 mod commands;
 mod sidecar;
 mod state;
+mod wizard;
 
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use tokio::sync::RwLock;
 
+use crate::sidecar::SidecarChild;
 use crate::state::SharedRuntimeConfig;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -17,6 +19,7 @@ pub fn run() {
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_process::init())
         .manage(shared)
+        .manage(SidecarChild(Mutex::new(None)))
         .setup(|app| {
             let handle = app.handle().clone();
             // Spawn sidecar on a tokio task so we don't block setup().
@@ -29,6 +32,13 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             commands::get_runtime_config,
+            commands::restart_sidecar,
+            wizard::check_docker,
+            wizard::get_app_state,
+            wizard::set_app_state,
+            wizard::reset_app_state,
+            wizard::default_stack_dir,
+            wizard::pick_directory,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
