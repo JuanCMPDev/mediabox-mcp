@@ -12,7 +12,7 @@ import { ReviewStep } from '@/components/wizard/steps/ReviewStep';
 import { useWizardDraft } from '@/lib/use-wizard-draft';
 import { useDeployStream } from '@/lib/use-deploy-stream';
 import { draftToDeployConfig } from '@/lib/wizard-types';
-import { defaultStackDir, setAppState, restartSidecar } from '@/lib/tauri-bridge';
+import { defaultStackDir, setAppState, restartSidecar, type WorkdirProbe } from '@/lib/tauri-bridge';
 import { reloadRuntimeConfig } from '@/lib/runtime-config';
 
 const STEP_TITLES = [
@@ -47,8 +47,9 @@ export function WizardView({ onComplete }: Props) {
   const { draft, setStep, update, updateNested, clear } = useWizardDraft();
   const { state: deployState, start, cancel, reset } = useDeployStream();
 
-  const [preflightReady, setPreflightReady] = useState(false);
-  const [deploying, setDeploying] = useState(false);
+  const [preflightReady, setPreflightReady]     = useState(false);
+  const [deploying, setDeploying]               = useState(false);
+  const [workdirProbe, setWorkdirProbe]         = useState<WorkdirProbe | null>(null);
 
   // Pre-fill workDir on first mount with the OS-suggested default.
   useEffect(() => {
@@ -70,6 +71,9 @@ export function WizardView({ onComplete }: Props) {
         if (!d.imageTag.trim()) return false;
         if (d.mode === 'vps'    && (!d.baseDomain.trim() || !d.letsEncryptEmail.trim())) return false;
         if (d.mode === 'tunnel' && (!d.baseDomain.trim() || !d.tunnelToken.trim()))      return false;
+        // Block if the probe ran and the filesystem is incompatible.
+        // null means "hasn't run yet" — we don't block on that.
+        if (workdirProbe !== null && !workdirProbe.sqliteCompatible) return false;
         return true;
       }
       case 2: return draft.system.timezone.trim().length > 0;
@@ -173,6 +177,7 @@ export function WizardView({ onComplete }: Props) {
           draft={draft}
           setWorkDir={v => update('workDir', v)}
           setDeployment={p => updateNested('deployment', p)}
+          onProbeResult={setWorkdirProbe}
         />
       )}
       {draft.step === 2 && <SystemStep   draft={draft} setSystem={p => updateNested('system', p)} />}
