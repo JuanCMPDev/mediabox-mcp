@@ -41,6 +41,8 @@ import {
   stackRestart,
   stackStop,
   stackStart,
+  stackUp,
+  streamDockerPull,
   StackUnavailableError,
 } from "../helpers/docker-compose.js";
 import {
@@ -395,6 +397,32 @@ setupRouter.post("/stack/stop", async (_req: Request, res: Response): Promise<vo
 setupRouter.post("/stack/start", async (_req: Request, res: Response): Promise<void> => {
   try {
     await stackStart();
+    res.json({ ok: true });
+  } catch (err) {
+    handleStackError(err, res);
+  }
+});
+
+// ── POST /check-updates ───────────────────────────────────────────────────────
+// Streams `docker compose pull --progress plain` as NDJSON PullEvents.
+// One-shot: the stream ends when pull completes or fails.
+
+setupRouter.post("/check-updates", (_req: Request, res: Response): void => {
+  res.setHeader("Content-Type", "application/x-ndjson");
+  res.setHeader("Transfer-Encoding", "chunked");
+  res.setHeader("Cache-Control", "no-cache");
+  res.setHeader("X-Accel-Buffering", "no");
+  res.flushHeaders();
+  streamDockerPull(res);
+});
+
+// ── POST /apply-updates ───────────────────────────────────────────────────────
+// Runs `docker compose up -d --remove-orphans` to restart containers whose
+// images were refreshed by /check-updates.
+
+setupRouter.post("/apply-updates", async (_req: Request, res: Response): Promise<void> => {
+  try {
+    await stackUp();
     res.json({ ok: true });
   } catch (err) {
     handleStackError(err, res);
