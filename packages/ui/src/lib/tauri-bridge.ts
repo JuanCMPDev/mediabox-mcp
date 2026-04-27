@@ -126,6 +126,36 @@ export async function pickDirectory(initial?: string): Promise<string | null> {
   return invoke<string | null>('pick_directory', { initial: initial ?? null });
 }
 
+// ── Workdir probe ─────────────────────────────────────────────────────────────
+
+export interface WorkdirProbe {
+  sqliteCompatible: boolean;
+  fsType:           string | null;
+  isSystemDrive:    boolean;
+  probedPath:       string;
+  error:            string | null;
+}
+
+/**
+ * Probes whether the filesystem at `path` supports SQLite WAL mode.
+ * The wizard calls this immediately after the user picks or types a workdir
+ * so we can warn them before deploying to a filesystem where *arr services
+ * will fail with SQLITE_CANTOPEN on startup (WSL2 9P bind-mounts, SMB, NFS).
+ */
+export async function probeWorkdir(path: string): Promise<WorkdirProbe> {
+  if (!inTauri()) {
+    // Browser dev fallback — pretend the path is fine.
+    return {
+      sqliteCompatible: true,
+      fsType:           'NTFS',
+      isSystemDrive:    true,
+      probedPath:       path,
+      error:            null,
+    };
+  }
+  return invoke<WorkdirProbe>('probe_workdir', { path });
+}
+
 // ── Sidecar lifecycle ─────────────────────────────────────────────────────────
 
 /**
