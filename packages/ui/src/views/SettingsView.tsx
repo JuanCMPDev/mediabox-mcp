@@ -2,8 +2,9 @@ import { useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import {
   ExternalLink, RefreshCw, FolderOpen, Eye, EyeOff,
-  Save, RotateCw, Power, Play, AlertTriangle, Trash2,
+  Save, RotateCw, Power, Play, AlertTriangle, Trash2, ScrollText,
 } from 'lucide-react';
+import { LogDrawer } from '@/components/log-drawer/LogDrawer';
 
 import { GlassCard }   from '@/components/atoms/GlassCard';
 import { GlassButton } from '@/components/atoms/GlassButton';
@@ -398,24 +399,53 @@ function PasswordRow({ service, label, envKey, configured }: {
 
 // ─── Services live status (read-only) ────────────────────────────────────────
 
+// Maps display name → docker-compose service name used by the log endpoint.
+const SERVICE_ID: Record<string, string> = {
+  Jellyfin:     'jellyfin',
+  qBittorrent:  'qbittorrent',
+  PyLoad:       'pyload',
+  Sonarr:       'sonarr',
+  Radarr:       'radarr',
+  Prowlarr:     'prowlarr',
+  FlareSolverr: 'flaresolverr',
+  Bazarr:       'bazarr',
+};
+
 function ServicesLiveSection({ info }: { info: SetupInfo }) {
+  const [logService, setLogService] = useState<{ id: string; name: string } | null>(null);
+
   return (
     <Section title="Servicios" subtitle="Click en cualquiera para abrir su UI nativa en el navegador.">
-      <ServiceUrlRow name="Jellyfin"     creds={info.services.jellyfin} />
-      <ServiceUrlRow name="qBittorrent"  creds={info.services.qbittorrent} />
-      <ServiceUrlRow name="PyLoad"       creds={info.services.pyload} />
-      <ServiceUrlRow name="Sonarr"       creds={info.services.sonarr} />
-      <ServiceUrlRow name="Radarr"       creds={info.services.radarr} />
-      <ServiceUrlRow name="Prowlarr"     creds={info.services.prowlarr} />
-      <ServiceUrlRow name="FlareSolverr" creds={info.services.flaresolverr} />
+      <ServiceUrlRow name="Jellyfin"     creds={info.services.jellyfin}     onOpenLogs={setLogService} />
+      <ServiceUrlRow name="qBittorrent"  creds={info.services.qbittorrent}  onOpenLogs={setLogService} />
+      <ServiceUrlRow name="PyLoad"       creds={info.services.pyload}       onOpenLogs={setLogService} />
+      <ServiceUrlRow name="Sonarr"       creds={info.services.sonarr}       onOpenLogs={setLogService} />
+      <ServiceUrlRow name="Radarr"       creds={info.services.radarr}       onOpenLogs={setLogService} />
+      <ServiceUrlRow name="Prowlarr"     creds={info.services.prowlarr}     onOpenLogs={setLogService} />
+      <ServiceUrlRow name="FlareSolverr" creds={info.services.flaresolverr} onOpenLogs={setLogService} />
       {info.services.bazarr.enabled && (
-        <ServiceUrlRow name="Bazarr" creds={info.services.bazarr} />
+        <ServiceUrlRow name="Bazarr"     creds={info.services.bazarr}       onOpenLogs={setLogService} />
+      )}
+
+      {logService && (
+        <LogDrawer
+          service={logService.id}
+          displayName={logService.name}
+          onClose={() => setLogService(null)}
+        />
       )}
     </Section>
   );
 }
 
-function ServiceUrlRow({ name, creds }: { name: string; creds: ServiceCreds }) {
+interface ServiceUrlRowProps {
+  name:       string;
+  creds:      ServiceCreds;
+  onOpenLogs: (s: { id: string; name: string }) => void;
+}
+
+function ServiceUrlRow({ name, creds, onOpenLogs }: ServiceUrlRowProps) {
+  const serviceId = SERVICE_ID[name];
   return (
     <div className={styles.serviceRow}>
       <div className={styles.serviceMain}>
@@ -429,6 +459,16 @@ function ServiceUrlRow({ name, creds }: { name: string; creds: ServiceCreds }) {
         {creds.hasApiKey === false   && <Badge tone="warn">sin key</Badge>}
         {creds.hasPassword === false && <Badge tone="warn">sin pwd</Badge>}
       </div>
+      {serviceId && (
+        <button
+          type="button"
+          className={styles.iconBtn}
+          onClick={() => onOpenLogs({ id: serviceId, name })}
+          title={`Ver logs de ${name}`}
+        >
+          <ScrollText size={14} />
+        </button>
+      )}
       <button
         type="button"
         className={styles.iconBtn}
