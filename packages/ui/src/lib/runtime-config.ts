@@ -92,3 +92,13 @@ export function __resetRuntimeConfig(): void {
   cached   = null;
   inFlight = null;
 }
+
+/**
+ * Drops the cached config and re-polls. Used after `restart_sidecar` so the
+ * webview picks up the new random port + bearer token without a page reload.
+ */
+export async function reloadRuntimeConfig(): Promise<RuntimeConfig> {
+  cached = null;
+  inFlight = null;
+  return loadRuntimeConfig();
+}

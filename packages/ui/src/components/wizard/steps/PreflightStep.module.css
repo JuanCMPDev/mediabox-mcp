@@ -1,0 +1,109 @@
+.preflight {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.intro {
+  font-family: var(--font-sans);
+  font-size: 14px;
+  color: var(--on-surface-variant);
+  line-height: 1.6;
+  margin: 0;
+}
+
+.checks {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  padding: var(--space-2);
+  background: var(--glass-tint);
+  border-radius: var(--radius-md);
+}
+
+.check {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+  padding: 10px var(--space-2);
+}
+
+.checkIcon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 20px;
+  height: 20px;
+  margin-top: 2px;
+}
+
+.checkBody {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.checkLabel {
+  font-family: var(--font-sans);
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--on-surface);
+}
+
+.checkDetail {
+  font-family: var(--font-mono, monospace);
+  font-size: 12px;
+  color: var(--on-surface-muted);
+}
+
+.errorBox {
+  display: flex;
+  gap: var(--space-2);
+  padding: var(--space-2);
+  background: rgba(255, 180, 171, 0.08);
+  border: 1px solid rgba(255, 180, 171, 0.20);
+  border-radius: var(--radius-md);
+  color: var(--error);
+}
+
+.errorBox > div {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 13px;
+}
+
+.errorBox p {
+  margin: 0;
+  color: var(--on-surface-variant);
+  font-size: 13px;
+}
+
+.link {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--primary);
+  text-decoration: none;
+  font-size: 12px;
+  font-weight: 500;
+  width: fit-content;
+}
+
+.link:hover {
+  text-decoration: underline;
+}
+
+.retry {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.spin {
+  animation: preflight-spin 0.9s linear infinite;
+}
+
+@keyframes preflight-spin {
+  to { transform: rotate(360deg); }
+}
