@@ -2,9 +2,10 @@ import { useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import {
   ExternalLink, RefreshCw, FolderOpen, Eye, EyeOff,
-  Save, RotateCw, Power, Play, AlertTriangle, Trash2, ScrollText,
+  Save, RotateCw, Power, Play, AlertTriangle, Trash2, ScrollText, Download,
 } from 'lucide-react';
-import { LogDrawer } from '@/components/log-drawer/LogDrawer';
+import { LogDrawer }    from '@/components/log-drawer/LogDrawer';
+import { UpdateDrawer } from '@/components/update-drawer/UpdateDrawer';
 
 import { GlassCard }   from '@/components/atoms/GlassCard';
 import { GlassButton } from '@/components/atoms/GlassButton';
@@ -56,6 +57,7 @@ export function SettingsView() {
           <ServicePasswordsSection info={info} />
           <ServicesLiveSection info={info} />
           <SystemSection info={info} />
+          <UpdatesSection />
           <StackLifecycleSection />
           <AdvancedSection info={info} />
         </>
@@ -547,6 +549,40 @@ function StackLifecycleSection() {
           Detener todo
         </GlassButton>
       </div>
+    </Section>
+  );
+}
+
+// ─── Update checker ──────────────────────────────────────────────────────────
+
+function UpdatesSection() {
+  const [showDrawer, setShowDrawer] = useState(false);
+  const qc = useQueryClient();
+
+  return (
+    <Section
+      title="Actualizaciones"
+      subtitle="Descarga las últimas imágenes Docker y reinicia solo los containers que cambiaron."
+    >
+      <div className={styles.actionsRow}>
+        <GlassButton variant="secondary" onClick={() => setShowDrawer(true)}>
+          <Download size={14} />
+          Buscar actualizaciones
+        </GlassButton>
+      </div>
+      <span className={styles.hintBox}>
+        Ejecuta <code>docker compose pull</code> para descargar las imágenes más recientes, luego aplica
+        con <code>docker compose up -d</code> para reiniciar solo los containers que cambiaron.
+      </span>
+      {showDrawer && (
+        <UpdateDrawer
+          onClose={() => setShowDrawer(false)}
+          onApplied={() => {
+            void qc.invalidateQueries({ queryKey: ['services'] });
+            setShowDrawer(false);
+          }}
+        />
+      )}
     </Section>
   );
 }
