@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import {
   ExternalLink, RefreshCw, FolderOpen, Eye, EyeOff,
-  Save, RotateCw, Power, Play, AlertTriangle, Trash2, ScrollText, Download,
+  Save, RotateCw, Power, Play, AlertTriangle, Trash2, ScrollText, Download, KeyRound,
 } from 'lucide-react';
 import { LogDrawer }    from '@/components/log-drawer/LogDrawer';
 import { UpdateDrawer } from '@/components/update-drawer/UpdateDrawer';
@@ -56,6 +56,7 @@ export function SettingsView() {
           <TelegramSection info={info} />
           <ServicePasswordsSection info={info} />
           <JellyfinPasswordSection info={info} />
+          <ServiceApiKeysSection info={info} />
           <ServicesLiveSection info={info} />
           <SystemSection info={info} />
           <UpdatesSection />
@@ -487,6 +488,75 @@ function JellyfinPasswordSection({ info }: { info: SetupInfo }) {
         </GlassButton>
       </div>
     </Section>
+  );
+}
+
+// ─── *arr API key rotation ───────────────────────────────────────────────────
+
+function ServiceApiKeysSection({ info }: { info: SetupInfo }) {
+  return (
+    <Section
+      title="API keys de *arr"
+      subtitle="Rota la API key de Sonarr, Radarr o Prowlarr. El container se detiene, la nueva key se escribe en config.xml + .env, y luego se reinicia el container y el sidecar."
+    >
+      <ArrApiKeyRow service="sonarr"   label="Sonarr"   hasKey={info.services.sonarr.hasApiKey   ?? false} />
+      <ArrApiKeyRow service="radarr"   label="Radarr"   hasKey={info.services.radarr.hasApiKey   ?? false} />
+      <ArrApiKeyRow service="prowlarr" label="Prowlarr" hasKey={info.services.prowlarr.hasApiKey ?? false} />
+    </Section>
+  );
+}
+
+interface ArrApiKeyRowProps {
+  service: 'sonarr' | 'radarr' | 'prowlarr';
+  label:   string;
+  hasKey:  boolean;
+}
+
+function ArrApiKeyRow({ service, label, hasKey }: ArrApiKeyRowProps) {
+  const [busy, setBusy] = useState(false);
+  const { toast }       = useToast();
+  const qc              = useQueryClient();
+
+  async function regenerate() {
+    const ok = await confirmDialog(
+      `Esto va a:\n\n  1. Detener el container de ${label}\n  2. Generar una nueva API key\n  3. Escribirla en config.xml y .env\n  4. Reiniciar el container\n  5. Reiniciar el sidecar\n\nLas integraciones que usen la key anterior dejarán de funcionar hasta que las re-configures.\n\n¿Continuar?`,
+      `Rotar API key de ${label}`,
+    );
+    if (!ok) return;
+
+    setBusy(true);
+    try {
+      const result = await api.setupRegenerateApiKey(service);
+      if (result.restartRequired.includes('sidecar')) {
+        await restartSidecar();
+        await reloadRuntimeConfig();
+      }
+      void qc.invalidateQueries({ queryKey: ['setup-info'] });
+      void qc.invalidateQueries({ queryKey: ['services'] });
+      toast(`API key de ${label} rotada`, 'success');
+    } catch (err) {
+      toast(`Error: ${err instanceof Error ? err.message : String(err)}`, 'error');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className={styles.serviceRow}>
+      <div className={styles.serviceMain}>
+        <span className={styles.serviceName}>{label}</span>
+        <code className={styles.serviceUrl}>{`${service.toUpperCase()}_API_KEY`}</code>
+      </div>
+      <div className={styles.serviceBadges}>
+        {hasKey
+          ? <Badge tone="ok">configurada</Badge>
+          : <Badge tone="warn">sin configurar</Badge>}
+      </div>
+      <GlassButton variant="secondary" size="sm" onClick={regenerate} disabled={busy}>
+        {busy ? <RotateCw size={13} className={styles.spin} /> : <KeyRound size={13} />}
+        Regenerar
+      </GlassButton>
+    </div>
   );
 }
 

@@ -137,4 +137,11 @@ export const api = {
   setupJellyfinPassword(currentPassword: string, newPassword: string) {
     return post<{ ok: boolean }>('/api/setup/jellyfin/password', { currentPassword, newPassword }, 30_000);
   },
+  setupRegenerateApiKey(service: 'sonarr' | 'radarr' | 'prowlarr') {
+    return post<{ ok: boolean; restartRequired: string[] }>(
+      '/api/setup/regenerate-api-key',
+      { service },
+      5 * 60_000,
+    );
+  },
 };
