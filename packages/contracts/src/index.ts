@@ -109,6 +109,14 @@ export type LogEvent =
   | { type: 'log';    line: string; ts: string }
   | { type: 'closed'; reason: 'eof' | 'killed' | 'error'; message?: string };
 
+// ── Docker image update streaming (Phase 3.3) ────────────────────────────────
+// Wire format for POST /api/setup/check-updates (mcp-server → UI).
+// Streams `docker compose pull --progress plain` output as NDJSON.
+
+export type PullEvent =
+  | { type: 'log';  line: string }
+  | { type: 'done'; ok: boolean; message?: string };
+
 // ── Chat streaming (Phase 2.3) ───────────────────────────────────────────────
 // Wire format between POST /api/chat/stream (mcp-server) and the browser UI.
 // Events are emitted as NDJSON: one JSON object per line.

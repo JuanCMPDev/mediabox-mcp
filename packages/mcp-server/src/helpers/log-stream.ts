@@ -8,7 +8,7 @@
  * ──────────────────────────────────────────────────────────────────────── */
 import readline from "node:readline";
 import type { Response }       from "express";
-import { execa, type ExecaChildProcess } from "execa";
+import { execa } from "execa";
 import { stackDir }            from "./stack-env.js";
 
 export const LOG_SERVICE_ALLOWLIST = new Set([
@@ -23,7 +23,7 @@ export const LOG_SERVICE_ALLOWLIST = new Set([
 ]);
 
 // One active child process per service name.
-const activeStreams = new Map<string, ExecaChildProcess>();
+const activeStreams = new Map<string, ReturnType<typeof execa>>();
 
 /**
  * Kill the log stream for `service` if one is already running.
@@ -62,7 +62,7 @@ export function streamServiceLogs(
     "docker",
     ["compose", "logs", "-f", "--tail", String(tail), "--timestamps", service],
     { cwd, reject: false, stdio: ["ignore", "pipe", "pipe"] },
-  ) as ExecaChildProcess;
+  );
 
   activeStreams.set(service, child);
 
@@ -82,7 +82,7 @@ export function streamServiceLogs(
     res.write(JSON.stringify({ type: "log", line: `[stderr] ${msg}`, ts: new Date().toISOString() }) + "\n");
   });
 
-  child.on("exit", (code, signal) => {
+  child.on("exit", (code: number | null, signal: string | null) => {
     activeStreams.delete(service);
     if (!res.writable) return;
     const reason = signal === "SIGTERM" ? "killed" : code === 0 ? "eof" : "error";

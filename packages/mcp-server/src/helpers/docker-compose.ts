@@ -6,7 +6,10 @@
  * Returns structured results so the API layer can build user-friendly
  * `RestartServicesResult` payloads without parsing stderr text.
  * ──────────────────────────────────────────────────────────────────────── */
-import { execa } from "execa";
+import readline from "node:readline";
+import type { Response } from "express";
+import { execa, type Subprocess } from "execa";
+import type { PullEvent } from "@mediabox/contracts";
 import { stackDir } from "./stack-env.js";
 
 export class StackUnavailableError extends Error {
@@ -63,6 +66,59 @@ export async function stackStop(): Promise<void> {
 
 export async function stackStart(): Promise<void> {
   await compose(["start"]);
+}
+
+export async function stackUp(): Promise<void> {
+  await compose(["up", "-d", "--remove-orphans"]);
+}
+
+/**
+ * Stream `docker compose pull --progress plain` to `res` as NDJSON PullEvents.
+ * The caller must set NDJSON headers and call `res.flushHeaders()` first.
+ * Kills the child process when the client disconnects.
+ */
+export function streamDockerPull(res: Response): void {
+  const cwd = stackDir();
+  if (!cwd) {
+    res.write(JSON.stringify({ type: "done", ok: false, message: "STACK_DIR is not configured — wizard not completed." } satisfies PullEvent) + "\n");
+    res.end();
+    return;
+  }
+
+  const child = execa(
+    "docker",
+    ["compose", "pull", "--progress", "plain"],
+    { cwd, reject: false, stdio: ["ignore", "pipe", "pipe"] },
+  );
+
+  let closed = false;
+  res.on("close", () => {
+    closed = true;
+    child.kill("SIGTERM");
+  });
+
+  function writeLine(line: string): void {
+    const trimmed = line.trim();
+    if (trimmed && !closed) {
+      res.write(JSON.stringify({ type: "log", line: trimmed } satisfies PullEvent) + "\n");
+    }
+  }
+
+  const rlOut = readline.createInterface({ input: child.stdout!, crlfDelay: Infinity });
+  const rlErr = readline.createInterface({ input: child.stderr!, crlfDelay: Infinity });
+  rlOut.on("line", writeLine);
+  rlErr.on("line", writeLine);
+
+  void child.then(result => {
+    rlOut.close();
+    rlErr.close();
+    if (closed) return;
+    const exitCode = result.exitCode ?? 1;
+    const lastErr = (result.stderr ?? "").trim().split("\n").pop()?.trim();
+    const msg = exitCode !== 0 ? lastErr : undefined;
+    res.write(JSON.stringify({ type: "done", ok: exitCode === 0, message: msg } satisfies PullEvent) + "\n");
+    res.end();
+  });
 }
 
 /** `docker compose ps --format json` — returns one JSON object per line. */
