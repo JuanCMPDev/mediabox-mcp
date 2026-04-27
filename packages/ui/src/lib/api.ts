@@ -134,4 +134,7 @@ export const api = {
   setupStackStop()    { return post('/api/setup/stack/stop',    undefined, 60_000); },
   setupStackStart()   { return post('/api/setup/stack/start',   undefined, 2 * 60_000); },
   setupApplyUpdates() { return post<{ ok: boolean }>('/api/setup/apply-updates', undefined, 10 * 60_000); },
+  setupJellyfinPassword(currentPassword: string, newPassword: string) {
+    return post<{ ok: boolean }>('/api/setup/jellyfin/password', { currentPassword, newPassword }, 30_000);
+  },
 };

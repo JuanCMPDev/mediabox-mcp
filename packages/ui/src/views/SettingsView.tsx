@@ -55,6 +55,7 @@ export function SettingsView() {
           <AIProviderSection info={info} />
           <TelegramSection info={info} />
           <ServicePasswordsSection info={info} />
+          <JellyfinPasswordSection info={info} />
           <ServicesLiveSection info={info} />
           <SystemSection info={info} />
           <UpdatesSection />
@@ -311,10 +312,6 @@ function ServicePasswordsSection({ info }: { info: SetupInfo }) {
         envKey="PYLOAD_PASSWORD"
         configured={info.services.pyload.hasPassword ?? false}
       />
-      <p className={styles.hintBox}>
-        El password de Jellyfin admin se cambia desde la propia UI de Jellyfin
-        (esto se va a integrar acá en la próxima iteración).
-      </p>
     </Section>
   );
 }
@@ -396,6 +393,100 @@ function PasswordRow({ service, label, envKey, configured }: {
       {tooShort && <span className={styles.errorText}>Mínimo 8 caracteres.</span>}
       <span className={styles.hint}>service: <code>{service}</code> · env: <code>{envKey}</code></span>
     </div>
+  );
+}
+
+// ─── Jellyfin admin password ──────────────────────────────────────────────────
+
+function JellyfinPasswordSection({ info }: { info: SetupInfo }) {
+  const [current,   setCurrent]   = useState('');
+  const [next,      setNext]      = useState('');
+  const [showCur,   setShowCur]   = useState(false);
+  const [showNext,  setShowNext]  = useState(false);
+  const [saving,    setSaving]    = useState(false);
+  const { toast } = useToast();
+
+  const adminUser   = info.services.jellyfin.user;
+  const nextTooShort = next.length > 0 && next.length < 8;
+  const canSave     = current.length > 0 && next.length >= 8 && !saving;
+
+  if (!adminUser) {
+    return (
+      <Section title="Contraseña Jellyfin Admin">
+        <span className={styles.hintBox}>
+          JELLYFIN_ADMIN_USER no configurado. Re-corré el wizard para establecer el usuario admin.
+        </span>
+      </Section>
+    );
+  }
+
+  async function save() {
+    setSaving(true);
+    try {
+      await api.setupJellyfinPassword(current, next);
+      toast('Contraseña de Jellyfin actualizada', 'success');
+      setCurrent('');
+      setNext('');
+    } catch (err) {
+      toast(`Error: ${err instanceof Error ? err.message : String(err)}`, 'error');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <Section
+      title="Contraseña Jellyfin Admin"
+      subtitle={`Usuario: "${adminUser}". El cambio se aplica directamente en Jellyfin vía su API.`}
+    >
+      <div className={styles.formField}>
+        <label className={styles.label}>Contraseña actual</label>
+        <div className={styles.passwordRow}>
+          <div className={styles.passwordInput}>
+            <GlassInput
+              value={showCur ? current : '•'.repeat(current.length)}
+              onChange={v => {
+                if (showCur) { setCurrent(v); return; }
+                if (v.length > current.length) setCurrent(current + v.slice(current.length));
+                else setCurrent(current.slice(0, v.length));
+              }}
+              placeholder="Contraseña actual"
+            />
+            <button type="button" className={styles.eyeBtn} onClick={() => setShowCur(s => !s)}>
+              {showCur ? <EyeOff size={14} /> : <Eye size={14} />}
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div className={styles.formField}>
+        <label className={styles.label}>Nueva contraseña</label>
+        <div className={styles.passwordRow}>
+          <div className={styles.passwordInput}>
+            <GlassInput
+              value={showNext ? next : '•'.repeat(next.length)}
+              onChange={v => {
+                if (showNext) { setNext(v); return; }
+                if (v.length > next.length) setNext(next + v.slice(next.length));
+                else setNext(next.slice(0, v.length));
+              }}
+              placeholder="Mínimo 8 caracteres"
+            />
+            <button type="button" className={styles.eyeBtn} onClick={() => setShowNext(s => !s)}>
+              {showNext ? <EyeOff size={14} /> : <Eye size={14} />}
+            </button>
+          </div>
+        </div>
+        {nextTooShort && <span className={styles.errorText}>Mínimo 8 caracteres.</span>}
+      </div>
+
+      <div className={styles.saveBar}>
+        <GlassButton variant="primary" size="sm" onClick={save} disabled={!canSave}>
+          {saving ? <RotateCw size={14} className={styles.spin} /> : <Save size={14} />}
+          Cambiar contraseña
+        </GlassButton>
+      </div>
+    </Section>
   );
 }
 

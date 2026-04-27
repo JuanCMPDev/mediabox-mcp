@@ -403,6 +403,86 @@ setupRouter.post("/stack/start", async (_req: Request, res: Response): Promise<v
   }
 });
 
+// ── POST /jellyfin/password ───────────────────────────────────────────────────
+// Changes the Jellyfin admin user's password via the Jellyfin API.
+// Authenticates first with the current password to obtain a short-lived token,
+// then calls /Users/{id}/Password with the new password.
+
+setupRouter.post("/jellyfin/password", async (req: Request, res: Response): Promise<void> => {
+  const { currentPassword, newPassword } = (req.body ?? {}) as {
+    currentPassword?: string;
+    newPassword?:     string;
+  };
+
+  if (!currentPassword?.trim() || !newPassword?.trim()) {
+    res.status(400).json({ error: "currentPassword and newPassword are required" });
+    return;
+  }
+  if (newPassword.length < 8) {
+    res.status(400).json({ error: "newPassword must be at least 8 characters" });
+    return;
+  }
+
+  const env = await readEnvMap();
+  const jellyfinUrl = (process.env.JELLYFIN_URL || env.JELLYFIN_URL || "http://localhost:8096").replace(/\/$/, "");
+  const adminUser   = process.env.JELLYFIN_ADMIN_USER || env.JELLYFIN_ADMIN_USER || "";
+
+  if (!adminUser) {
+    res.status(500).json({ error: "JELLYFIN_ADMIN_USER is not configured" });
+    return;
+  }
+
+  try {
+    // Step 1 — authenticate to get a short-lived token + user ID.
+    const authRes = await fetch(`${jellyfinUrl}/Users/AuthenticateByName`, {
+      method:  "POST",
+      headers: {
+        "Content-Type":      "application/json",
+        "X-Emby-Authorization": 'MediaBrowser Client="Mediabox", Device="MCP Server", DeviceId="mediabox-mcp-server", Version="1.0"',
+      },
+      body: JSON.stringify({ Username: adminUser, Pw: currentPassword }),
+    });
+
+    if (!authRes.ok) {
+      const msg = authRes.status === 401
+        ? "Contraseña actual incorrecta"
+        : `Jellyfin respondió ${authRes.status}`;
+      res.status(authRes.status === 401 ? 401 : 502).json({ error: msg });
+      return;
+    }
+
+    const authData = await authRes.json() as { AccessToken?: string; User?: { Id?: string } };
+    const token  = authData.AccessToken;
+    const userId = authData.User?.Id;
+
+    if (!token || !userId) {
+      res.status(502).json({ error: "Jellyfin auth response malformed (missing token or user ID)" });
+      return;
+    }
+
+    // Step 2 — change the password.
+    const pwRes = await fetch(`${jellyfinUrl}/Users/${userId}/Password`, {
+      method:  "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Emby-Token": token,
+      },
+      body: JSON.stringify({ CurrentPw: currentPassword, NewPw: newPassword }),
+    });
+
+    if (!pwRes.ok) {
+      res.status(502).json({ error: `Jellyfin rechazó el cambio de contraseña (${pwRes.status})` });
+      return;
+    }
+
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(503).json({
+      error: `No se pudo conectar a Jellyfin: ${err instanceof Error ? err.message : String(err)}`,
+    });
+  }
+});
+
 // ── POST /check-updates ───────────────────────────────────────────────────────
 // Streams `docker compose pull --progress plain` as NDJSON PullEvents.
 // One-shot: the stream ends when pull completes or fails.
