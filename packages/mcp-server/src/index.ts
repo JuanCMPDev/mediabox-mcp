@@ -9,6 +9,7 @@ import { oauthProvider, authMiddleware } from "./auth.js";
 import { createMcpServer } from "./tools/register.js";
 import { dashboardRouter } from "./api/dashboard.js";
 import { chatRouter }      from "./api/chat.js";
+import { setupRouter }     from "./api/setup.js";
 import { chatProviderInfo } from "./chat/provider.js";
 import { VERSION } from "./version.js";
 
@@ -42,6 +43,9 @@ app.use("/api/dashboard", authMiddleware, dashboardRouter);
 
 // Chat API — LLM + MCP tool-calling via NDJSON stream
 app.use("/api/chat", authMiddleware, chatRouter);
+
+// Setup API — desktop wizard deploy, NDJSON event stream
+app.use("/api/setup", authMiddleware, setupRouter);
 
 if (!process.env.INTERNAL_API_KEY) {
   console.warn("WARNING: INTERNAL_API_KEY is not set — generating ephemeral key. The Telegram bot will lose auth on every restart. Set INTERNAL_API_KEY in your .env file.");

@@ -50,8 +50,11 @@ chatRouter.post("/stream", async (req: Request, res: Response): Promise<void> =>
   res.flushHeaders();
 
   const conversationId = cidIn ?? randomUUID();
+  // Use res.on('close') — req.on('close') fires after express.json() consumes
+  // the body, which is well before the first token leaves the LLM, so it would
+  // mark us as closed and silently drop every chunk.
   let closed = false;
-  req.on("close", () => { closed = true; });
+  res.on("close", () => { closed = true; });
 
   function emit(event: ChatEvent): void {
     if (!closed) res.write(JSON.stringify(event) + "\n");

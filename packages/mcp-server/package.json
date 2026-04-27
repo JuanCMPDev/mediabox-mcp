@@ -20,6 +20,7 @@
   },
   "dependencies": {
     "@mediabox/chat-core": "*",
+    "@mediabox/core": "*",
     "@modelcontextprotocol/sdk": "^1.12.1",
     "cors": "^2.8.6",
     "express": "^5.1.0",
