@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import styles from './TopBar.module.css';
 import type { View } from '@/lib/types';
+import { closeWindow, minimizeWindow, toggleMaximize } from '@/lib/tauri-bridge';
 
 const VIEW_LABELS: Record<View, string> = {
   dashboard: 'Dashboard',
@@ -23,16 +24,34 @@ export function TopBar({ activeView, serverOnline }: TopBarProps) {
   }, []);
 
   return (
-    <header className={styles.topbar}>
+    <header className={styles.topbar} data-tauri-drag-region>
       <div className={styles.left}>
         <div className={styles.windowControls}>
-          <div className={`${styles.wc} ${styles.close}`} />
-          <div className={`${styles.wc} ${styles.min}`} />
-          <div className={`${styles.wc} ${styles.max}`} />
+          <button
+            type="button"
+            className={`${styles.wc} ${styles.close}`}
+            onClick={() => void closeWindow()}
+            aria-label="Cerrar"
+            title="Cerrar"
+          />
+          <button
+            type="button"
+            className={`${styles.wc} ${styles.min}`}
+            onClick={() => void minimizeWindow()}
+            aria-label="Minimizar"
+            title="Minimizar"
+          />
+          <button
+            type="button"
+            className={`${styles.wc} ${styles.max}`}
+            onClick={() => void toggleMaximize()}
+            aria-label="Maximizar"
+            title="Maximizar"
+          />
         </div>
       </div>
 
-      <div className={styles.center} />
+      <div className={styles.center} data-tauri-drag-region />
 
       <div className={styles.right}>
         <div className={styles.breadcrumb}>
