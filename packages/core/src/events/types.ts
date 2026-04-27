@@ -1,40 +1,11 @@
 /**
- * Logical phases of a deployment. Consumers (CLI spinner, UI progress bars,
- * Tauri JSON-RPC wire) can group or filter events by prefix:
- *  - "generate:*"   → writing config files
- *  - "deploy:*"     → Docker lifecycle
- *  - "discover:*"   → reading state from running services
- *  - "configure:*"  → configuring services via their APIs
+ * Wire-format types for deploy events live in @mediabox/contracts so both the
+ * CLI sink, the desktop wizard UI, and any future consumer share one source
+ * of truth. Re-exported here for backward compat with consumers that already
+ * import from @mediabox/core.
  */
-export type DeployPhase =
-  | "config:validate"
-  | "generate:compose"
-  | "generate:env"
-  | "generate:qbittorrent"
-  | "generate:caddy"
-  | "generate:directories"
-  | "deploy:prepare-images"
-  | "deploy:start"
-  | "deploy:health"
-  | "discover:api-keys"
-  | "configure:jellyfin"
-  | "configure:sonarr"
-  | "configure:radarr"
-  | "configure:prowlarr"
-  | "configure:qbittorrent"
-  | "configure:flaresolverr"
-  | "configure:arr-auth"
-  | "configure:jellyfin-libraries"
-  | "write:env-update"
-  | "deploy:restart";
-
-export type DeployEvent =
-  | { kind: "start"; phase: DeployPhase; message: string }
-  | { kind: "progress"; phase: DeployPhase; message: string; percent?: number }
-  | { kind: "success"; phase: DeployPhase; message: string }
-  | { kind: "warn"; phase: DeployPhase; message: string }
-  | { kind: "error"; phase: DeployPhase; message: string; cause?: unknown }
-  | { kind: "log"; level: "info" | "debug"; message: string };
+export type { DeployEvent, DeployPhase } from "@mediabox/contracts";
+import type { DeployEvent } from "@mediabox/contracts";
 
 /**
  * Simple callback-style event sink. Downstream can wrap into an

@@ -30,6 +30,7 @@
     "test:watch": "vitest"
   },
   "dependencies": {
+    "@mediabox/contracts": "*",
     "execa": "^9.5.0",
     "fast-xml-parser": "^5.7.1",
     "yaml": "^2.6.0"
