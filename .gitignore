@@ -24,3 +24,6 @@ Series/
 .DS_Store
 Thumbs.db
 CLAUDE.md
+
+# Local build artifact captured by Tee-Object during installer rebuilds
+.build-desktop.log
