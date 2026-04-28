@@ -9,13 +9,14 @@
  *   4. If tool_call chunks arrive → execute tools, append result, loop
  *   5. If only text → yield tokens, emit 'done', return
  * ──────────────────────────────────────────────────────────────────────── */
-import type { ChatEvent } from '@mediabox/contracts';
+import type { ChatEvent, ChatChoiceItem } from '@mediabox/contracts';
 import type { StreamChatOptions, ChatMessage, ToolCallInfo, ToolResultInfo } from './types.js';
 import type { LLMStreamChunk } from './providers/types.js';
 import { selectTools }      from './tool-selector.js';
 import { executeVirtualTool } from './tool-router.js';
 import { trimHistory }      from './history.js';
 import { buildSystemPrompt } from './prompt.js';
+import { PRESENT_CHOICES_TOOL } from './virtual-tools.js';
 
 const MAX_ITERATIONS = 20;
 const TOOL_TIMEOUT_MS = 60_000;
@@ -70,6 +71,38 @@ export async function* streamChat(opts: StreamChatOptions): AsyncGenerator<ChatE
     }
 
     if (accCalls.length > 0) {
+      // ── present_choices: UI-only tool. Emit a 'choices' event and end the
+      //    turn — the user clicks a card and the click becomes the next user
+      //    message, so we don't loop the LLM here. If the model paired it with
+      //    other real tool calls we ignore them this turn (the prompt tells
+      //    it to call present_choices alone).
+      const choicesCall = accCalls.find(c => c.name === PRESENT_CHOICES_TOOL);
+      if (choicesCall) {
+        const choicesEvent = buildChoicesEvent(choicesCall.args);
+        if (choicesEvent) yield choicesEvent;
+
+        // Persist the assistant turn so the next user message has context.
+        // We record only the present_choices call (not the result — there isn't
+        // one) and a minimal synthetic result so providers that demand a result
+        // for every call don't choke when the next turn is sent.
+        const stubCall: ToolCallInfo = {
+          id:   choicesCall.id,
+          name: choicesCall.name,
+          args: choicesCall.args,
+        };
+        history.push({ role: 'assistant', content: accText, toolCalls: [stubCall] });
+        history.push({
+          role: 'user',
+          content: '',
+          toolResults: [{ id: choicesCall.id, name: choicesCall.name, result: '{"presented":true}' }],
+        });
+        historyStore.set(conversationId, trimHistory(history));
+
+        const finalText = accText || '';
+        yield { type: 'done', fullText: finalText };
+        return;
+      }
+
       // Save assistant turn with tool call intentions
       const tcs: ToolCallInfo[] = accCalls.map(c => ({ id: c.id, name: c.name, args: c.args }));
       history.push({ role: 'assistant', content: accText, toolCalls: tcs });
@@ -77,9 +110,10 @@ export async function* streamChat(opts: StreamChatOptions): AsyncGenerator<ChatE
       // Execute each tool and emit progress events
       const results: ToolResultInfo[] = [];
       for (const tc of accCalls) {
-        yield { type: 'tool-start', name: tc.name, args: tc.args };
+        yield { type: 'tool-start', name: tc.name, args: tc.args, callId: tc.id };
         const t0 = Date.now();
         let result: string;
+        let errorMessage: string | undefined;
         try {
           result = await raceTimeout(
             executeVirtualTool(tc.name, tc.args, mcpCall),
@@ -87,10 +121,18 @@ export async function* streamChat(opts: StreamChatOptions): AsyncGenerator<ChatE
             `Tool ${tc.name} timed out`,
           );
         } catch (err) {
-          result = JSON.stringify({ error: err instanceof Error ? err.message : String(err) });
+          errorMessage = err instanceof Error ? err.message : String(err);
+          result = JSON.stringify({ error: errorMessage });
         }
         const ok = !result.includes('"error"');
-        yield { type: 'tool-end', name: tc.name, ok, durationMs: Date.now() - t0 };
+        yield {
+          type: 'tool-end',
+          name: tc.name,
+          ok,
+          durationMs: Date.now() - t0,
+          callId: tc.id,
+          ...(ok ? {} : { error: errorMessage ?? extractErrorMessage(result) }),
+        };
         results.push({ id: tc.id, name: tc.name, result });
       }
 
@@ -116,6 +158,42 @@ function raceTimeout<T>(p: Promise<T>, ms: number, msg: string): Promise<T> {
     p,
     new Promise<never>((_, r) => setTimeout(() => r(new Error(msg)), ms)),
   ]);
+}
+
+/** Coerce the LLM's `present_choices` arguments into a wire-safe ChatEvent.
+ *  Returns null if the args are malformed enough that we'd send empty cards
+ *  — in that case the caller falls back to treating the turn as plain text. */
+function buildChoicesEvent(
+  args: Record<string, unknown>,
+): Extract<ChatEvent, { type: 'choices' }> | null {
+  const rawItems = Array.isArray(args.items) ? args.items : [];
+  const items: ChatChoiceItem[] = [];
+  for (const [i, raw] of rawItems.entries()) {
+    if (!raw || typeof raw !== 'object') continue;
+    const r = raw as Record<string, unknown>;
+    const label = typeof r.label === 'string' ? r.label.trim() : '';
+    const value = typeof r.value === 'string' ? r.value.trim() : '';
+    if (!label || !value) continue;
+    items.push({
+      id:        `c-${i}`,
+      label,
+      value,
+      subtitle:  typeof r.subtitle === 'string' && r.subtitle.trim() ? r.subtitle.trim() : undefined,
+      meta:      typeof r.meta     === 'string' && r.meta.trim()     ? r.meta.trim()     : undefined,
+    });
+  }
+  if (items.length === 0) return null;
+  const prompt = typeof args.prompt === 'string' && args.prompt.trim() ? args.prompt.trim() : undefined;
+  return { type: 'choices', prompt, items };
+}
+
+/** Best-effort extraction of an `error` field from a stringified MCP result. */
+function extractErrorMessage(result: string): string | undefined {
+  try {
+    const parsed = JSON.parse(result);
+    if (parsed && typeof parsed === 'object' && typeof parsed.error === 'string') return parsed.error;
+  } catch {}
+  return undefined;
 }
 
 /**

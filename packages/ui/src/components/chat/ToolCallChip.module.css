@@ -1,0 +1,65 @@
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 8px 3px 6px;
+  border-radius: var(--radius-full);
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1;
+  border: 1px solid transparent;
+  user-select: none;
+  white-space: nowrap;
+}
+
+.icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+  border-radius: var(--radius-full);
+  flex-shrink: 0;
+}
+
+.label {
+  color: var(--on-surface);
+  opacity: 0.85;
+}
+
+.duration {
+  font-size: 10px;
+  color: var(--on-surface-variant);
+  opacity: 0.7;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Running — primary tint, animated icon */
+.running {
+  background: rgba(173, 198, 255, 0.08);
+  border-color: rgba(173, 198, 255, 0.18);
+}
+
+.running .icon { color: var(--primary); }
+
+.spin { animation: spin 0.8s linear infinite; }
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+/* Ok — subtle green */
+.ok {
+  background: rgba(120, 220, 160, 0.08);
+  border-color: rgba(120, 220, 160, 0.18);
+}
+
+.ok .icon { color: rgb(140, 230, 175); }
+
+/* Error — soft red */
+.error {
+  background: rgba(255, 180, 171, 0.10);
+  border-color: rgba(255, 180, 171, 0.22);
+}
+
+.error .icon { color: var(--error); }

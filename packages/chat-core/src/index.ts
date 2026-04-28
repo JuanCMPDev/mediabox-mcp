@@ -26,7 +26,7 @@ export { selectTools }          from './tool-selector.js';
 export { executeVirtualTool }   from './tool-router.js';
 
 // Static data
-export { VIRTUAL_TOOLS, TOOL_GROUPS, KEYWORD_MAP } from './virtual-tools.js';
+export { VIRTUAL_TOOLS } from './virtual-tools.js';
 export { SYSTEM_PROMPT, buildSystemPrompt }        from './prompt.js';
 export type { PromptLocale }                       from './prompt.js';
 

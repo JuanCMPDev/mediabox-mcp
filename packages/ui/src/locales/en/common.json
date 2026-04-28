@@ -84,26 +84,34 @@
     "nLines": "{{n}} lines"
   },
   "chat": {
-    "title":          "AI assistant",
-    "subtitle":       "AI-powered media control — early preview, may misfire on complex requests.",
-    "clearTitle":     "Clear conversation",
-    "clearConfirm":   "Clear conversation?",
-    "yes":            "Yes",
-    "no":             "No",
-    "generating":     "Generating…",
-    "pressEnter":     "Press Enter to send",
-    "askPlaceholder": "Ask Mediabox anything…",
-    "send":           "Send",
+    "title":               "AI assistant",
+    "subtitle":            "AI-powered media control — early preview, may misfire on complex requests.",
+    "clearTitle":          "Clear conversation",
+    "clearConfirm":        "Clear conversation?",
+    "yes":                 "Yes",
+    "no":                  "No",
+    "generating":          "Generating…",
+    "pressEnter":          "Press Enter to send",
+    "pressEnterMultiline": "Enter to send · Shift+Enter for newline",
+    "askPlaceholder":      "Ask Mediabox anything…",
+    "send":                "Send",
+    "copy":                "Copy message",
+    "copied":              "Copied to clipboard",
+    "copyFailed":          "Couldn't copy",
     "tools": {
-      "server_info":  "Querying server…",
-      "media_query":  "Searching library…",
-      "library_ops":  "Managing files…",
-      "series":       "Querying Sonarr…",
-      "movies":       "Querying Radarr…",
-      "downloads":    "Checking downloads…",
-      "optimize":     "Analyzing media…",
-      "maintenance":  "Running maintenance…",
-      "fallback":     "{{name}}…"
+      "server_info":  "Querying server",
+      "media_query":  "Searching library",
+      "library_ops":  "Managing files",
+      "series":       "Querying Sonarr",
+      "movies":       "Querying Radarr",
+      "downloads":    "Checking downloads",
+      "optimize":     "Analyzing media",
+      "maintenance":  "Running maintenance",
+      "present_choices": "Showing options",
+      "fallback":     "{{name}}"
+    },
+    "toolHistory": {
+      "duration": "{{ms}} ms"
     }
   },
   "dashboard": {

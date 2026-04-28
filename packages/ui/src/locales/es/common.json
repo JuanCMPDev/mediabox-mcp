@@ -84,26 +84,34 @@
     "nLines": "{{n}} líneas"
   },
   "chat": {
-    "title":          "Asistente IA",
-    "subtitle":       "Control de medios con IA — vista previa, puede equivocarse en peticiones complejas.",
-    "clearTitle":     "Borrar conversación",
-    "clearConfirm":   "¿Borrar conversación?",
-    "yes":            "Sí",
-    "no":             "No",
-    "generating":     "Generando…",
-    "pressEnter":     "Pulsá Enter para enviar",
-    "askPlaceholder": "Preguntale lo que sea a Mediabox…",
-    "send":           "Enviar",
+    "title":               "Asistente IA",
+    "subtitle":            "Control de medios con IA — vista previa, puede equivocarse en peticiones complejas.",
+    "clearTitle":          "Borrar conversación",
+    "clearConfirm":        "¿Borrar conversación?",
+    "yes":                 "Sí",
+    "no":                  "No",
+    "generating":          "Generando…",
+    "pressEnter":          "Pulsá Enter para enviar",
+    "pressEnterMultiline": "Enter para enviar · Shift+Enter para salto de línea",
+    "askPlaceholder":      "Preguntale lo que sea a Mediabox…",
+    "send":                "Enviar",
+    "copy":                "Copiar mensaje",
+    "copied":              "Copiado al portapapeles",
+    "copyFailed":          "No se pudo copiar",
     "tools": {
-      "server_info":  "Consultando el servidor…",
-      "media_query":  "Buscando en la biblioteca…",
-      "library_ops":  "Gestionando archivos…",
-      "series":       "Consultando Sonarr…",
-      "movies":       "Consultando Radarr…",
-      "downloads":    "Revisando descargas…",
-      "optimize":     "Analizando medios…",
-      "maintenance":  "Ejecutando mantenimiento…",
-      "fallback":     "{{name}}…"
+      "server_info":  "Consultando el servidor",
+      "media_query":  "Buscando en la biblioteca",
+      "library_ops":  "Gestionando archivos",
+      "series":       "Consultando Sonarr",
+      "movies":       "Consultando Radarr",
+      "downloads":    "Revisando descargas",
+      "optimize":     "Analizando medios",
+      "maintenance":  "Ejecutando mantenimiento",
+      "present_choices": "Mostrando opciones",
+      "fallback":     "{{name}}"
+    },
+    "toolHistory": {
+      "duration": "{{ms}} ms"
     }
   },
   "dashboard": {

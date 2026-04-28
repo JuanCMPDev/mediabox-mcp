@@ -120,12 +120,39 @@ export type PullEvent =
 // ── Chat streaming (Phase 2.3) ───────────────────────────────────────────────
 // Wire format between POST /api/chat/stream (mcp-server) and the browser UI.
 // Events are emitted as NDJSON: one JSON object per line.
+//
+// `callId` lets the UI match a tool-end with its tool-start so per-turn tool
+// history can render alongside the assistant message. Optional for back-compat
+// — older engine builds may omit it.
+//
+// `choices` is emitted when the assistant calls the virtual `present_choices`
+// tool. The UI renders the items as clickable cards; clicking one sends the
+// chosen `value` back as the next user message (so the LLM picks up exactly
+// what was selected — full IDs included, not just the visible label).
+
+export interface ChatChoiceItem {
+  /** Stable id for React keys; not sent back to the LLM. */
+  id:         string;
+  /** Headline shown on the card (e.g. "Night of the Living Dead (1968)"). */
+  label:      string;
+  /** Optional secondary line (e.g. "TMDB ID: 10331 · Director: George A. Romero"). */
+  subtitle?:  string;
+  /** Optional short context line under subtitle (e.g. "Action · 96 min"). */
+  meta?:      string;
+  /**
+   * Verbatim text sent back as the next user turn when the card is clicked.
+   * Should embed any IDs the LLM needs so the next turn isn't ambiguous.
+   * Example: "Quiero la versión de 1968 (TMDB ID: 10331)".
+   */
+  value:      string;
+}
 
 export type ChatEvent =
   | { type: 'conversation'; id: string }
   | { type: 'token';        text: string }
-  | { type: 'tool-start';   name: string; args: Record<string, unknown> }
-  | { type: 'tool-end';     name: string; ok: boolean; durationMs: number }
+  | { type: 'tool-start';   name: string; args: Record<string, unknown>; callId?: string }
+  | { type: 'tool-end';     name: string; ok: boolean; durationMs: number; callId?: string; error?: string }
+  | { type: 'choices';      prompt?: string; items: ChatChoiceItem[] }
   | { type: 'done';         fullText: string }
   | { type: 'error';        message: string };
 

@@ -27,8 +27,27 @@ export function registerSonarrTools(server: McpServer): void {
   }, async ({ query, addTvdbId, rootFolder, monitor, seasons, quality, searchNow }) => {
     if (!addTvdbId) {
       if (!query) throw new Error("query is required when not adding by ID");
-      const results = await sonarrApi(`series/lookup?term=${encodeURIComponent(query)}`);
-      return textResult(results.slice(0, 10).map((s: any) => ({ title: s.title, year: s.year, tvdbId: s.tvdbId, overview: s.overview?.slice(0, 120), seasons: s.seasons?.length, status: s.status })));
+      const [results, library] = await Promise.all([
+        sonarrApi(`series/lookup?term=${encodeURIComponent(query)}`),
+        sonarrApi("series"),
+      ]);
+      const byTvdb = new Map<number, any>(library.map((s: any) => [s.tvdbId, s]));
+      return textResult(results.slice(0, 10).map((s: any) => {
+        const existing = byTvdb.get(s.tvdbId);
+        return {
+          title:    s.title,
+          year:     s.year,
+          tvdbId:   s.tvdbId,
+          inSonarr: !!existing,
+          // sonarrId is the internal id; present only when already added.
+          // Use this — NOT tvdbId — for series_releases, series_grab,
+          // series_remove, and series_status episodes view.
+          sonarrId: existing?.id,
+          overview: s.overview?.slice(0, 120),
+          seasons:  s.seasons?.length,
+          status:   s.status,
+        };
+      }));
     }
     const existing = (await sonarrApi("series")).find((s: any) => s.tvdbId === addTvdbId);
     const profiles = await sonarrApi("qualityprofile");
@@ -158,7 +177,10 @@ export function registerSonarrTools(server: McpServer): void {
     else if (seriesId) ep += `seriesId=${seriesId}`;
     else throw new Error("Provide episodeId, or seriesId + seasonNumber + episodeNumber");
     const rels = await sonarrApi(ep);
-    return textResult(rels.slice(0, 20).map((r: any) => ({
+    // Drop dead torrents at the source — they can never download, so the LLM
+    // shouldn't waste context (or user attention) on them.
+    const live = rels.filter((r: any) => (r.seeders ?? 0) > 0);
+    return textResult(live.slice(0, 20).map((r: any) => ({
       guid: r.guid, title: r.title, quality: r.quality?.quality?.name, size: `${(r.size / 1073741824).toFixed(1)}GB`,
       seeders: r.seeders, languages: r.languages?.map((l: any) => l.name), indexer: r.indexer, indexerId: r.indexerId,
       score: r.customFormatScore, rejected: r.rejected || undefined, rejections: r.rejections?.length ? r.rejections.map((j: any) => j.reason) : undefined,
@@ -193,7 +215,35 @@ export function registerSonarrTools(server: McpServer): void {
       }
     }
     await sonarrApi("release", "POST", { guid, indexerId });
-    return textResult({ message: "Release sent to download client", replaced: episodeId ? true : undefined });
+
+    // Poll the queue briefly so the LLM has authoritative state without
+    // making a separate verify call (which can hit Sonarr before the new
+    // download has propagated, leading to a false "no entry found").
+    if (episodeId) {
+      for (let i = 0; i < 5; i++) {
+        await new Promise(r => setTimeout(r, 400));
+        const q = await sonarrApi("queue?pageSize=200");
+        const found = (q.records || []).find((r: any) => r.episodeId === episodeId);
+        if (found) {
+          return textResult({
+            message: "Release accepted and queued",
+            queued: {
+              series:   found.series?.title,
+              episode:  found.episode ? `S${String(found.episode.seasonNumber).padStart(2, "0")}E${String(found.episode.episodeNumber).padStart(2, "0")}` : undefined,
+              status:   found.status,
+              progress: found.sizeleft ? `${((1 - found.sizeleft / found.size) * 100).toFixed(0)}%` : "0%",
+              size:     `${(found.size / 1073741824).toFixed(1)}GB`,
+            },
+            replaced: true,
+          });
+        }
+      }
+    }
+    return textResult({
+      message: "Release accepted by Sonarr — download client will pick it up shortly",
+      replaced: episodeId ? true : undefined,
+      note:    "Queue may take a few more seconds to populate. Do NOT report this as a failure.",
+    });
   });
 
   server.registerTool("series_import", {

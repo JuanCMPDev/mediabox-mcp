@@ -4,13 +4,12 @@ import styles from './ChatPanel.module.css';
 import { GlassCard }       from '@/components/atoms/GlassCard';
 import { MessageList }     from './MessageList';
 import { ChatInput }       from './ChatInput';
-import { ActiveToolChip }  from './ActiveToolChip';
 import { useChat }         from '@/lib/use-chat';
 import { useState }        from 'react';
 
 export function ChatPanel() {
   const { t } = useTranslation();
-  const { messages, isStreaming, activeTool, send, clear } = useChat();
+  const { messages, isStreaming, send, pickChoice, clear } = useChat();
   const [input, setInput] = useState('');
   const [confirmClear, setConfirmClear] = useState(false);
 
@@ -65,15 +64,8 @@ export function ChatPanel() {
 
       {/* Messages */}
       <div className={styles.messages}>
-        <MessageList messages={messages} isTyping={false} />
+        <MessageList messages={messages} isTyping={false} onPickChoice={pickChoice} />
       </div>
-
-      {/* Tool progress chip */}
-      {activeTool && (
-        <div className={styles.toolRow}>
-          <ActiveToolChip name={activeTool} />
-        </div>
-      )}
 
       {/* Input */}
       <div className={styles.inputArea}>
@@ -84,7 +76,7 @@ export function ChatPanel() {
           disabled={isStreaming}
         />
         <div className={styles.hint}>
-          {isStreaming ? t('chat.generating') : t('chat.pressEnter')}
+          {isStreaming ? t('chat.generating') : t('chat.pressEnterMultiline')}
         </div>
       </div>
     </GlassCard>
