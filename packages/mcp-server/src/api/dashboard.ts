@@ -5,7 +5,7 @@ import { getDownloads } from "../fetchers/downloads.js";
 import { getLibrary }   from "../fetchers/library.js";
 import { getServices }  from "../fetchers/services.js";
 import { jfApi }        from "../helpers/api.js";
-import { qbitApi }      from "../helpers/qbittorrent.js";
+import { qbitApi, qbitPause, qbitResume } from "../helpers/qbittorrent.js";
 
 export const dashboardRouter = Router();
 
@@ -65,7 +65,7 @@ dashboardRouter.post("/sessions/:id/message", async (req, res) => {
 /** Pause a torrent. */
 dashboardRouter.post("/downloads/qbit/:hash/pause", async (req, res) => {
   try {
-    await qbitApi("torrents/pause", "POST", { hashes: req.params.hash });
+    await qbitPause(req.params.hash);
     ok(res);
   } catch (err) { fail(res, err); }
 });
@@ -73,7 +73,7 @@ dashboardRouter.post("/downloads/qbit/:hash/pause", async (req, res) => {
 /** Resume a paused torrent. */
 dashboardRouter.post("/downloads/qbit/:hash/resume", async (req, res) => {
   try {
-    await qbitApi("torrents/resume", "POST", { hashes: req.params.hash });
+    await qbitResume(req.params.hash);
     ok(res);
   } catch (err) { fail(res, err); }
 });

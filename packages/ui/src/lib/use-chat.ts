@@ -1,13 +1,15 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { streamChat }   from './chat-stream';
 import { api }          from './api';
-import type { ChatMessage } from './types';
+import type { ChatMessage, ToolCallRecord } from './types';
 
 const STORAGE_KEY = 'mediabox:conversation-id';
 
 interface ChatState {
   messages:       ChatMessage[];
   isStreaming:    boolean;
+  /** Name of the tool currently executing — used by the input's "running" hint.
+   *  Per-turn tool history lives on each ChatMessage's `tools` array. */
   activeTool:     string | null;
   conversationId: string | null;
 }
@@ -30,7 +32,15 @@ export function useChat() {
    */
   const conversationIdRef = useRef<string | null>(null);
 
+  /** Mirrors state.messages so callbacks (pickChoice) can resolve a card's
+   *  value synchronously without needing to be re-created on every render. */
+  const messagesRef = useRef<ChatMessage[]>([]);
+
   const initialized = useRef(false);
+
+  useEffect(() => {
+    messagesRef.current = state.messages;
+  }, [state.messages]);
 
   useEffect(() => {
     if (initialized.current) return;
@@ -85,6 +95,7 @@ export function useChat() {
         content:    '',
         timestamp:  new Date(),
         isStreaming: true,
+        tools:       [],
       };
       return {
         ...s,
@@ -116,12 +127,58 @@ export function useChat() {
             }));
             break;
 
-          case 'tool-start':
-            setState(s => ({ ...s, activeTool: evt.name }));
+          case 'tool-start': {
+            const callId = evt.callId ?? `t-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+            const record: ToolCallRecord = {
+              callId,
+              name:      evt.name,
+              status:    'running',
+              startedAt: Date.now(),
+            };
+            setState(s => ({
+              ...s,
+              activeTool: evt.name,
+              messages: s.messages.map(m =>
+                m.isStreaming ? { ...m, tools: [...(m.tools ?? []), record] } : m,
+              ),
+            }));
             break;
+          }
 
           case 'tool-end':
-            setState(s => ({ ...s, activeTool: null }));
+            setState(s => ({
+              ...s,
+              activeTool: null,
+              messages: s.messages.map(m => {
+                if (!m.isStreaming) return m;
+                const tools = (m.tools ?? []).map(t => {
+                  // Match by callId when present; otherwise the most recent
+                  // running entry with the same name (covers older engine builds).
+                  const matches = evt.callId
+                    ? t.callId === evt.callId
+                    : t.status === 'running' && t.name === evt.name;
+                  if (!matches) return t;
+                  return {
+                    ...t,
+                    status:     evt.ok ? 'ok' as const : 'error' as const,
+                    durationMs: evt.durationMs,
+                    error:      evt.ok ? undefined : evt.error,
+                  };
+                });
+                return { ...m, tools };
+              }),
+            }));
+            break;
+
+          case 'choices':
+            setState(s => ({
+              ...s,
+              messages: s.messages.map(m =>
+                m.isStreaming
+                  ? { ...m, choices: { prompt: evt.prompt, items: evt.items } }
+                  : m,
+              ),
+            }));
             break;
 
           case 'done':
@@ -156,6 +213,24 @@ export function useChat() {
     }
   }, []);
 
+  /** Clicking a choice card sends its `value` as the next user turn AND
+   *  consumes the cards on the originating message so they aren't clickable
+   *  twice. */
+  const pickChoice = useCallback(async (messageId: string, choiceId: string) => {
+    const target = messagesRef.current.find(m => m.id === messageId);
+    const item   = target?.choices?.items.find(i => i.id === choiceId);
+    if (!item) return;
+
+    setState(s => ({
+      ...s,
+      messages: s.messages.map(m =>
+        m.id === messageId ? { ...m, choices: undefined } : m,
+      ),
+    }));
+
+    await send(item.value);
+  }, [send]);
+
   const clear = useCallback(async () => {
     const cid = conversationIdRef.current;
     if (cid) api.clearChat(cid).catch(() => {});
@@ -164,5 +239,5 @@ export function useChat() {
     setState({ messages: [], isStreaming: false, activeTool: null, conversationId: null });
   }, []);
 
-  return { ...state, send, clear };
+  return { ...state, send, pickChoice, clear };
 }

@@ -124,12 +124,6 @@
   flex-direction: column;
 }
 
-/* Active tool chip — shown between messages and input while LLM calls a tool */
-.toolRow {
-  padding: 6px 0 2px;
-  flex-shrink: 0;
-}
-
 .inputArea {
   padding-top: var(--space-2);
   border-top: 1px solid rgba(255, 255, 255, 0.07);

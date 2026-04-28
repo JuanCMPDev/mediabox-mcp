@@ -2,6 +2,20 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { radarrApi, textResult } from "../helpers/api.js";
 
+/** Accept either a Radarr internal id or a TMDB id. The chat assistant has
+ *  burned us twice now by forwarding a tmdbId straight from `movie_search` into
+ *  `movie_releases` (which expects the Radarr internal id) — so we mirror the
+ *  pattern Sonarr has had all along. If neither matches, the error tells the
+ *  caller to add the movie first. */
+async function resolveMovieId(movieId: number): Promise<number> {
+  const all = await radarrApi("movie");
+  const byId = all.find((m: any) => m.id === movieId);
+  if (byId) return movieId;
+  const byTmdb = all.find((m: any) => m.tmdbId === movieId);
+  if (byTmdb) return byTmdb.id;
+  throw new Error(`Movie ${movieId} not found in Radarr. Add it first with movie_search(addTmdbId).`);
+}
+
 export function registerRadarrTools(server: McpServer): void {
   server.registerTool("movie_search", {
     description: "Search for a movie and optionally add it to Radarr for monitoring. Use searchNow=false (default) to add without auto-downloading, letting you pick a release manually via movie_releases + movie_grab.",
@@ -14,8 +28,28 @@ export function registerRadarrTools(server: McpServer): void {
   }, async ({ query, addTmdbId, quality, searchNow }) => {
     if (!addTmdbId) {
       if (!query) throw new Error("query is required when not adding by ID");
-      const results = await radarrApi(`movie/lookup?term=${encodeURIComponent(query)}`);
-      return textResult(results.slice(0, 10).map((m: any) => ({ title: m.title, year: m.year, tmdbId: m.tmdbId, overview: m.overview?.slice(0, 120), runtime: m.runtime ? `${m.runtime}min` : null, status: m.status })));
+      const [results, library] = await Promise.all([
+        radarrApi(`movie/lookup?term=${encodeURIComponent(query)}`),
+        radarrApi("movie"),
+      ]);
+      const byTmdb = new Map<number, any>(library.map((m: any) => [m.tmdbId, m]));
+      return textResult(results.slice(0, 10).map((m: any) => {
+        const existing = byTmdb.get(m.tmdbId);
+        return {
+          title:    m.title,
+          year:     m.year,
+          tmdbId:   m.tmdbId,
+          inRadarr: !!existing,
+          // movieId is the Radarr internal id, present only if the movie has
+          // already been added. Use this — NOT tmdbId — for movie_releases,
+          // movie_grab, movie_remove, etc.
+          movieId:  existing?.id,
+          hasFile:  existing?.hasFile,
+          overview: m.overview?.slice(0, 120),
+          runtime:  m.runtime ? `${m.runtime}min` : null,
+          status:   m.status,
+        };
+      }));
     }
     const existing = (await radarrApi("movie")).find((m: any) => m.tmdbId === addTmdbId);
     const profiles = await radarrApi("qualityprofile");
@@ -55,22 +89,30 @@ export function registerRadarrTools(server: McpServer): void {
   server.registerTool("movie_remove", {
     description: "Remove a movie from Radarr",
     inputSchema: {
-      movieId: z.number(), deleteFiles: z.boolean().default(false),
+      movieId: z.number().describe("Radarr internal movie id (or tmdbId — auto-resolved)"),
+      deleteFiles: z.boolean().default(false),
     },
   }, async ({ movieId, deleteFiles }) => {
-    const m = await radarrApi(`movie/${movieId}`);
-    await radarrApi(`movie/${movieId}?deleteFiles=${deleteFiles}`, "DELETE");
+    const resolved = await resolveMovieId(movieId);
+    const m = await radarrApi(`movie/${resolved}`);
+    await radarrApi(`movie/${resolved}?deleteFiles=${deleteFiles}`, "DELETE");
     return textResult({ message: `Removed "${m.title}"${deleteFiles ? " + files" : ""}` });
   });
 
   server.registerTool("movie_releases", {
-    description: "Search available torrent releases for a movie. Shows size, languages, seeders, score.",
+    description: "Search available torrent releases for a movie. Shows size, languages, seeders, score. movieId can be a Radarr internal id OR a tmdbId — both are auto-resolved.",
     inputSchema: {
-      movieId: z.number(),
+      movieId: z.number().describe("Radarr internal movie id (or tmdbId — auto-resolved). Movie must already be in Radarr; add it first with movie_search(addTmdbId) if not."),
     },
   }, async ({ movieId }) => {
-    const rels = await radarrApi(`release?movieId=${movieId}`);
-    return textResult(rels.slice(0, 20).map((r: any) => ({
+    const resolved = await resolveMovieId(movieId);
+    const rels = await radarrApi(`release?movieId=${resolved}`);
+    // Drop dead torrents at the source — they can never download, so the LLM
+    // shouldn't waste context (or user attention) on them. If every release
+    // has 0 seeders, the empty result tells the LLM to report "no viable
+    // releases" instead of presenting unworkable options.
+    const live = rels.filter((r: any) => (r.seeders ?? 0) > 0);
+    return textResult(live.slice(0, 20).map((r: any) => ({
       guid: r.guid, title: r.title, quality: r.quality?.quality?.name, size: `${(r.size / 1073741824).toFixed(1)}GB`,
       seeders: r.seeders, languages: r.languages?.map((l: any) => l.name), indexer: r.indexer, indexerId: r.indexerId,
       score: r.customFormatScore, rejected: r.rejected || undefined, rejections: r.rejections?.length ? r.rejections.map((j: any) => j.reason) : undefined,
@@ -81,18 +123,49 @@ export function registerRadarrTools(server: McpServer): void {
     description: "Download a specific torrent release for a movie. Automatically cancels any existing download for the same movie to avoid duplicates.",
     inputSchema: {
       guid: z.string(), indexerId: z.number(),
-      movieId: z.number().optional().describe("Movie ID — if provided, cancels any active download for this movie before grabbing"),
+      movieId: z.number().optional().describe("Radarr internal movie id (or tmdbId — auto-resolved). If provided, cancels any active download for this movie before grabbing."),
     },
   }, async ({ guid, indexerId, movieId }) => {
+    let resolved: number | undefined;
     if (movieId) {
+      resolved = await resolveMovieId(movieId);
       const q = await radarrApi("queue?pageSize=200");
-      const dupes = (q.records || []).filter((r: any) => r.movieId === movieId);
+      const dupes = (q.records || []).filter((r: any) => r.movieId === resolved);
       if (dupes.length) {
         await radarrApi("queue/bulk?removeFromClient=true&blocklist=false", "DELETE", { ids: dupes.map((r: any) => r.id) } as any);
       }
     }
     await radarrApi("release", "POST", { guid, indexerId });
-    return textResult({ message: "Release sent to download client", replaced: movieId ? true : undefined });
+
+    // Poll the queue briefly so the LLM has authoritative state without
+    // making a separate verify call. Radarr-to-qBit propagation usually
+    // completes within ~1s, but we've seen the chat assistant report a
+    // false-error when it polled the queue immediately after release POST
+    // and saw 0 records. Returning the queue entry inline closes that gap.
+    if (resolved) {
+      for (let i = 0; i < 5; i++) {
+        await new Promise(r => setTimeout(r, 400));
+        const q = await radarrApi("queue?pageSize=200");
+        const found = (q.records || []).find((r: any) => r.movieId === resolved);
+        if (found) {
+          return textResult({
+            message: "Release accepted and queued",
+            queued: {
+              title:    found.title,
+              status:   found.status,
+              progress: found.sizeleft ? `${((1 - found.sizeleft / found.size) * 100).toFixed(0)}%` : "0%",
+              size:     `${(found.size / 1073741824).toFixed(1)}GB`,
+            },
+            replaced: true,
+          });
+        }
+      }
+    }
+    return textResult({
+      message: "Release accepted by Radarr — download client will pick it up shortly",
+      replaced: resolved ? true : undefined,
+      note:    "Queue may take a few more seconds to populate. Do NOT report this as a failure.",
+    });
   });
 
   server.registerTool("movie_import", {
@@ -128,12 +201,13 @@ export function registerRadarrTools(server: McpServer): void {
   server.registerTool("movie_rescan", {
     description: "Force Radarr to rescan movie folders or a specific movie for new files.",
     inputSchema: {
-      movieId: z.number().optional().describe("Radarr movie ID. If omitted, rescans all movies."),
+      movieId: z.number().optional().describe("Radarr internal movie id (or tmdbId — auto-resolved). Omit to rescan all movies."),
     },
   }, async ({ movieId }) => {
-    const cmd = movieId ? { name: "RescanMovie", movieIds: [movieId] } : { name: "RescanMovie" };
+    const resolved = movieId !== undefined ? await resolveMovieId(movieId) : undefined;
+    const cmd = resolved !== undefined ? { name: "RescanMovie", movieIds: [resolved] } : { name: "RescanMovie" };
     await radarrApi("command", "POST", cmd);
-    return textResult({ message: `Rescan command sent${movieId ? ` for movie ${movieId}` : ""}` });
+    return textResult({ message: `Rescan command sent${resolved !== undefined ? ` for movie ${resolved}` : ""}` });
   });
 }
 
