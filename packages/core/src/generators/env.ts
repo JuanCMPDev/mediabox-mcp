@@ -29,13 +29,20 @@ export function generateEnv(config: DeployConfig, keys?: DiscoveredKeys): string
     "",
     `TZ=${system.timezone}`,
     "",
-    "# Service API Keys (auto-populated by setup wizard)",
+    "# Service Credentials & API Keys (auto-populated by setup wizard)",
+    `JELLYFIN_ADMIN_USER=${services.jellyfin.adminUsername}`,
     `JELLYFIN_API_KEY=${keys?.jellyfinApiKey ?? ""}`,
     `SONARR_API_KEY=${keys?.sonarrApiKey ?? ""}`,
     `RADARR_API_KEY=${keys?.radarrApiKey ?? ""}`,
     `QBIT_PASSWORD=${services.qbittorrent.password}`,
-    `PYLOAD_USER=${services.pyload.username}`,
-    `PYLOAD_PASSWORD=${services.pyload.password}`,
+    // PyLoad-ng's lscr image creates a single hardcoded account on first
+    // run: pyload:pyload. Username can't be changed via the image's env
+    // vars or our deploy-time API calls, so we pin it to the default.
+    // The password starts as the default and the configure:pyload step
+    // rotates it to the wizard's value after the container is healthy
+    // (rewriting this line in the same .env once the rotation succeeds).
+    `PYLOAD_USER=pyload`,
+    `PYLOAD_PASSWORD=pyload`,
     "",
     "# MCP Server",
     `MCP_PUBLIC_URL=${mcp.publicUrl}`,

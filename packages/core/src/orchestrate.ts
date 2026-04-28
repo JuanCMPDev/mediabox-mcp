@@ -334,6 +334,11 @@ export async function deployStack(opts: DeployStackOptions): Promise<DeployResul
     if (discoveredKeys.jellyfinApiKey) updates.JELLYFIN_API_KEY = discoveredKeys.jellyfinApiKey;
     if (discoveredKeys.sonarrApiKey) updates.SONARR_API_KEY = discoveredKeys.sonarrApiKey;
     if (discoveredKeys.radarrApiKey) updates.RADARR_API_KEY = discoveredKeys.radarrApiKey;
+    // Without this line, Prowlarr's key was discovered + used in-memory for the
+    // Sonarr↔Prowlarr↔Radarr application sync but never persisted, so the
+    // Settings panel always showed "sin configurar" and the *arr key rotation
+    // feature had nothing to rotate from.
+    if (discoveredKeys.prowlarrApiKey) updates.PROWLARR_API_KEY = discoveredKeys.prowlarrApiKey;
     if (Object.keys(updates).length > 0) {
       const updated = updateEnvKeys(existingEnv, updates);
       await deployer.writeFile(ctx, ".env", updated);

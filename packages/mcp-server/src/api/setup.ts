@@ -42,6 +42,8 @@ import {
   stackStop,
   stackStart,
   stackUp,
+  stopServices,
+  startServices,
   streamDockerPull,
   StackUnavailableError,
 } from "../helpers/docker-compose.js";
@@ -238,7 +240,7 @@ setupRouter.get("/info", async (_req: Request, res: Response): Promise<void> => 
     services: {
       jellyfin: {
         url:        process.env.JELLYFIN_URL    || "http://localhost:8096",
-        user:       env.JELLYFIN_ADMIN_USER     || undefined,
+        user:       process.env.JELLYFIN_ADMIN_USER || env.JELLYFIN_ADMIN_USER || undefined,
         hasApiKey:  has("JELLYFIN_API_KEY"),
       },
       qbittorrent: {
@@ -333,9 +335,27 @@ setupRouter.patch("/env", async (req: Request, res: Response): Promise<void> => 
     return;
   }
 
+  // qBittorrent dumps its in-memory state (with the OLD PBKDF2 hash) over
+  // qBittorrent.conf when it receives SIGTERM. If we edit the file while it's
+  // running and then `restart` it, the edit is silently lost. Stop it first,
+  // patch, then start — so the new hash survives.
+  const needsQbitDance = Object.prototype.hasOwnProperty.call(accepted, "QBIT_PASSWORD");
+
   try {
+    if (needsQbitDance) {
+      await stopServices(["qbittorrent"]);
+    }
+
     await patchEnvFile(accepted);
+
+    if (needsQbitDance) {
+      await startServices(["qbittorrent"]);
+    }
   } catch (err) {
+    if (needsQbitDance) {
+      // Best-effort: bring qbit back up so we don't leave it stopped.
+      await startServices(["qbittorrent"]).catch(() => { /* swallow */ });
+    }
     res.status(500).json({
       updated: [],
       restartRequired: [],
@@ -409,6 +429,48 @@ setupRouter.post("/stack/start", async (_req: Request, res: Response): Promise<v
   }
 });
 
+// ── GET /prowlarr/indexers ───────────────────────────────────────────────────
+// Used by the wizard's post-deploy "Configurar Prowlarr" step. Reads
+// PROWLARR_API_KEY from the deployed .env (re-read on every call so we don't
+// depend on the sidecar's process.env being refreshed) and proxies a call to
+// Prowlarr's /api/v1/indexer endpoint, returning the count + a host URL the
+// webview can pass to openExternal().
+
+setupRouter.get("/prowlarr/indexers", async (_req: Request, res: Response): Promise<void> => {
+  const env    = await readEnvMap();
+  const apiKey = (env.PROWLARR_API_KEY || process.env.PROWLARR_API_KEY || "").trim();
+  const url    = (process.env.PROWLARR_URL || env.PROWLARR_URL || "http://localhost:9696").replace(/\/$/, "");
+
+  if (!apiKey) {
+    res.status(503).json({
+      error: "PROWLARR_API_KEY isn't in .env yet — the deploy may not have finished.",
+      url,
+    });
+    return;
+  }
+
+  try {
+    const r = await fetch(`${url}/api/v1/indexer`, {
+      headers: { "X-Api-Key": apiKey },
+      signal:  AbortSignal.timeout(5_000),
+    });
+    if (!r.ok) {
+      res.status(502).json({ error: `Prowlarr returned ${r.status}`, url });
+      return;
+    }
+    const indexers = await r.json();
+    res.json({
+      count: Array.isArray(indexers) ? indexers.length : 0,
+      url,
+    });
+  } catch (err) {
+    res.status(503).json({
+      error: `Couldn't reach Prowlarr: ${err instanceof Error ? err.message : String(err)}`,
+      url,
+    });
+  }
+});
+
 // ── POST /jellyfin/password ───────────────────────────────────────────────────
 // Changes the Jellyfin admin user's password via the Jellyfin API.
 // Authenticates first with the current password to obtain a short-lived token,
@@ -451,8 +513,8 @@ setupRouter.post("/jellyfin/password", async (req: Request, res: Response): Prom
 
     if (!authRes.ok) {
       const msg = authRes.status === 401
-        ? "Contraseña actual incorrecta"
-        : `Jellyfin respondió ${authRes.status}`;
+        ? "Current password is incorrect"
+        : `Jellyfin returned ${authRes.status}`;
       res.status(authRes.status === 401 ? 401 : 502).json({ error: msg });
       return;
     }
@@ -477,14 +539,14 @@ setupRouter.post("/jellyfin/password", async (req: Request, res: Response): Prom
     });
 
     if (!pwRes.ok) {
-      res.status(502).json({ error: `Jellyfin rechazó el cambio de contraseña (${pwRes.status})` });
+      res.status(502).json({ error: `Jellyfin rejected the password change (${pwRes.status})` });
       return;
     }
 
     res.json({ ok: true });
   } catch (err) {
     res.status(503).json({
-      error: `No se pudo conectar a Jellyfin: ${err instanceof Error ? err.message : String(err)}`,
+      error: `Couldn't reach Jellyfin: ${err instanceof Error ? err.message : String(err)}`,
     });
   }
 });

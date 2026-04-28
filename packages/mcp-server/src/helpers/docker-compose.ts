@@ -72,6 +72,18 @@ export async function stackUp(): Promise<void> {
   await compose(["up", "-d", "--remove-orphans"]);
 }
 
+export async function stopServices(services: string[]): Promise<void> {
+  for (const svc of services) {
+    await compose(["stop", svc]);
+  }
+}
+
+export async function startServices(services: string[]): Promise<void> {
+  for (const svc of services) {
+    await compose(["start", svc]);
+  }
+}
+
 /**
  * Stream `docker compose pull --progress plain` to `res` as NDJSON PullEvents.
  * The caller must set NDJSON headers and call `res.flushHeaders()` first.
@@ -85,9 +97,12 @@ export function streamDockerPull(res: Response): void {
     return;
   }
 
+  // Note: `docker compose pull` does NOT accept --progress (only `up` and
+  // `build` do). Default output goes to stderr line-by-line, which is what
+  // we want — readline picks it up below.
   const child = execa(
     "docker",
-    ["compose", "pull", "--progress", "plain"],
+    ["compose", "pull"],
     { cwd, reject: false, stdio: ["ignore", "pipe", "pipe"] },
   );
 

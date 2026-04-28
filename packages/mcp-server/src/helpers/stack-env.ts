@@ -101,9 +101,18 @@ export const EDITABLE_ENV_KEYS: Record<string, string[]> = {
   ALLOWED_TELEGRAM_USERS:  ["telegram-bot"],
 
   // ── Service credentials ───────────────────────────────────────────────────
-  QBIT_PASSWORD:    ["qbittorrent"],
-  PYLOAD_USER:      ["pyload"],
-  PYLOAD_PASSWORD:  ["pyload"],
+  // qBittorrent stores its actual password as a PBKDF2 hash inside
+  // qBittorrent.conf — patchEnvFile regenerates that file. The qbittorrent
+  // container has to be stopped before we edit (otherwise it overwrites
+  // our hash on SIGTERM); the PATCH /env handler does that dance, so we
+  // don't return "qbittorrent" in restartRequired here. The sidecar still
+  // needs to restart so its qBit client uses the new password.
+  QBIT_PASSWORD:    ["sidecar"],
+  // PyLoad's actual user/password live in its own DB and are not read from
+  // env vars. Changing these just syncs mcp-server's auth credentials —
+  // the user must change the real password through PyLoad's UI first.
+  PYLOAD_USER:      ["sidecar"],
+  PYLOAD_PASSWORD:  ["sidecar"],
 };
 
 export function filterEditable(updates: Record<string, string>): {
