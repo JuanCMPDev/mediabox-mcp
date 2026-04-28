@@ -31,22 +31,22 @@ export function TopBar({ activeView, serverOnline }: TopBarProps) {
             type="button"
             className={`${styles.wc} ${styles.close}`}
             onClick={() => void closeWindow()}
-            aria-label="Cerrar"
-            title="Cerrar"
+            aria-label="Close"
+            title="Close"
           />
           <button
             type="button"
             className={`${styles.wc} ${styles.min}`}
             onClick={() => void minimizeWindow()}
-            aria-label="Minimizar"
-            title="Minimizar"
+            aria-label="Minimize"
+            title="Minimize"
           />
           <button
             type="button"
             className={`${styles.wc} ${styles.max}`}
             onClick={() => void toggleMaximize()}
-            aria-label="Maximizar"
-            title="Maximizar"
+            aria-label="Maximize"
+            title="Maximize"
           />
         </div>
       </div>

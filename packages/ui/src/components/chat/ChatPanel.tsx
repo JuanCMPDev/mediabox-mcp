@@ -31,8 +31,13 @@ export function ChatPanel() {
         <div className={styles.headerLeft}>
           <MessageSquare size={18} color="var(--primary)" />
           <div>
-            <div className={styles.headerTitle}>MCP Console</div>
-            <div className={styles.headerSub}>AI-powered media assistant</div>
+            <div className={styles.headerTitle}>
+              MCP Console
+              <span className={styles.betaBadge}>Beta</span>
+            </div>
+            <div className={styles.headerSub}>
+              AI-powered media assistant — early preview, may misfire on complex requests.
+            </div>
           </div>
         </div>
 

@@ -17,7 +17,7 @@ import { api }              from '@/lib/api';
 import { useSetupInfo }     from '@/lib/queries';
 import { useToast }         from '@/lib/toast';
 import {
-  openExternal, confirmDialog, resetAppState, restartSidecar,
+  openExternal, openPath, confirmDialog, resetAppState, restartSidecar,
 } from '@/lib/tauri-bridge';
 import { reloadRuntimeConfig } from '@/lib/runtime-config';
 import type { SetupInfo, ServiceCreds } from '@mediabox/contracts';
@@ -35,15 +35,14 @@ export function SettingsView() {
     <div className={styles.view}>
       <header className={styles.header}>
         <div>
-          <h1 className={styles.title}>Configuración</h1>
+          <h1 className={styles.title}>Settings</h1>
           <p className={styles.subtitle}>
-            Cambios afectan al stack desplegado. Los containers que dependan de cada
-            ajuste se reinician automáticamente al guardar.
+            Changes affect the deployed stack. Affected containers restart automatically when you save.
           </p>
         </div>
         <GlassButton variant="secondary" size="sm" onClick={() => void refetch()}>
           <RefreshCw size={14} />
-          Refrescar
+          Refresh
         </GlassButton>
       </header>
 
@@ -88,12 +87,12 @@ function SettingsSkeleton() {
 
 function StackOverview({ info }: { info: SetupInfo }) {
   return (
-    <Section title="Estado del stack">
-      <Row k="Ubicación"      v={info.stack.workDir ?? '—'} mono />
-      <Row k="Modo"           v={info.stack.deploymentMode} />
-      <Row k="Tag de imagen"  v={info.stack.imageTag} mono />
-      {info.stack.baseDomain && <Row k="Dominio base" v={info.stack.baseDomain} />}
-      <Row k="Versión app"    v={info.app.version} mono />
+    <Section title="Stack">
+      <Row k="Location"    v={info.stack.workDir ?? '—'} mono />
+      <Row k="Mode"        v={info.stack.deploymentMode} />
+      <Row k="Image tag"   v={info.stack.imageTag} mono />
+      {info.stack.baseDomain && <Row k="Base domain" v={info.stack.baseDomain} />}
+      <Row k="App version" v={info.app.version} mono />
     </Section>
   );
 }
@@ -139,7 +138,7 @@ function AIProviderSection({ info }: { info: SetupInfo }) {
       await applyRestarts(result.restartRequired);
       qc.invalidateQueries({ queryKey: ['setup-info'] });
       setApiKey('');
-      toast('Configuración de AI actualizada', 'success');
+      toast('AI provider updated', 'success');
     } catch (err) {
       toast(`Error: ${err instanceof Error ? err.message : String(err)}`, 'error');
     } finally {
@@ -148,14 +147,14 @@ function AIProviderSection({ info }: { info: SetupInfo }) {
   }
 
   return (
-    <Section title="Asistente AI" subtitle="Cambios reinician el chat de la app y el bot de Telegram.">
+    <Section title="AI assistant" subtitle="Saving restarts the in-app chat and Telegram bot.">
       <div className={styles.formField}>
-        <label className={styles.label}>Proveedor</label>
+        <label className={styles.label}>Provider</label>
         <SegmentedControl
           value={provider}
           onChange={v => setProvider(v as typeof provider)}
           options={[
-            { value: 'none',       label: 'Sin AI' },
+            { value: 'none',       label: 'No AI' },
             { value: 'openrouter', label: 'OpenRouter' },
             { value: 'google',     label: 'Google AI' },
           ]}
@@ -168,20 +167,21 @@ function AIProviderSection({ info }: { info: SetupInfo }) {
             <label className={styles.label}>
               API key
               {info.ai.hasKey && info.ai.provider === provider && (
-                <span className={styles.labelHint}>configurada — dejá vacío para mantener</span>
+                <span className={styles.labelHint}>set — leave blank to keep</span>
               )}
             </label>
             <GlassInput
+              type="password"
               value={apiKey}
               onChange={setApiKey}
               placeholder={info.ai.hasKey && info.ai.provider === provider
-                ? '•••• reemplazar con nueva key'
+                ? '•••• replace with new key'
                 : (provider === 'openrouter' ? 'sk-or-v1-…' : 'AIza…')}
             />
           </div>
 
           <div className={styles.formField}>
-            <label className={styles.label}>Modelo</label>
+            <label className={styles.label}>Model</label>
             <GlassInput
               value={model}
               onChange={setModel}
@@ -224,7 +224,7 @@ function TelegramSection({ info }: { info: SetupInfo }) {
       } else if (token.trim()) {
         updates.TELEGRAM_BOT_TOKEN = token.trim();
       } else if (!info.telegram.hasToken) {
-        toast('Necesitás un bot token para activar Telegram', 'error');
+        toast('A bot token is required to enable Telegram', 'error');
         setSaving(false);
         return;
       }
@@ -236,7 +236,7 @@ function TelegramSection({ info }: { info: SetupInfo }) {
       await applyRestarts(result.restartRequired);
       qc.invalidateQueries({ queryKey: ['setup-info'] });
       setToken('');
-      toast('Telegram actualizado', 'success');
+      toast('Telegram updated', 'success');
     } catch (err) {
       toast(`Error: ${err instanceof Error ? err.message : String(err)}`, 'error');
     } finally {
@@ -245,15 +245,15 @@ function TelegramSection({ info }: { info: SetupInfo }) {
   }
 
   return (
-    <Section title="Telegram bot" subtitle="Replica el chat AI a tu teléfono. El cambio reinicia el bot.">
+    <Section title="Telegram bot" subtitle="Mirrors the AI chat to your phone. Saving restarts the bot.">
       <div className={styles.formField}>
-        <label className={styles.label}>Estado</label>
+        <label className={styles.label}>Status</label>
         <SegmentedControl
           value={enabled ? 'on' : 'off'}
           onChange={v => setEnabled(v === 'on')}
           options={[
-            { value: 'off', label: 'Desactivado' },
-            { value: 'on',  label: 'Activado' },
+            { value: 'off', label: 'Disabled' },
+            { value: 'on',  label: 'Enabled' },
           ]}
         />
       </div>
@@ -264,20 +264,21 @@ function TelegramSection({ info }: { info: SetupInfo }) {
             <label className={styles.label}>
               Bot token
               {info.telegram.hasToken && (
-                <span className={styles.labelHint}>configurado — dejá vacío para mantener</span>
+                <span className={styles.labelHint}>set — leave blank to keep</span>
               )}
             </label>
             <GlassInput
+              type="password"
               value={token}
               onChange={setToken}
-              placeholder={info.telegram.hasToken ? '•••• reemplazar con nuevo token' : '123456:ABC-DEF…'}
+              placeholder={info.telegram.hasToken ? '•••• replace with new token' : '123456:ABC-DEF…'}
             />
           </div>
 
           <div className={styles.formField}>
             <label className={styles.label}>
-              User IDs autorizados
-              <span className={styles.labelHint}>vacío = cualquiera</span>
+              Allowed user IDs
+              <span className={styles.labelHint}>blank = anyone</span>
             </label>
             <GlassInput
               value={users}
@@ -297,27 +298,31 @@ function TelegramSection({ info }: { info: SetupInfo }) {
 
 function ServicePasswordsSection({ info }: { info: SetupInfo }) {
   return (
-    <Section
-      title="Contraseñas de servicios"
-      subtitle="Solo se guardan si escribís un valor nuevo. El container correspondiente se reinicia."
-    >
-      <PasswordRow
-        service="qbittorrent"
-        label="qBittorrent"
-        envKey="QBIT_PASSWORD"
-        configured={info.services.qbittorrent.hasPassword ?? false}
-      />
-      <PasswordRow
-        service="pyload"
-        label="PyLoad"
-        envKey="PYLOAD_PASSWORD"
-        configured={info.services.pyload.hasPassword ?? false}
-      />
-    </Section>
+    <>
+      <Section
+        title="qBittorrent password"
+        subtitle="Username is always admin. Saving rotates the password and restarts qBittorrent."
+      >
+        <PasswordRow
+          service="qbittorrent"
+          label="qBittorrent"
+          envKey="QBIT_PASSWORD"
+          configured={info.services.qbittorrent.hasPassword ?? false}
+        />
+      </Section>
+
+      <Section
+        title="PyLoad credentials"
+        subtitle="PyLoad's image always starts with default credentials. Rotate them from PyLoad's web UI if needed."
+      >
+        <Row k="Username" v="pyload" mono />
+        <Row k="Password" v="pyload" mono />
+      </Section>
+    </>
   );
 }
 
-function PasswordRow({ service, label, envKey, configured }: {
+function PasswordRow({ label, envKey, configured }: {
   service: string;
   label:   string;
   envKey:  string;
@@ -343,7 +348,7 @@ function PasswordRow({ service, label, envKey, configured }: {
       await applyRestarts(result.restartRequired);
       qc.invalidateQueries({ queryKey: ['setup-info'] });
       setValue('');
-      toast(`Contraseña de ${label} actualizada`, 'success');
+      toast(`${label} password updated`, 'success');
     } catch (err) {
       toast(`Error: ${err instanceof Error ? err.message : String(err)}`, 'error');
     } finally {
@@ -356,30 +361,18 @@ function PasswordRow({ service, label, envKey, configured }: {
       <label className={styles.label}>
         {label}
         {configured
-          ? <span className={styles.labelHint}>configurada — dejá vacío para mantener</span>
-          : <span className={styles.labelWarn}>sin configurar</span>}
+          ? <span className={styles.labelHint}>set — leave blank to keep</span>
+          : <span className={styles.labelWarn}>not set</span>}
       </label>
       <div className={styles.passwordRow}>
         <div className={styles.passwordInput}>
           <GlassInput
-            value={show ? value : '•'.repeat(value.length)}
-            onChange={v => {
-              if (show) setValue(v);
-              else {
-                if (v.length > value.length) setValue(value + v.slice(value.length));
-                else setValue(value.slice(0, v.length));
-              }
-            }}
-            placeholder="Mínimo 8 caracteres"
+            type={show ? 'text' : 'password'}
+            value={value}
+            onChange={setValue}
+            placeholder="Min. 8 characters"
+            iconRight={<EyeToggleButton show={show} onToggle={() => setShow(s => !s)} />}
           />
-          <button
-            type="button"
-            className={styles.eyeBtn}
-            onClick={() => setShow(s => !s)}
-            aria-label={show ? 'Ocultar' : 'Mostrar'}
-          >
-            {show ? <EyeOff size={14} /> : <Eye size={14} />}
-          </button>
         </div>
         <GlassButton
           variant="primary"
@@ -388,11 +381,10 @@ function PasswordRow({ service, label, envKey, configured }: {
           disabled={value.length === 0 || tooShort || saving}
         >
           {saving ? <RotateCw size={14} className={styles.spin} /> : <Save size={14} />}
-          Guardar
+          Save
         </GlassButton>
       </div>
-      {tooShort && <span className={styles.errorText}>Mínimo 8 caracteres.</span>}
-      <span className={styles.hint}>service: <code>{service}</code> · env: <code>{envKey}</code></span>
+      {tooShort && <span className={styles.errorText}>At least 8 characters.</span>}
     </div>
   );
 }
@@ -413,9 +405,9 @@ function JellyfinPasswordSection({ info }: { info: SetupInfo }) {
 
   if (!adminUser) {
     return (
-      <Section title="Contraseña Jellyfin Admin">
+      <Section title="Jellyfin admin password">
         <span className={styles.hintBox}>
-          JELLYFIN_ADMIN_USER no configurado. Re-corré el wizard para establecer el usuario admin.
+          Admin user not set. Re-run the wizard to configure it.
         </span>
       </Section>
     );
@@ -425,7 +417,7 @@ function JellyfinPasswordSection({ info }: { info: SetupInfo }) {
     setSaving(true);
     try {
       await api.setupJellyfinPassword(current, next);
-      toast('Contraseña de Jellyfin actualizada', 'success');
+      toast('Jellyfin password updated', 'success');
       setCurrent('');
       setNext('');
     } catch (err) {
@@ -437,54 +429,36 @@ function JellyfinPasswordSection({ info }: { info: SetupInfo }) {
 
   return (
     <Section
-      title="Contraseña Jellyfin Admin"
-      subtitle={`Usuario: "${adminUser}". El cambio se aplica directamente en Jellyfin vía su API.`}
+      title="Jellyfin admin password"
+      subtitle={`User: ${adminUser}. The change is applied directly in Jellyfin.`}
     >
       <div className={styles.formField}>
-        <label className={styles.label}>Contraseña actual</label>
-        <div className={styles.passwordRow}>
-          <div className={styles.passwordInput}>
-            <GlassInput
-              value={showCur ? current : '•'.repeat(current.length)}
-              onChange={v => {
-                if (showCur) { setCurrent(v); return; }
-                if (v.length > current.length) setCurrent(current + v.slice(current.length));
-                else setCurrent(current.slice(0, v.length));
-              }}
-              placeholder="Contraseña actual"
-            />
-            <button type="button" className={styles.eyeBtn} onClick={() => setShowCur(s => !s)}>
-              {showCur ? <EyeOff size={14} /> : <Eye size={14} />}
-            </button>
-          </div>
-        </div>
+        <label className={styles.label}>Current password</label>
+        <GlassInput
+          type={showCur ? 'text' : 'password'}
+          value={current}
+          onChange={setCurrent}
+          placeholder="Current password"
+          iconRight={<EyeToggleButton show={showCur} onToggle={() => setShowCur(s => !s)} />}
+        />
       </div>
 
       <div className={styles.formField}>
-        <label className={styles.label}>Nueva contraseña</label>
-        <div className={styles.passwordRow}>
-          <div className={styles.passwordInput}>
-            <GlassInput
-              value={showNext ? next : '•'.repeat(next.length)}
-              onChange={v => {
-                if (showNext) { setNext(v); return; }
-                if (v.length > next.length) setNext(next + v.slice(next.length));
-                else setNext(next.slice(0, v.length));
-              }}
-              placeholder="Mínimo 8 caracteres"
-            />
-            <button type="button" className={styles.eyeBtn} onClick={() => setShowNext(s => !s)}>
-              {showNext ? <EyeOff size={14} /> : <Eye size={14} />}
-            </button>
-          </div>
-        </div>
-        {nextTooShort && <span className={styles.errorText}>Mínimo 8 caracteres.</span>}
+        <label className={styles.label}>New password</label>
+        <GlassInput
+          type={showNext ? 'text' : 'password'}
+          value={next}
+          onChange={setNext}
+          placeholder="Min. 8 characters"
+          iconRight={<EyeToggleButton show={showNext} onToggle={() => setShowNext(s => !s)} />}
+        />
+        {nextTooShort && <span className={styles.errorText}>At least 8 characters.</span>}
       </div>
 
       <div className={styles.saveBar}>
         <GlassButton variant="primary" size="sm" onClick={save} disabled={!canSave}>
           {saving ? <RotateCw size={14} className={styles.spin} /> : <Save size={14} />}
-          Cambiar contraseña
+          Change password
         </GlassButton>
       </div>
     </Section>
@@ -496,8 +470,8 @@ function JellyfinPasswordSection({ info }: { info: SetupInfo }) {
 function ServiceApiKeysSection({ info }: { info: SetupInfo }) {
   return (
     <Section
-      title="API keys de *arr"
-      subtitle="Rota la API key de Sonarr, Radarr o Prowlarr. El container se detiene, la nueva key se escribe en config.xml + .env, y luego se reinicia el container y el sidecar."
+      title="*arr API keys"
+      subtitle="Generate a fresh API key for Sonarr, Radarr, or Prowlarr."
     >
       <ArrApiKeyRow service="sonarr"   label="Sonarr"   hasKey={info.services.sonarr.hasApiKey   ?? false} />
       <ArrApiKeyRow service="radarr"   label="Radarr"   hasKey={info.services.radarr.hasApiKey   ?? false} />
@@ -519,8 +493,8 @@ function ArrApiKeyRow({ service, label, hasKey }: ArrApiKeyRowProps) {
 
   async function regenerate() {
     const ok = await confirmDialog(
-      `Esto va a:\n\n  1. Detener el container de ${label}\n  2. Generar una nueva API key\n  3. Escribirla en config.xml y .env\n  4. Reiniciar el container\n  5. Reiniciar el sidecar\n\nLas integraciones que usen la key anterior dejarán de funcionar hasta que las re-configures.\n\n¿Continuar?`,
-      `Rotar API key de ${label}`,
+      `${label} will be briefly restarted while we rotate its API key. Anything still using the old key will need to be reconfigured. Continue?`,
+      `Rotate ${label} API key`,
     );
     if (!ok) return;
 
@@ -533,7 +507,7 @@ function ArrApiKeyRow({ service, label, hasKey }: ArrApiKeyRowProps) {
       }
       void qc.invalidateQueries({ queryKey: ['setup-info'] });
       void qc.invalidateQueries({ queryKey: ['services'] });
-      toast(`API key de ${label} rotada`, 'success');
+      toast(`${label} API key rotated`, 'success');
     } catch (err) {
       toast(`Error: ${err instanceof Error ? err.message : String(err)}`, 'error');
     } finally {
@@ -545,16 +519,15 @@ function ArrApiKeyRow({ service, label, hasKey }: ArrApiKeyRowProps) {
     <div className={styles.serviceRow}>
       <div className={styles.serviceMain}>
         <span className={styles.serviceName}>{label}</span>
-        <code className={styles.serviceUrl}>{`${service.toUpperCase()}_API_KEY`}</code>
       </div>
       <div className={styles.serviceBadges}>
         {hasKey
-          ? <Badge tone="ok">configurada</Badge>
-          : <Badge tone="warn">sin configurar</Badge>}
+          ? <Badge tone="ok">set</Badge>
+          : <Badge tone="warn">not set</Badge>}
       </div>
       <GlassButton variant="secondary" size="sm" onClick={regenerate} disabled={busy}>
         {busy ? <RotateCw size={13} className={styles.spin} /> : <KeyRound size={13} />}
-        Regenerar
+        Rotate
       </GlassButton>
     </div>
   );
@@ -578,7 +551,7 @@ function ServicesLiveSection({ info }: { info: SetupInfo }) {
   const [logService, setLogService] = useState<{ id: string; name: string } | null>(null);
 
   return (
-    <Section title="Servicios" subtitle="Click en cualquiera para abrir su UI nativa en el navegador.">
+    <Section title="Services" subtitle="Click any to open its web UI in your browser.">
       <ServiceUrlRow name="Jellyfin"     creds={info.services.jellyfin}     onOpenLogs={setLogService} />
       <ServiceUrlRow name="qBittorrent"  creds={info.services.qbittorrent}  onOpenLogs={setLogService} />
       <ServiceUrlRow name="PyLoad"       creds={info.services.pyload}       onOpenLogs={setLogService} />
@@ -613,21 +586,21 @@ function ServiceUrlRow({ name, creds, onOpenLogs }: ServiceUrlRowProps) {
     <div className={styles.serviceRow}>
       <div className={styles.serviceMain}>
         <span className={styles.serviceName}>{name}</span>
-        {creds.user && <span className={styles.serviceUser}>usuario: <strong>{creds.user}</strong></span>}
+        {creds.user && <span className={styles.serviceUser}>user: <strong>{creds.user}</strong></span>}
         <code className={styles.serviceUrl}>{creds.url.replace(/^https?:\/\//, '')}</code>
       </div>
       <div className={styles.serviceBadges}>
         {creds.hasApiKey   && <Badge tone="ok">API key</Badge>}
         {creds.hasPassword && <Badge tone="ok">password</Badge>}
-        {creds.hasApiKey === false   && <Badge tone="warn">sin key</Badge>}
-        {creds.hasPassword === false && <Badge tone="warn">sin pwd</Badge>}
+        {creds.hasApiKey === false   && <Badge tone="warn">no key</Badge>}
+        {creds.hasPassword === false && <Badge tone="warn">no password</Badge>}
       </div>
       {serviceId && (
         <button
           type="button"
           className={styles.iconBtn}
           onClick={() => onOpenLogs({ id: serviceId, name })}
-          title={`Ver logs de ${name}`}
+          title={`View ${name} logs`}
         >
           <ScrollText size={14} />
         </button>
@@ -636,7 +609,7 @@ function ServiceUrlRow({ name, creds, onOpenLogs }: ServiceUrlRowProps) {
         type="button"
         className={styles.iconBtn}
         onClick={() => void openExternal(creds.url)}
-        title="Abrir en navegador"
+        title="Open in browser"
       >
         <ExternalLink size={14} />
       </button>
@@ -648,19 +621,42 @@ function Badge({ tone, children }: { tone: 'ok' | 'warn'; children: React.ReactN
   return <span className={`${styles.badge} ${styles[`badge_${tone}`]}`}>{children}</span>;
 }
 
+/** Inline eye-toggle button rendered inside a GlassInput's `iconRight` slot. */
+function EyeToggleButton({ show, onToggle }: { show: boolean; onToggle: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onToggle}
+      aria-label={show ? 'Hide password' : 'Show password'}
+      style={{
+        background: 'transparent',
+        border: 'none',
+        color: 'inherit',
+        cursor: 'pointer',
+        padding: 0,
+        display: 'flex',
+        alignItems: 'center',
+        lineHeight: 0,
+      }}
+    >
+      {show ? <EyeOff size={14} /> : <Eye size={14} />}
+    </button>
+  );
+}
+
 // ─── System info (read-only) ─────────────────────────────────────────────────
 
 function SystemSection({ info }: { info: SetupInfo }) {
   return (
-    <Section title="Sistema">
-      <Row k="Zona horaria"  v={info.system.timezone} />
-      <Row k="UID / GID"     v={`${info.system.puid} : ${info.system.pgid}`} mono />
-      <Row k="Películas"     v={info.paths.movies} mono />
-      <Row k="Series"        v={info.paths.tv}     mono />
-      <Row k="Anime"         v={info.paths.anime}  mono />
-      <Row k="Música"        v={info.paths.music}  mono />
+    <Section title="System">
+      <Row k="Timezone" v={info.system.timezone} />
+      <Row k="UID / GID" v={`${info.system.puid} : ${info.system.pgid}`} mono />
+      <Row k="Movies" v={info.paths.movies} mono />
+      <Row k="TV"     v={info.paths.tv}     mono />
+      <Row k="Anime"  v={info.paths.anime}  mono />
+      <Row k="Music"  v={info.paths.music}  mono />
       <span className={styles.hintBox}>
-        Cambiar paths o uid/gid requiere recrear los containers. Próxima iteración.
+        Editing paths or UID/GID requires recreating the containers. Coming soon.
       </span>
     </Section>
   );
@@ -674,10 +670,14 @@ function StackLifecycleSection() {
   const qc = useQueryClient();
 
   async function run(kind: 'restart' | 'stop' | 'start') {
-    const labels = { restart: 'Reiniciar', stop: 'Detener', start: 'Iniciar' };
+    const labels: Record<typeof kind, { verb: string; toast: string; title: string }> = {
+      restart: { verb: 'restart', toast: 'Stack restarted', title: 'Restart stack' },
+      stop:    { verb: 'stop',    toast: 'Stack stopped',   title: 'Stop stack' },
+      start:   { verb: 'start',   toast: 'Stack started',   title: 'Start stack' },
+    };
     const ok = await confirmDialog(
-      `Esto va a ${labels[kind].toLowerCase()} todos los containers del stack. ¿Continuar?`,
-      `${labels[kind]} stack`,
+      `This will ${labels[kind].verb} every container in the stack. Continue?`,
+      labels[kind].title,
     );
     if (!ok) return;
     setBusy(kind);
@@ -686,7 +686,7 @@ function StackLifecycleSection() {
       if (kind === 'stop')    await api.setupStackStop();
       if (kind === 'start')   await api.setupStackStart();
       qc.invalidateQueries({ queryKey: ['services'] });
-      toast(`${labels[kind]} ejecutado`, 'success');
+      toast(labels[kind].toast, 'success');
     } catch (err) {
       toast(`Error: ${err instanceof Error ? err.message : String(err)}`, 'error');
     } finally {
@@ -695,19 +695,19 @@ function StackLifecycleSection() {
   }
 
   return (
-    <Section title="Operaciones del stack" subtitle="Acciones globales sobre todos los containers (docker compose).">
+    <Section title="Stack lifecycle" subtitle="Global actions on every container.">
       <div className={styles.actionsRow}>
         <GlassButton variant="secondary" onClick={() => run('start')} disabled={busy !== null}>
           {busy === 'start' ? <RotateCw size={14} className={styles.spin} /> : <Play size={14} />}
-          Iniciar todo
+          Start all
         </GlassButton>
         <GlassButton variant="secondary" onClick={() => run('restart')} disabled={busy !== null}>
           {busy === 'restart' ? <RotateCw size={14} className={styles.spin} /> : <RotateCw size={14} />}
-          Reiniciar todo
+          Restart all
         </GlassButton>
         <GlassButton variant="secondary" onClick={() => run('stop')} disabled={busy !== null}>
           {busy === 'stop' ? <RotateCw size={14} className={styles.spin} /> : <Power size={14} />}
-          Detener todo
+          Stop all
         </GlassButton>
       </div>
     </Section>
@@ -722,19 +722,15 @@ function UpdatesSection() {
 
   return (
     <Section
-      title="Actualizaciones"
-      subtitle="Descarga las últimas imágenes Docker y reinicia solo los containers que cambiaron."
+      title="Updates"
+      subtitle="Pull the latest Docker images and restart only what changed."
     >
       <div className={styles.actionsRow}>
         <GlassButton variant="secondary" onClick={() => setShowDrawer(true)}>
           <Download size={14} />
-          Buscar actualizaciones
+          Check for updates
         </GlassButton>
       </div>
-      <span className={styles.hintBox}>
-        Ejecuta <code>docker compose pull</code> para descargar las imágenes más recientes, luego aplica
-        con <code>docker compose up -d</code> para reiniciar solo los containers que cambiaron.
-      </span>
       {showDrawer && (
         <UpdateDrawer
           onClose={() => setShowDrawer(false)}
@@ -753,42 +749,47 @@ function UpdatesSection() {
 function AdvancedSection({ info }: { info: SetupInfo }) {
   const { toast } = useToast();
 
+  async function openStackFolder() {
+    if (!info.stack.workDir) return;
+    try {
+      await openPath(info.stack.workDir);
+    } catch (err) {
+      toast(`Couldn't open stack folder: ${err instanceof Error ? err.message : String(err)}`, 'error');
+    }
+  }
+
   async function rerunWizard() {
     const ok = await confirmDialog(
-      'Esto borra el estado del wizard pero NO toca el stack desplegado. La próxima vez que abras la app vas a ver el wizard de nuevo. ¿Continuar?',
-      'Re-correr wizard',
+      'This clears the wizard state but does NOT touch the deployed stack. Next launch will run the wizard again. Continue?',
+      'Re-run wizard',
     );
     if (!ok) return;
     try {
       await resetAppState();
-      toast('Estado borrado. Reiniciá la app para ver el wizard.', 'info');
+      toast('Wizard state cleared. Restart the app to see the wizard.', 'info');
     } catch (err) {
       toast(`Error: ${err instanceof Error ? err.message : String(err)}`, 'error');
     }
   }
 
   return (
-    <Section title="Avanzado">
+    <Section title="Advanced">
       <div className={styles.actionsRow}>
         {info.stack.workDir && (
-          <GlassButton
-            variant="secondary"
-            onClick={() => info.stack.workDir && void openExternal(`file://${info.stack.workDir}`)}
-          >
+          <GlassButton variant="secondary" onClick={() => void openStackFolder()}>
             <FolderOpen size={14} />
-            Abrir carpeta del stack
+            Open stack folder
           </GlassButton>
         )}
         <GlassButton variant="secondary" onClick={rerunWizard}>
           <Trash2 size={14} />
-          Re-correr wizard
+          Re-run wizard
         </GlassButton>
       </div>
       <span className={styles.hintBox}>
         <AlertTriangle size={12} style={{ marginRight: 6, verticalAlign: 'text-bottom' }} />
-        Re-correr wizard solo limpia <code>state.json</code>. Los containers Docker
-        siguen corriendo — para empezar de cero hace falta también <code>docker compose down -v</code>
-        en la carpeta del stack.
+        Re-running the wizard only clears <code>state.json</code>. Docker containers keep running —
+        to start completely fresh, also run <code>docker compose down -v</code> in the stack folder.
       </span>
     </Section>
   );

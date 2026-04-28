@@ -11,25 +11,25 @@ export function AIProviderStep({ draft, setAI }: Props) {
   return (
     <>
       <p className="wizard-hint" style={{ margin: 0 }}>
-        El asistente AI de Mediabox usa un LLM para responder preguntas, mostrar el estado y
-        ejecutar acciones. Podés saltar este paso y configurarlo después.
+        The AI assistant answers questions, shows status, and runs actions. Skip this step
+        and configure it later from Settings if you want.
       </p>
 
       <div className="wizard-field">
-        <label className="wizard-label">Proveedor de LLM</label>
+        <label className="wizard-label">LLM provider</label>
         <SegmentedControl
           value={draft.ai.provider}
           onChange={v => setAI({ provider: v as WizardDraft['ai']['provider'] })}
           options={[
-            { value: 'none',       label: 'Sin AI' },
+            { value: 'none',       label: 'No AI' },
             { value: 'openrouter', label: 'OpenRouter' },
             { value: 'google',     label: 'Google AI' },
           ]}
         />
         <span className="wizard-hint">
-          {draft.ai.provider === 'none'       && 'Sin asistente AI por ahora. La fase 4 agregará soporte para Ollama (local).'}
-          {draft.ai.provider === 'openrouter' && 'Provee acceso a Claude, GPT-4 y demás. Generá la key en openrouter.ai/keys.'}
-          {draft.ai.provider === 'google'     && 'Gemini de Google AI Studio. Es el provider más económico para prototipar.'}
+          {draft.ai.provider === 'none'       && 'Skip the AI assistant for now. Local Ollama support is coming in phase 4.'}
+          {draft.ai.provider === 'openrouter' && 'One key, access to Claude, GPT-4, and more. Get one at openrouter.ai/keys.'}
+          {draft.ai.provider === 'google'     && 'Gemini via Google AI Studio. Cheapest option for prototyping.'}
         </span>
       </div>
 
@@ -46,28 +46,28 @@ export function AIProviderStep({ draft, setAI }: Props) {
 
           {draft.ai.provider === 'openrouter' && (
             <div className="wizard-field">
-              <label className="wizard-label">Modelo</label>
+              <label className="wizard-label">Model</label>
               <GlassInput
                 value={draft.ai.model}
                 onChange={v => setAI({ model: v })}
                 placeholder="anthropic/claude-3.5-sonnet"
               />
               <span className="wizard-hint">
-                Otros: <code>openai/gpt-4o</code>, <code>google/gemini-2.0-flash-exp</code>.
+                Other options: <code>openai/gpt-4o</code>, <code>google/gemini-2.0-flash-exp</code>.
               </span>
             </div>
           )}
 
           {draft.ai.provider === 'google' && (
             <div className="wizard-field">
-              <label className="wizard-label">Modelo (opcional)</label>
+              <label className="wizard-label">Model (optional)</label>
               <GlassInput
                 value={draft.ai.model}
                 onChange={v => setAI({ model: v })}
                 placeholder="gemini-2.0-flash-exp"
               />
               <span className="wizard-hint">
-                Si lo dejás vacío, usamos el default del SDK.
+                Leave blank to use the SDK default.
               </span>
             </div>
           )}

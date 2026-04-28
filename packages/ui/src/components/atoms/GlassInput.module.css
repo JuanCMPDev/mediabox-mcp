@@ -41,6 +41,14 @@
   opacity: 0.6;
 }
 
+/* Hide WebView2/Edge's native password reveal/clear buttons — we render our
+   own eye toggle via the iconRight slot. Without this, type=password fields
+   show two reveal buttons stacked on top of each other on Windows. */
+.input::-ms-reveal,
+.input::-ms-clear {
+  display: none;
+}
+
 .icon {
   color: var(--on-surface-variant);
   flex-shrink: 0;

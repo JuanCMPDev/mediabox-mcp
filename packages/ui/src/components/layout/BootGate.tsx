@@ -38,13 +38,13 @@ export function BootGate({ children }: Props) {
         <div className={styles.spinner} aria-hidden />
         {state.status === 'loading' && (
           <>
-            <h1 className={styles.title}>Iniciando Mediabox OS</h1>
-            <p className={styles.subtitle}>Levantando el servicio local…</p>
+            <h1 className={styles.title}>Starting Mediabox OS</h1>
+            <p className={styles.subtitle}>Bringing up the local service…</p>
           </>
         )}
         {state.status === 'failed' && (
           <>
-            <h1 className={styles.titleError}>No se pudo iniciar el servicio</h1>
+            <h1 className={styles.titleError}>Couldn&apos;t start the service</h1>
             <p className={styles.subtitle}>{state.error}</p>
           </>
         )}

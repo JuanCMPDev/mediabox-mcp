@@ -9,6 +9,7 @@ import { ServicesStep } from '@/components/wizard/steps/ServicesStep';
 import { AIProviderStep } from '@/components/wizard/steps/AIProviderStep';
 import { TelegramStep } from '@/components/wizard/steps/TelegramStep';
 import { ReviewStep } from '@/components/wizard/steps/ReviewStep';
+import { ProwlarrSetupStep } from '@/components/wizard/steps/ProwlarrSetupStep';
 import { useWizardDraft } from '@/lib/use-wizard-draft';
 import { useDeployStream } from '@/lib/use-deploy-stream';
 import { draftToDeployConfig } from '@/lib/wizard-types';
@@ -17,24 +18,24 @@ import { reloadRuntimeConfig } from '@/lib/runtime-config';
 
 const STEP_TITLES = [
   'Pre-flight',
-  'Despliegue',
-  'Sistema',
-  'Rutas de medios',
-  'Servicios',
-  'Asistente AI',
+  'Deployment',
+  'System',
+  'Media paths',
+  'Services',
+  'AI assistant',
   'Telegram bot',
-  'Revisión y deploy',
+  'Review',
 ];
 
 const STEP_SUBTITLES = [
-  'Verificamos que Docker esté listo en tu máquina antes de empezar.',
-  '¿Cómo querés exponer el stack? ¿Dónde guardamos los archivos de orquestación?',
-  'Algunos parámetros del host que Docker necesita saber.',
-  'Carpetas donde Sonarr y Radarr van a guardar las descargas organizadas.',
-  'Credenciales para acceder a cada servicio por web.',
-  'Activá el chat AI nativo y conectá un proveedor de LLM.',
-  'Opcionalmente, enchufá un bot de Telegram para usar el AI desde el celular.',
-  'Última oportunidad para revisar antes de tirar el deploy.',
+  'Make sure Docker is ready before we start.',
+  'How should the stack be exposed, and where do the orchestration files live?',
+  'A few host parameters Docker needs to know.',
+  'Folders where Sonarr and Radarr will keep your organized media.',
+  'Credentials for each service’s web UI.',
+  'Optional: enable the in-app AI chat and pick an LLM provider.',
+  'Optional: connect a Telegram bot to use the AI from your phone.',
+  'Last chance to review before kicking off the deploy.',
 ];
 
 const TOTAL_STEPS = STEP_TITLES.length;
@@ -50,6 +51,9 @@ export function WizardView({ onComplete }: Props) {
   const [preflightReady, setPreflightReady]     = useState(false);
   const [deploying, setDeploying]               = useState(false);
   const [workdirProbe, setWorkdirProbe]         = useState<WorkdirProbe | null>(null);
+  // Set after deploy succeeds and the sidecar has been restarted with the
+  // freshly-written .env. Triggers the "Configurar Prowlarr" post-deploy step.
+  const [postDeployReady, setPostDeployReady]   = useState(false);
 
   // Pre-fill workDir on first mount with the OS-suggested default.
   useEffect(() => {
@@ -79,12 +83,13 @@ export function WizardView({ onComplete }: Props) {
       case 2: return draft.system.timezone.trim().length > 0;
       case 3: return Object.values(draft.paths).every(p => p.trim().length > 0);
       case 4: {
+        // PyLoad credentials are not collected — its image hardcodes
+        // pyload:pyload and we don't try to rotate them. The wizard step
+        // only exposes Jellyfin + qBittorrent inputs.
         const s = draft.services;
         return s.jellyfinAdminUsername.length > 0
           && s.jellyfinAdminPassword.length >= 8
-          && s.qbitPassword.length >= 8
-          && s.pyloadUsername.length > 0
-          && s.pyloadPassword.length >= 8;
+          && s.qbitPassword.length >= 8;
       }
       case 5: {
         if (draft.ai.provider === 'none') return true;
@@ -108,12 +113,29 @@ export function WizardView({ onComplete }: Props) {
     await start(config, draft.workDir, false);
   };
 
+  // Phase 1 of post-deploy: write a partial state.json (just stackDir so the
+  // sidecar can find the newly-written .env) and restart the sidecar so the
+  // ProwlarrSetupStep's polling endpoint has PROWLARR_API_KEY in its env.
+  // wizardCompletedAt stays null — App.tsx still routes us to the wizard until
+  // the user finishes the post-deploy step.
+  const beginPostDeploy = async () => {
+    await setAppState({
+      wizardCompletedAt: null,
+      stackDir:          draft.workDir,
+      configSummary:     null,
+    });
+    await restartSidecar();
+    await reloadRuntimeConfig();
+    setPostDeployReady(true);
+  };
+
+  // Phase 2 of post-deploy: write the full state and exit the wizard. Called
+  // either when the user completes the ProwlarrSetupStep (≥1 indexer) or when
+  // they explicitly skip it.
   const finishWizard = async () => {
-    // Order matters: write state.json first so the restarted sidecar reads
-    // the newly-deployed stack's .env on its first probe.
     await setAppState({
       wizardCompletedAt: new Date().toISOString(),
-      stackDir: draft.workDir,
+      stackDir:          draft.workDir,
       configSummary: {
         deploymentMode:    draft.deployment.mode,
         imageTag:          draft.deployment.imageTag,
@@ -123,7 +145,7 @@ export function WizardView({ onComplete }: Props) {
         pgid:              draft.system.pgid,
         paths:             draft.paths,
         jellyfinAdminUser: draft.services.jellyfinAdminUsername,
-        pyloadUser:        draft.services.pyloadUsername,
+        pyloadUser:        'pyload',
         bazarrEnabled:     draft.services.bazarrEnabled,
         aiProvider:        draft.ai.provider,
         aiModel:           draft.ai.model.trim() || null,
@@ -132,27 +154,41 @@ export function WizardView({ onComplete }: Props) {
           .split(',').map(s => s.trim()).filter(Boolean).length,
       },
     });
-    await restartSidecar();
-    // Wait until the new sidecar reports `ready`, refresh our cached
-    // { apiUrl, token } so the dashboard's first fetch hits the new instance.
-    await reloadRuntimeConfig();
+    // No need to restart the sidecar again — beginPostDeploy already did that.
     clear();
     onComplete();
   };
+
+  if (postDeployReady) {
+    return (
+      <StepShell
+        stepIndex={TOTAL_STEPS - 1}
+        totalSteps={TOTAL_STEPS}
+        title="Set up Prowlarr"
+        subtitle="Add at least one indexer so the stack can search for content."
+        hideNav
+      >
+        <ProwlarrSetupStep
+          onContinue={() => void finishWizard()}
+          onSkip={() => void finishWizard()}
+        />
+      </StepShell>
+    );
+  }
 
   if (deploying) {
     return (
       <StepShell
         stepIndex={TOTAL_STEPS - 1}
         totalSteps={TOTAL_STEPS}
-        title="Desplegando el stack"
-        subtitle="Esto puede tardar varios minutos en el primer arranque."
+        title="Deploying"
+        subtitle="This can take a few minutes the first time."
         hideNav
       >
         <DeployProgress
           state={deployState}
           onCancel={() => { cancel(); setDeploying(false); }}
-          onFinish={() => void finishWizard()}
+          onFinish={() => void beginPostDeploy()}
           onRetry={() => { reset(); void launchDeploy(); }}
         />
       </StepShell>
@@ -169,7 +205,7 @@ export function WizardView({ onComplete }: Props) {
       onForward={draft.step === TOTAL_STEPS - 1 ? launchDeploy : goForward}
       canGoBack={draft.step > 0}
       canGoForward={canGoForward()}
-      forwardLabel={draft.step === TOTAL_STEPS - 1 ? 'Iniciar deploy' : undefined}
+      forwardLabel={draft.step === TOTAL_STEPS - 1 ? 'Start deploy' : undefined}
     >
       {draft.step === 0 && <PreflightStep onReady={setPreflightReady} />}
       {draft.step === 1 && (

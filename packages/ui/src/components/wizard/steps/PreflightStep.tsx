@@ -48,23 +48,22 @@ export function PreflightStep({ onReady }: Props) {
   return (
     <div className={styles.preflight}>
       <p className={styles.intro}>
-        Mediabox OS necesita Docker corriendo en tu máquina para orquestar Jellyfin,
-        Sonarr, Radarr y el resto del stack. Vamos a hacer un chequeo rápido.
+        Mediabox needs Docker to run the stack. Quick check first.
       </p>
 
       <div className={styles.checks}>
         <Check
-          label="Docker instalado"
+          label="Docker installed"
           status={loading ? 'pending' : status?.installed ? 'ok' : 'fail'}
           detail={status?.version ?? undefined}
         />
         <Check
-          label="Docker daemon corriendo"
+          label="Docker daemon running"
           status={loading ? 'pending' : status?.daemonRunning ? 'ok' : 'fail'}
-          detail={!status?.daemonRunning && status?.installed ? 'Iniciá Docker Desktop o systemctl start docker' : undefined}
+          detail={!status?.daemonRunning && status?.installed ? 'Start Docker Desktop' : undefined}
         />
         <Check
-          label="Plugin docker compose"
+          label="docker compose plugin"
           status={loading ? 'pending' : status?.composeAvailable ? 'ok' : 'fail'}
         />
       </div>
@@ -73,10 +72,10 @@ export function PreflightStep({ onReady }: Props) {
         <div className={styles.errorBox}>
           <AlertTriangle size={16} />
           <div>
-            <strong>No podemos continuar todavía.</strong>
-            <p>{status.error || 'Algún chequeo falló. Revisá Docker Desktop y volvé a intentar.'}</p>
+            <strong>Can&apos;t continue yet.</strong>
+            <p>{status.error || 'A check failed. Verify Docker Desktop is running, then retry.'}</p>
             <a href="https://docs.docker.com/get-docker/" target="_blank" rel="noopener" className={styles.link}>
-              Instalar Docker
+              Install Docker
               <ExternalLink size={12} />
             </a>
           </div>
@@ -86,7 +85,7 @@ export function PreflightStep({ onReady }: Props) {
       <div className={styles.retry}>
         <GlassButton variant="secondary" size="sm" onClick={probe} disabled={loading}>
           {loading ? <Loader2 size={14} className={styles.spin} /> : null}
-          Reintentar chequeo
+          Retry
         </GlassButton>
       </div>
     </div>

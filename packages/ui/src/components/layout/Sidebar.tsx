@@ -7,10 +7,17 @@ import {
 import styles from './Sidebar.module.css';
 import type { View } from '@/lib/types';
 
-const NAV_ITEMS: { id: View; label: string; Icon: React.ElementType }[] = [
+interface NavItem {
+  id:    View;
+  label: string;
+  Icon:  React.ElementType;
+  beta?: boolean;
+}
+
+const NAV_ITEMS: NavItem[] = [
   { id: 'dashboard', label: 'Dashboard',   Icon: LayoutDashboard },
   { id: 'library',   label: 'Library',     Icon: Film },
-  { id: 'chat',      label: 'MCP Console', Icon: MessageSquare },
+  { id: 'chat',      label: 'MCP Console', Icon: MessageSquare, beta: true },
   { id: 'settings',  label: 'Settings',    Icon: Settings },
 ];
 
@@ -35,7 +42,7 @@ export function Sidebar({ activeView, onViewChange, serverOnline }: SidebarProps
 
       <nav className={styles.nav}>
         <div className={styles.sectionLabel}>Navigation</div>
-        {NAV_ITEMS.map(({ id, label, Icon }) => (
+        {NAV_ITEMS.map(({ id, label, Icon, beta }) => (
           <button
             key={id}
             type="button"
@@ -45,7 +52,8 @@ export function Sidebar({ activeView, onViewChange, serverOnline }: SidebarProps
             onClick={() => onViewChange(id)}
           >
             <Icon size={18} className={styles.navIcon} />
-            {label}
+            <span>{label}</span>
+            {beta && <span className={styles.betaBadge}>Beta</span>}
           </button>
         ))}
       </nav>

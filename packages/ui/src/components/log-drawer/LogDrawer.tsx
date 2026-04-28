@@ -40,15 +40,15 @@ export function LogDrawer({ service, displayName, onClose }: Props) {
       {/* Backdrop */}
       <div className={styles.backdrop} onClick={onClose} />
 
-      <aside className={styles.drawer} role="dialog" aria-label={`Logs de ${displayName}`}>
+      <aside className={styles.drawer} role="dialog" aria-label={`${displayName} logs`}>
         {/* Header */}
         <div className={styles.header}>
           <div className={styles.headerTitle}>
             <StatusDot status={status} />
             <span className={styles.serviceName}>{displayName}</span>
-            <span className={styles.headerSub}>logs en vivo</span>
+            <span className={styles.headerSub}>live logs</span>
           </div>
-          <button className={styles.iconBtn} onClick={onClose} title="Cerrar">
+          <button className={styles.iconBtn} onClick={onClose} title="Close">
             <X size={16} />
           </button>
         </div>
@@ -56,14 +56,14 @@ export function LogDrawer({ service, displayName, onClose }: Props) {
         {/* Controls */}
         <div className={styles.controls}>
           <div className={styles.controlGroup}>
-            <label className={styles.controlLabel}>Últimas</label>
+            <label className={styles.controlLabel}>Tail</label>
             <select
               className={styles.select}
               value={tail}
               onChange={e => setTail(Number(e.target.value))}
             >
               {TAIL_OPTIONS.map(n => (
-                <option key={n} value={n}>{n} líneas</option>
+                <option key={n} value={n}>{n} lines</option>
               ))}
             </select>
           </div>
@@ -71,7 +71,7 @@ export function LogDrawer({ service, displayName, onClose }: Props) {
           <div className={styles.controlGroup}>
             <input
               className={styles.searchInput}
-              placeholder="Filtrar…"
+              placeholder="Filter…"
               value={search}
               onChange={e => setSearch(e.target.value)}
             />
@@ -80,12 +80,12 @@ export function LogDrawer({ service, displayName, onClose }: Props) {
           <button
             className={styles.iconBtn}
             onClick={() => setAutoScroll(a => !a)}
-            title={autoScroll ? 'Pausar scroll automático' : 'Reanudar scroll automático'}
+            title={autoScroll ? 'Pause auto-scroll' : 'Resume auto-scroll'}
           >
             {autoScroll ? <PauseCircle size={15} /> : <PlayCircle size={15} />}
           </button>
 
-          <button className={styles.iconBtn} onClick={clear} title="Limpiar">
+          <button className={styles.iconBtn} onClick={clear} title="Clear">
             <Trash2 size={15} />
           </button>
         </div>
@@ -104,14 +104,14 @@ export function LogDrawer({ service, displayName, onClose }: Props) {
           {status === 'connecting' && (
             <div className={styles.centeredMsg}>
               <Loader size={16} className={styles.spin} />
-              Conectando a {displayName}…
+              Connecting to {displayName}…
             </div>
           )}
 
           {status === 'error' && (
             <div className={styles.centeredMsg}>
               <AlertCircle size={16} />
-              {error ?? 'Error desconocido'}
+              {error ?? 'Unknown error'}
             </div>
           )}
 
@@ -123,11 +123,11 @@ export function LogDrawer({ service, displayName, onClose }: Props) {
           ))}
 
           {status === 'closed' && lines.length > 0 && (
-            <div className={styles.eofMsg}>— fin del stream —</div>
+            <div className={styles.eofMsg}>— end of stream —</div>
           )}
 
           {(status === 'live' || status === 'closed') && filtered.length === 0 && (
-            <div className={styles.centeredMsg}>Sin líneas{search ? ' que coincidan con el filtro' : ''}.</div>
+            <div className={styles.centeredMsg}>No lines{search ? ' match the filter' : ''}.</div>
           )}
         </div>
 
@@ -135,10 +135,10 @@ export function LogDrawer({ service, displayName, onClose }: Props) {
         <div className={styles.footer}>
           <StatusDot status={status} />
           <span className={styles.footerStatus}>{statusLabel(status)}</span>
-          <span className={styles.lineCount}>{lines.length.toLocaleString('es')} líneas</span>
+          <span className={styles.lineCount}>{lines.length.toLocaleString('en')} lines</span>
           {(status === 'closed' || status === 'error') && (
             <button className={styles.retryBtn} onClick={() => void open(service, tail)}>
-              Reconectar
+              Reconnect
             </button>
           )}
         </div>
@@ -161,7 +161,7 @@ function StatusDot({ status }: { status: LogStreamStatus }) {
 }
 
 function statusLabel(s: LogStreamStatus) {
-  return { idle: 'inactivo', connecting: 'conectando', live: 'en vivo', closed: 'cerrado', error: 'error' }[s];
+  return { idle: 'idle', connecting: 'connecting', live: 'live', closed: 'closed', error: 'error' }[s];
 }
 
 /** Format an ISO timestamp to HH:MM:SS.mmm */

@@ -18,14 +18,14 @@ export function PathsStep({ draft, setPaths }: Props) {
   return (
     <>
       <p className="wizard-hint" style={{ margin: 0 }}>
-        Pueden ser rutas absolutas (recomendado en Linux) o relativas al directorio del stack.
-        Si no existen, las creamos al deployar.
+        Absolute paths recommended on Linux; relative paths resolve against the stack folder.
+        Folders are created on first deploy if they don&apos;t exist.
       </p>
 
-      <PathRow label="Películas"  value={draft.paths.movies} onChange={v => setPaths({ movies: v })} onBrowse={() => browseField('movies')} />
-      <PathRow label="Series"     value={draft.paths.tv}     onChange={v => setPaths({ tv: v })}     onBrowse={() => browseField('tv')} />
-      <PathRow label="Anime"      value={draft.paths.anime}  onChange={v => setPaths({ anime: v })}  onBrowse={() => browseField('anime')} />
-      <PathRow label="Música"     value={draft.paths.music}  onChange={v => setPaths({ music: v })}  onBrowse={() => browseField('music')} />
+      <PathRow label="Movies" value={draft.paths.movies} onChange={v => setPaths({ movies: v })} onBrowse={() => browseField('movies')} />
+      <PathRow label="TV"     value={draft.paths.tv}     onChange={v => setPaths({ tv: v })}     onBrowse={() => browseField('tv')} />
+      <PathRow label="Anime"  value={draft.paths.anime}  onChange={v => setPaths({ anime: v })}  onBrowse={() => browseField('anime')} />
+      <PathRow label="Music"  value={draft.paths.music}  onChange={v => setPaths({ music: v })}  onBrowse={() => browseField('music')} />
     </>
   );
 }

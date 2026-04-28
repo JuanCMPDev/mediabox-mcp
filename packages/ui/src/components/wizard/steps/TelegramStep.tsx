@@ -13,18 +13,18 @@ export function TelegramStep({ draft, setTelegram }: Props) {
   return (
     <>
       <p className="wizard-hint" style={{ margin: 0 }}>
-        El bot de Telegram replica al chat AI nativo, pero accesible desde tu teléfono.
-        Para activarlo necesitás un bot creado con <code>@BotFather</code> y el provider AI ya configurado.
+        The Telegram bot mirrors the in-app AI chat to your phone. You&apos;ll need a bot token
+        from <code>@BotFather</code> and an AI provider configured.
       </p>
 
       <div className="wizard-field">
-        <label className="wizard-label">Activar Telegram bot</label>
+        <label className="wizard-label">Enable Telegram bot</label>
         <SegmentedControl
           value={draft.telegram.enabled ? 'on' : 'off'}
           onChange={v => setTelegram({ enabled: v === 'on' })}
           options={[
-            { value: 'off', label: 'No, gracias' },
-            { value: 'on',  label: 'Sí, activar' },
+            { value: 'off', label: 'No, thanks' },
+            { value: 'on',  label: 'Yes, enable' },
           ]}
         />
       </div>
@@ -38,34 +38,33 @@ export function TelegramStep({ draft, setTelegram }: Props) {
           color: 'var(--error)',
           font: '13px var(--font-sans)',
         }}>
-          Volvé al paso anterior y configurá un proveedor AI primero — el bot lo necesita para responder.
+          Go back and configure an AI provider first — the bot needs one to reply.
         </div>
       )}
 
       {draft.telegram.enabled && aiConfigured && (
         <>
           <div className="wizard-field">
-            <label className="wizard-label">Token del bot</label>
+            <label className="wizard-label">Bot token</label>
             <GlassInput
               value={draft.telegram.botToken}
               onChange={v => setTelegram({ botToken: v })}
               placeholder="123456:ABC-DEF…"
             />
             <span className="wizard-hint">
-              Lo obtenés al hablar con <code>@BotFather</code> en Telegram y crear un bot nuevo con <code>/newbot</code>.
+              Talk to <code>@BotFather</code> on Telegram and create a new bot with <code>/newbot</code>.
             </span>
           </div>
 
           <div className="wizard-field">
-            <label className="wizard-label">User IDs autorizados</label>
+            <label className="wizard-label">Allowed user IDs</label>
             <GlassInput
               value={draft.telegram.allowedUserIds}
               onChange={v => setTelegram({ allowedUserIds: v })}
               placeholder="123456789, 987654321"
             />
             <span className="wizard-hint">
-              Separados por comas. Vacío = cualquiera puede chatear con el bot.
-              Para saber tu User ID, hablá con <code>@userinfobot</code>.
+              Comma-separated. Leave blank to allow anyone. Find your ID via <code>@userinfobot</code>.
             </span>
           </div>
         </>

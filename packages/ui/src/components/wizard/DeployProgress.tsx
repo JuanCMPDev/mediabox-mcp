@@ -12,26 +12,26 @@ interface Props {
 }
 
 const PHASE_LABELS: Record<string, string> = {
-  'config:validate':            'Validando configuración',
-  'generate:directories':       'Creando directorios',
-  'generate:env':               'Generando .env',
-  'generate:compose':           'Generando docker-compose.yml',
-  'generate:qbittorrent':       'Pre-configurando qBittorrent',
-  'generate:caddy':             'Generando Caddyfile',
-  'deploy:prepare-images':      'Descargando imágenes Docker',
-  'deploy:start':               'Iniciando contenedores',
-  'deploy:health':              'Esperando que los servicios estén listos',
-  'discover:api-keys':          'Descubriendo API keys',
-  'configure:jellyfin':         'Configurando Jellyfin',
-  'configure:sonarr':           'Configurando Sonarr',
-  'configure:radarr':           'Configurando Radarr',
-  'configure:prowlarr':         'Configurando Prowlarr',
-  'configure:qbittorrent':      'Conectando qBittorrent',
-  'configure:flaresolverr':     'Conectando FlareSolverr',
-  'configure:arr-auth':         'Configurando autenticación entre servicios',
-  'configure:jellyfin-libraries': 'Creando bibliotecas en Jellyfin',
-  'write:env-update':           'Actualizando .env con keys descubiertas',
-  'deploy:restart':             'Reiniciando contenedores',
+  'config:validate':            'Validating configuration',
+  'generate:directories':       'Creating folders',
+  'generate:env':               'Writing .env',
+  'generate:compose':           'Writing docker-compose.yml',
+  'generate:qbittorrent':       'Pre-configuring qBittorrent',
+  'generate:caddy':             'Writing Caddyfile',
+  'deploy:prepare-images':      'Pulling Docker images',
+  'deploy:start':               'Starting containers',
+  'deploy:health':              'Waiting for services to be ready',
+  'discover:api-keys':          'Discovering API keys',
+  'configure:jellyfin':         'Configuring Jellyfin',
+  'configure:sonarr':           'Configuring Sonarr',
+  'configure:radarr':           'Configuring Radarr',
+  'configure:prowlarr':         'Configuring Prowlarr',
+  'configure:qbittorrent':      'Connecting qBittorrent',
+  'configure:flaresolverr':     'Connecting FlareSolverr',
+  'configure:arr-auth':         'Wiring up service auth',
+  'configure:jellyfin-libraries': 'Creating Jellyfin libraries',
+  'write:env-update':           'Updating .env with discovered keys',
+  'deploy:restart':             'Restarting containers',
 };
 
 export function DeployProgress({ state, onCancel, onFinish, onRetry }: Props) {
@@ -60,18 +60,18 @@ export function DeployProgress({ state, onCancel, onFinish, onRetry }: Props) {
         {showHardError       && <XCircle size={20} color="var(--error)" />}
         <div>
           <strong>
-            {state.phase === 'starting' && 'Preparando deploy…'}
+            {state.phase === 'starting' && 'Preparing deploy…'}
             {state.phase === 'running'  && lastPhase && 'phase' in lastPhase
               ? (PHASE_LABELS[lastPhase.phase] ?? lastPhase.phase)
               : null}
-            {showFinishedSummary && '¡Listo! Stack desplegado.'}
-            {showFailedSummary   && 'Deploy completado con errores'}
-            {showHardError       && 'Falló el deploy'}
+            {showFinishedSummary && 'Done! Stack deployed.'}
+            {showFailedSummary   && 'Deploy finished with errors'}
+            {showHardError       && 'Deploy failed'}
           </strong>
           {state.phase === 'finished' && state.durationMs !== null && (
             <p className={styles.muted}>
               Total: {(state.durationMs / 1000).toFixed(1)}s
-              {state.warnings.length > 0 && ` · ${state.warnings.length} advertencias`}
+              {state.warnings.length > 0 && ` · ${state.warnings.length} warnings`}
             </p>
           )}
           {showHardError && state.error && (
@@ -82,7 +82,7 @@ export function DeployProgress({ state, onCancel, onFinish, onRetry }: Props) {
 
       <div className={styles.log} ref={scrollRef}>
         {state.events.length === 0 && state.phase !== 'error' && (
-          <div className={styles.logEmpty}>Esperando primer evento…</div>
+          <div className={styles.logEmpty}>Waiting…</div>
         )}
         {state.events.map((evt, i) => (
           <LogLine key={i} event={evt} />
@@ -91,15 +91,15 @@ export function DeployProgress({ state, onCancel, onFinish, onRetry }: Props) {
 
       <div className={styles.footer}>
         {(state.phase === 'starting' || state.phase === 'running') && (
-          <GlassButton variant="secondary" onClick={onCancel}>Cancelar</GlassButton>
+          <GlassButton variant="secondary" onClick={onCancel}>Cancel</GlassButton>
         )}
         {showFinishedSummary && (
-          <GlassButton variant="primary" onClick={onFinish}>Abrir el dashboard</GlassButton>
+          <GlassButton variant="primary" onClick={onFinish}>Continue</GlassButton>
         )}
         {(showFailedSummary || showHardError) && (
           <>
-            <GlassButton variant="secondary" onClick={onCancel}>Volver al wizard</GlassButton>
-            <GlassButton variant="primary" onClick={onRetry}>Reintentar</GlassButton>
+            <GlassButton variant="secondary" onClick={onCancel}>Back to wizard</GlassButton>
+            <GlassButton variant="primary" onClick={onRetry}>Retry</GlassButton>
           </>
         )}
       </div>

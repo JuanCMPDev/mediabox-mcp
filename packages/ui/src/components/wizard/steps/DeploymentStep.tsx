@@ -61,25 +61,25 @@ export function DeploymentStep({ draft, setWorkDir, setDeployment, onProbeResult
   return (
     <>
       <div className="wizard-field">
-        <label className="wizard-label">Modo de despliegue</label>
+        <label className="wizard-label">Deployment mode</label>
         <SegmentedControl
           value={draft.deployment.mode}
           onChange={v => setDeployment({ mode: v as WizardDraft['deployment']['mode'] })}
           options={[
             { value: 'local',  label: 'Local' },
-            { value: 'vps',    label: 'VPS público' },
+            { value: 'vps',    label: 'Public VPS' },
             { value: 'tunnel', label: 'Cloudflare Tunnel' },
           ]}
         />
         <span className="wizard-hint">
-          {draft.deployment.mode === 'local'  && 'Stack accesible solo desde tu LAN. Lo más simple para uso doméstico.'}
-          {draft.deployment.mode === 'vps'    && "Stack en un servidor público con Caddy + Let's Encrypt."}
-          {draft.deployment.mode === 'tunnel' && 'Stack local expuesto vía Cloudflare Tunnel — sin abrir puertos.'}
+          {draft.deployment.mode === 'local'  && 'Reachable only from your LAN. Simplest for home use.'}
+          {draft.deployment.mode === 'vps'    && "Public server with Caddy + Let's Encrypt."}
+          {draft.deployment.mode === 'tunnel' && 'Local stack exposed through a Cloudflare Tunnel — no open ports.'}
         </span>
       </div>
 
       <div className="wizard-field">
-        <label className="wizard-label">Directorio del stack</label>
+        <label className="wizard-label">Stack folder</label>
         <div style={{ display: 'flex', gap: 8 }}>
           <div style={{ flex: 1 }}>
             <GlassInput
@@ -90,11 +90,11 @@ export function DeploymentStep({ draft, setWorkDir, setDeployment, onProbeResult
           </div>
           <GlassButton variant="secondary" size="md" onClick={browse}>
             <Folder size={14} />
-            Elegir
+            Browse
           </GlassButton>
         </div>
         <span className="wizard-hint">
-          Acá se generan <code>docker-compose.yml</code>, <code>.env</code> y la carpeta <code>config/</code>.
+          We&apos;ll write <code>docker-compose.yml</code>, <code>.env</code>, and <code>config/</code> here.
         </span>
 
         <WorkdirBanner probe={probe} probing={probing} />
@@ -102,7 +102,7 @@ export function DeploymentStep({ draft, setWorkDir, setDeployment, onProbeResult
 
       {(draft.deployment.mode === 'vps' || draft.deployment.mode === 'tunnel') && (
         <div className="wizard-field">
-          <label className="wizard-label">Dominio base</label>
+          <label className="wizard-label">Base domain</label>
           <GlassInput
             value={draft.deployment.baseDomain}
             onChange={v => setDeployment({ baseDomain: v })}
@@ -113,7 +113,7 @@ export function DeploymentStep({ draft, setWorkDir, setDeployment, onProbeResult
 
       {draft.deployment.mode === 'vps' && (
         <div className="wizard-field">
-          <label className="wizard-label">Email para Let's Encrypt</label>
+          <label className="wizard-label">Let&apos;s Encrypt email</label>
           <GlassInput
             value={draft.deployment.letsEncryptEmail}
             onChange={v => setDeployment({ letsEncryptEmail: v })}
@@ -124,27 +124,27 @@ export function DeploymentStep({ draft, setWorkDir, setDeployment, onProbeResult
 
       {draft.deployment.mode === 'tunnel' && (
         <div className="wizard-field">
-          <label className="wizard-label">Token del Cloudflare Tunnel</label>
+          <label className="wizard-label">Cloudflare Tunnel token</label>
           <GlassInput
             value={draft.deployment.tunnelToken}
             onChange={v => setDeployment({ tunnelToken: v })}
             placeholder="eyJh…"
           />
           <span className="wizard-hint">
-            Lo obtenés en el dashboard de Cloudflare Zero Trust → Networks → Tunnels.
+            Get it from Cloudflare Zero Trust → Networks → Tunnels.
           </span>
         </div>
       )}
 
       <div className="wizard-field">
-        <label className="wizard-label">Tag de imagen (GHCR)</label>
+        <label className="wizard-label">Image tag</label>
         <GlassInput
           value={draft.deployment.imageTag}
           onChange={v => setDeployment({ imageTag: v })}
           placeholder="latest"
         />
         <span className="wizard-hint">
-          Para producción, fijá un tag específico (ej. <code>v2.1.0</code>) en vez de <code>latest</code>.
+          Pin to a specific tag (e.g. <code>v2.1.0</code>) for production instead of <code>latest</code>.
         </span>
       </div>
     </>
@@ -163,7 +163,7 @@ function WorkdirBanner({ probe, probing }: BannerProps) {
     return (
       <div className={`${styles.banner} ${styles.bannerChecking}`}>
         <Loader size={14} className={styles.spin} />
-        <span>Verificando compatibilidad del sistema de archivos…</span>
+        <span>Checking filesystem compatibility…</span>
       </div>
     );
   }
@@ -176,12 +176,11 @@ function WorkdirBanner({ probe, probing }: BannerProps) {
       <div className={`${styles.banner} ${styles.bannerError}`}>
         <XCircle size={14} />
         <span>
-          <strong>Sistema de archivos incompatible{fsLabel}.</strong>{' '}
-          Sonarr, Radarr y Prowlarr fallarán con <code>SQLITE_CANTOPEN</code> al
-          iniciarse porque el sistema de archivos no soporta el modo WAL de SQLite
-          (requerido en bind-mounts WSL2 9P, SMB y NFS).{' '}
-          <strong>Recomendamos usar <code>C:\</code> para el stack</strong> y apuntar
-          las carpetas de medios a tu unidad preferida desde los pasos de Rutas.
+          <strong>Incompatible filesystem{fsLabel}.</strong>{' '}
+          Sonarr, Radarr, and Prowlarr won&apos;t start here — this filesystem doesn&apos;t
+          support SQLite&apos;s WAL mode (typical on WSL2 9P bind-mounts, SMB, and NFS).{' '}
+          <strong>Use <code>C:\</code> for the stack folder</strong> and point your media
+          paths at your preferred drive in the next step.
         </span>
       </div>
     );
@@ -193,10 +192,9 @@ function WorkdirBanner({ probe, probing }: BannerProps) {
       <div className={`${styles.banner} ${styles.bannerWarn}`}>
         <AlertTriangle size={14} />
         <span>
-          <strong>Unidad no-sistema detectada{fsLabel}.</strong>{' '}
-          Docker Desktop + WSL2 puede tener problemas de file-locking en bind-mounts
-          a unidades distintas de <code>C:\</code>. Si Sonarr/Radarr/Prowlarr fallan
-          al iniciar, mové el stack a <code>C:\</code>.
+          <strong>Non-system drive detected{fsLabel}.</strong>{' '}
+          Docker Desktop + WSL2 can have file-locking issues on drives other than <code>C:\</code>.
+          If Sonarr/Radarr/Prowlarr crash on startup, move the stack to <code>C:\</code>.
         </span>
       </div>
     );
@@ -206,7 +204,7 @@ function WorkdirBanner({ probe, probing }: BannerProps) {
     <div className={`${styles.banner} ${styles.bannerOk}`}>
       <CheckCircle size={14} />
       <span>
-        Sistema de archivos compatible{probe.fsType ? ` (${probe.fsType})` : ''}.
+        Filesystem looks good{probe.fsType ? ` (${probe.fsType})` : ''}.
       </span>
     </div>
   );

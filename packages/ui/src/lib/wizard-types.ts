@@ -150,8 +150,12 @@ export function draftToDeployConfig(draft: WizardDraft): DeployConfig {
       },
       qbittorrent: { password: draft.services.qbitPassword },
       pyload: {
-        username: draft.services.pyloadUsername,
-        password: draft.services.pyloadPassword,
+        // PyLoad-ng's image hardcodes the credentials to pyload:pyload and
+        // exposes no API to change them at deploy time, so the wizard no
+        // longer collects pyload input. We send the defaults verbatim — the
+        // env generator hardcodes the same values regardless.
+        username: 'pyload',
+        password: 'pyload',
       },
       bazarr: { enabled: draft.services.bazarrEnabled },
     },

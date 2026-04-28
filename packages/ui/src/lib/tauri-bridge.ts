@@ -199,6 +199,20 @@ export async function openExternal(url: string): Promise<void> {
   await open(url);
 }
 
+/**
+ * Open a folder (or file) in the OS file manager. Use this instead of
+ * `openExternal('file://…')` for local paths — Tauri's shell plugin doesn't
+ * handle Windows backslashes / malformed file URIs well.
+ */
+export async function openPath(path: string): Promise<void> {
+  if (!inTauri()) {
+    // Browser dev: best-effort, just log.
+    console.warn('[openPath] no-op outside Tauri:', path);
+    return;
+  }
+  await invoke<void>('open_path', { path });
+}
+
 // ── Native confirmation dialog ────────────────────────────────────────────────
 
 export async function confirmDialog(message: string, title = 'Confirmar'): Promise<boolean> {

@@ -10,6 +10,7 @@ interface GlassInputProps {
   disabled?: boolean;
   autoFocus?: boolean;
   className?: string;
+  type?: 'text' | 'password' | 'email' | 'number';
 }
 
 export function GlassInput({
@@ -22,12 +23,14 @@ export function GlassInput({
   disabled = false,
   autoFocus = false,
   className,
+  type = 'text',
 }: GlassInputProps) {
   return (
     <div className={[styles.wrapper, className].filter(Boolean).join(' ')}>
       {iconLeft && <span className={styles.icon}>{iconLeft}</span>}
       <input
         className={styles.input}
+        type={type}
         value={value}
         onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}

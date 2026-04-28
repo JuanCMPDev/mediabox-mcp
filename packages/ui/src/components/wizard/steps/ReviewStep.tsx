@@ -9,53 +9,53 @@ export function ReviewStep({ draft }: Props) {
   return (
     <>
       <p className="wizard-hint" style={{ margin: 0 }}>
-        Revisá la configuración antes de iniciar el deploy. Este paso descarga las imágenes Docker,
-        las inicia, espera a que cada servicio esté listo, y configura las API keys entre ellos.
-        Tarda entre 3 y 8 minutos según tu conexión.
+        Review your settings before deploying. The deploy pulls Docker images, starts each service,
+        waits for them to become healthy, and wires up the API keys between them. Takes 3–8 minutes
+        depending on your connection.
       </p>
 
       <div className={styles.summary}>
-        <Section title="Despliegue">
-          <Row k="Modo"            v={draft.deployment.mode} />
-          <Row k="Stack en"        v={draft.workDir} mono />
-          <Row k="Tag de imagen"   v={draft.deployment.imageTag} />
+        <Section title="Deployment">
+          <Row k="Mode"        v={draft.deployment.mode} />
+          <Row k="Stack at"    v={draft.workDir} mono />
+          <Row k="Image tag"   v={draft.deployment.imageTag} />
           {draft.deployment.mode !== 'local' && (
-            <Row k="Dominio" v={draft.deployment.baseDomain} />
+            <Row k="Domain" v={draft.deployment.baseDomain} />
           )}
         </Section>
 
-        <Section title="Sistema">
-          <Row k="Zona horaria"  v={draft.system.timezone} />
-          <Row k="UID/GID"       v={`${draft.system.puid}:${draft.system.pgid}`} />
+        <Section title="System">
+          <Row k="Timezone" v={draft.system.timezone} />
+          <Row k="UID/GID"  v={`${draft.system.puid}:${draft.system.pgid}`} />
         </Section>
 
-        <Section title="Rutas de medios">
-          <Row k="Películas" v={draft.paths.movies} mono />
-          <Row k="Series"    v={draft.paths.tv}     mono />
-          <Row k="Anime"     v={draft.paths.anime}  mono />
-          <Row k="Música"    v={draft.paths.music}  mono />
+        <Section title="Media paths">
+          <Row k="Movies" v={draft.paths.movies} mono />
+          <Row k="TV"     v={draft.paths.tv}     mono />
+          <Row k="Anime"  v={draft.paths.anime}  mono />
+          <Row k="Music"  v={draft.paths.music}  mono />
         </Section>
 
-        <Section title="Servicios">
+        <Section title="Services">
           <Row k="Jellyfin admin" v={draft.services.jellyfinAdminUsername} />
-          <Row k="qBittorrent"    v={draft.services.qbitPassword.length > 0 ? '••• definido' : 'sin contraseña'} />
-          <Row k="PyLoad"         v={draft.services.pyloadUsername} />
-          <Row k="Bazarr"         v={draft.services.bazarrEnabled ? 'activado' : 'desactivado'} />
+          <Row k="qBittorrent"    v={draft.services.qbitPassword.length > 0 ? 'admin / ••• set' : 'no password'} />
+          <Row k="PyLoad"         v="pyload / pyload (default)" />
+          <Row k="Bazarr"         v={draft.services.bazarrEnabled ? 'enabled' : 'disabled'} />
         </Section>
 
         <Section title="AI">
-          <Row k="Proveedor" v={draft.ai.provider === 'none' ? 'ninguno' : draft.ai.provider} />
+          <Row k="Provider" v={draft.ai.provider === 'none' ? 'none' : draft.ai.provider} />
           {draft.ai.provider !== 'none' && (
-            <Row k="API key"  v={draft.ai.apiKey ? `••• ${draft.ai.apiKey.slice(-4)}` : 'falta'} mono />
+            <Row k="API key" v={draft.ai.apiKey ? `••• ${draft.ai.apiKey.slice(-4)}` : 'missing'} mono />
           )}
         </Section>
 
         <Section title="Telegram">
-          <Row k="Estado" v={draft.telegram.enabled ? 'activo' : 'desactivado'} />
+          <Row k="Status" v={draft.telegram.enabled ? 'enabled' : 'disabled'} />
           {draft.telegram.enabled && (
             <>
-              <Row k="Token" v={draft.telegram.botToken ? `••• ${draft.telegram.botToken.slice(-4)}` : 'falta'} mono />
-              <Row k="Usuarios" v={draft.telegram.allowedUserIds || 'cualquiera'} />
+              <Row k="Token" v={draft.telegram.botToken ? `••• ${draft.telegram.botToken.slice(-4)}` : 'missing'} mono />
+              <Row k="Users" v={draft.telegram.allowedUserIds || 'anyone'} />
             </>
           )}
         </Section>

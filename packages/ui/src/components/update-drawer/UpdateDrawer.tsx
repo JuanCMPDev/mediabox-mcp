@@ -33,7 +33,7 @@ export function UpdateDrawer({ onClose, onApplied }: Props) {
     try {
       await api.setupApplyUpdates();
       setApplied(true);
-      toast('Containers actualizados', 'success');
+      toast('Containers updated', 'success');
       onApplied?.();
     } catch (err) {
       toast(`Error: ${err instanceof Error ? err.message : String(err)}`, 'error');
@@ -49,13 +49,13 @@ export function UpdateDrawer({ onClose, onApplied }: Props) {
     <>
       <div className={styles.backdrop} onClick={onClose} />
 
-      <aside className={styles.drawer} role="dialog" aria-label="Actualizar imágenes Docker">
+      <aside className={styles.drawer} role="dialog" aria-label="Update Docker images">
         <div className={styles.header}>
           <div className={styles.headerTitle}>
             <StatusIcon status={displayStatus} />
-            <span className={styles.title}>Actualizar imágenes</span>
+            <span className={styles.title}>Update images</span>
           </div>
-          <button className={styles.iconBtn} onClick={onClose} title="Cerrar">
+          <button className={styles.iconBtn} onClick={onClose} title="Close">
             <X size={16} />
           </button>
         </div>
@@ -64,7 +64,7 @@ export function UpdateDrawer({ onClose, onApplied }: Props) {
           {status === 'pulling' && lines.length === 0 && (
             <div className={styles.centeredMsg}>
               <Loader size={16} className={styles.spin} />
-              Ejecutando docker compose pull…
+              Pulling latest images…
             </div>
           )}
 
@@ -75,21 +75,21 @@ export function UpdateDrawer({ onClose, onApplied }: Props) {
           {status === 'error' && (
             <div className={styles.errorMsg}>
               <AlertCircle size={13} />
-              {error ?? 'Error desconocido'}
+              {error ?? 'Unknown error'}
             </div>
           )}
 
           {status === 'done' && !applied && (
             <div className={styles.doneMsg}>
               <CheckCircle size={13} />
-              Pull completado. Presioná "Aplicar" para reiniciar los containers con las nuevas imágenes.
+              Pull complete. Click &quot;Apply&quot; to restart containers with the new images.
             </div>
           )}
 
           {applied && (
             <div className={styles.doneMsg}>
               <CheckCircle size={13} />
-              Containers reiniciados con las nuevas imágenes.
+              Containers restarted with new images.
             </div>
           )}
         </div>
@@ -98,7 +98,7 @@ export function UpdateDrawer({ onClose, onApplied }: Props) {
           {status === 'error' && (
             <button className={styles.retryBtn} onClick={() => void start()}>
               <RefreshCw size={12} />
-              Reintentar
+              Retry
             </button>
           )}
           {status === 'done' && !applied && (
@@ -111,11 +111,11 @@ export function UpdateDrawer({ onClose, onApplied }: Props) {
                 ? <Loader size={12} className={styles.spin} />
                 : <Rocket size={12} />
               }
-              {applying ? 'Aplicando…' : 'Aplicar actualizaciones'}
+              {applying ? 'Applying…' : 'Apply updates'}
             </button>
           )}
           <span className={styles.lineCount}>
-            {lines.length.toLocaleString('es')} líneas
+            {lines.length.toLocaleString('en')} lines
           </span>
         </div>
       </aside>

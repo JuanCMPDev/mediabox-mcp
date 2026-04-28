@@ -35,7 +35,7 @@ export function StepShell({
   onBack,
   onForward,
   forwardLabel,
-  backLabel = 'Atrás',
+  backLabel = 'Back',
   hideNav = false,
 }: StepShellProps) {
   const progressPct = ((stepIndex + 1) / totalSteps) * 100;
@@ -50,7 +50,7 @@ export function StepShell({
               <div className={styles.progressFill} style={{ width: `${progressPct}%` }} />
             </div>
             <span className={styles.progressLabel}>
-              Paso {stepIndex + 1} de {totalSteps}
+              Step {stepIndex + 1} of {totalSteps}
             </span>
           </div>
           <h1 className={styles.title}>{title}</h1>
@@ -74,7 +74,7 @@ export function StepShell({
               onClick={onForward}
               disabled={!canGoForward}
             >
-              {forwardLabel ?? (isLast ? 'Finalizar' : 'Continuar')}
+              {forwardLabel ?? (isLast ? 'Finish' : 'Continue')}
               {!isLast && <ChevronRight size={16} />}
             </GlassButton>
           </footer>

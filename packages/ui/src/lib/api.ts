@@ -144,4 +144,7 @@ export const api = {
       5 * 60_000,
     );
   },
+  setupProwlarrIndexers() {
+    return get<{ count: number; url: string }>('/api/setup/prowlarr/indexers');
+  },
 };
