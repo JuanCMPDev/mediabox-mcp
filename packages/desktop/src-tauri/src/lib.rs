@@ -33,8 +33,45 @@ fn focus_main_window(handle: &AppHandle) {
     }
 }
 
+/// macOS apps launched from Finder inherit a minimal PATH
+/// (`/usr/bin:/bin:/usr/sbin:/sbin`), missing the directories where Homebrew
+/// and Docker Desktop install their CLIs. Linux desktop launchers can have a
+/// similar gap depending on how the user logged in. Augment PATH at process
+/// start so:
+///   - `Command::new("docker")` from the Rust pre-flight check finds it
+///   - The bun-compiled sidecar (which inherits this process's environment)
+///     can shell out to `docker compose up`, `docker compose pull`, etc.
+/// Windows inherits PATH from explorer.exe correctly — Docker Desktop
+/// installs into the system PATH — so we skip it there.
+fn augment_path() {
+    let extras: &[&str] = if cfg!(target_os = "macos") {
+        &["/usr/local/bin", "/opt/homebrew/bin"]
+    } else if cfg!(target_os = "linux") {
+        &["/usr/local/bin", "/snap/bin"]
+    } else {
+        return;
+    };
+
+    let current = std::env::var("PATH").unwrap_or_default();
+    let mut joined = current.clone();
+    for &p in extras {
+        // Cheap contains check is fine — PATH stays small.
+        if !current.split(':').any(|x| x == p) {
+            if !joined.is_empty() {
+                joined.push(':');
+            }
+            joined.push_str(p);
+        }
+    }
+    if joined != current {
+        std::env::set_var("PATH", joined);
+    }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    augment_path();
+
     let shared: SharedRuntimeConfig = Arc::new(RwLock::new(state::RuntimeConfig::default()));
 
     let app = tauri::Builder::default()
