@@ -1,0 +1,117 @@
+name: Release
+
+# Push a tag like `v2.1.0-beta.0` to trigger a multi-platform Desktop App
+# release. Each runner builds its own native sidecar (`bun build --compile`)
+# and Tauri bundle, then `tauri-action` attaches the artifacts to the GitHub
+# Release for the tag (creating it on the first runner that finishes).
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build (${{ matrix.platform }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: macos-latest      # Apple Silicon (aarch64)
+            target: aarch64-apple-darwin
+          - platform: macos-13          # Intel (x86_64)
+            target: x86_64-apple-darwin
+          - platform: ubuntu-22.04      # x86_64 Linux (.AppImage + .deb)
+            target: x86_64-unknown-linux-gnu
+          - platform: windows-latest    # x86_64 Windows (.msi + .exe)
+            target: x86_64-pc-windows-msvc
+
+    runs-on: ${{ matrix.platform }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Linux build dependencies
+        if: matrix.platform == 'ubuntu-22.04'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            libappindicator3-dev \
+            librsvg2-dev \
+            patchelf \
+            libssl-dev \
+            build-essential
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      # Cache the Cargo build cache scoped per OS to keep Tauri rebuilds fast.
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: packages/desktop/src-tauri -> target
+
+      - name: Install npm workspaces
+        run: npm ci
+
+      # ── Build the workspace dependency graph in order ────────────────────
+      # @mediabox/contracts → chat-core / core → mcp-server → ui
+      # The sidecar bundles `mcp-server`, so it has to compile first.
+      - name: Build @mediabox/contracts
+        run: npm run build -w @mediabox/contracts
+
+      - name: Build @mediabox/chat-core
+        run: npm run build -w @mediabox/chat-core
+
+      - name: Build @mediabox/core
+        run: npm run build -w @mediabox/core
+
+      - name: Build mediabox-mcp (sidecar source)
+        run: npm run build -w mediabox-mcp
+
+      - name: Build @mediabox/ui (frontend dist)
+        run: npm run build -w @mediabox/ui
+
+      # Compiles `mcp-server` into a single executable named
+      # `mediabox-mcp-<host-triple>(.exe)` under packages/desktop/src-tauri/binaries/
+      # — exactly where Tauri looks for it via tauri.conf.json#bundle.externalBin.
+      - name: Build sidecar (bun --compile)
+        run: npm run sidecar:build
+
+      - name: Build & publish Tauri release
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          projectPath: packages/desktop
+          tagName: ${{ github.ref_name }}
+          releaseName: 'Mediabox OS ${{ github.ref_name }}'
+          releaseBody: |
+            Self-hosted media stack with AI-powered management.
+
+            ### Install
+            - **Windows:** download the `.msi` or `-setup.exe`
+            - **macOS (Apple Silicon):** download the `aarch64.dmg`
+            - **macOS (Intel):** download the `x64.dmg`
+            - **Linux:** `.AppImage` (portable) or `.deb` (Debian/Ubuntu)
+
+            > Beta builds are unsigned. Windows SmartScreen and macOS Gatekeeper
+            > will warn on first launch — open via right-click → Open on macOS,
+            > or "More info → Run anyway" on Windows.
+
+            See the [docs](https://github.com/JuanCMPDev/mediabox-mcp/blob/master/docs/README.en.md)
+            for setup, or run `npx create-mediabox` for a headless install.
+          releaseDraft: false
+          prerelease: true
