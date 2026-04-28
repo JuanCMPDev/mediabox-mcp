@@ -11,18 +11,20 @@
   },
   "type": "module",
   "engines": {
-    "node": ">=20"
+    "node": ">=22"
   },
   "scripts": {
     "build": "tsc",
-    "dev":   "tsx watch --env-file=.env src/index.ts",
+    "dev": "tsx watch --env-file=.env src/index.ts",
     "start": "node --env-file=.env dist/index.js"
   },
   "dependencies": {
     "@mediabox/chat-core": "*",
+    "@mediabox/core": "*",
     "@modelcontextprotocol/sdk": "^1.12.1",
     "cors": "^2.8.6",
     "express": "^5.1.0",
+    "i18next": "^26.0.8",
     "zod": "^3.24.4"
   },
   "devDependencies": {

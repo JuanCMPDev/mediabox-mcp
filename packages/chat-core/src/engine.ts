@@ -15,13 +15,31 @@ import type { LLMStreamChunk } from './providers/types.js';
 import { selectTools }      from './tool-selector.js';
 import { executeVirtualTool } from './tool-router.js';
 import { trimHistory }      from './history.js';
-import { SYSTEM_PROMPT }    from './prompt.js';
+import { buildSystemPrompt } from './prompt.js';
 
 const MAX_ITERATIONS = 20;
 const TOOL_TIMEOUT_MS = 60_000;
 
+/** Localised fallback strings for responses produced by the engine itself
+ *  (not by the LLM). Kept tiny so we don't grow another full i18n bundle. */
+interface EngineFallbacks {
+  empty:     string;
+  iterLimit: string;
+}
+
+const FALLBACKS: Record<'en' | 'es', EngineFallbacks> = {
+  en: { empty: '(no response)',  iterLimit: 'Iteration limit reached. Start a new conversation.' },
+  es: { empty: '(sin respuesta)', iterLimit: 'Límite de iteraciones alcanzado. Inicia una nueva conversación.' },
+};
+
+function pickFallback(locale: string | undefined): EngineFallbacks {
+  return locale === 'es' ? FALLBACKS.es : FALLBACKS.en;
+}
+
 export async function* streamChat(opts: StreamChatOptions): AsyncGenerator<ChatEvent> {
-  const { message, conversationId, provider, mcpCall, historyStore } = opts;
+  const { message, conversationId, provider, mcpCall, historyStore, locale } = opts;
+  const fallbacks   = pickFallback(locale);
+  const systemPrompt = buildSystemPrompt(locale);
 
   yield { type: 'conversation', id: conversationId };
 
@@ -36,7 +54,7 @@ export async function* streamChat(opts: StreamChatOptions): AsyncGenerator<ChatE
     const accCalls: Array<{ id: string; name: string; args: Record<string, unknown> }> = [];
 
     const llmStream = provider.stream({
-      systemPrompt: SYSTEM_PROMPT,
+      systemPrompt,
       messages:     history,
       tools:        selectedTools,
     }) as AsyncGenerator<LLMStreamChunk>;
@@ -83,14 +101,14 @@ export async function* streamChat(opts: StreamChatOptions): AsyncGenerator<ChatE
     }
 
     // No tool calls — this is the final natural-language response
-    const finalText = accText || '(sin respuesta)';
+    const finalText = accText || fallbacks.empty;
     history.push({ role: 'assistant', content: finalText });
     historyStore.set(conversationId, trimHistory(history));
     yield { type: 'done', fullText: finalText };
     return;
   }
 
-  yield { type: 'error', message: 'Límite de iteraciones alcanzado. Inicia una nueva conversación.' };
+  yield { type: 'error', message: fallbacks.iterLimit };
 }
 
 function raceTimeout<T>(p: Promise<T>, ms: number, msg: string): Promise<T> {
@@ -106,11 +124,12 @@ function raceTimeout<T>(p: Promise<T>, ms: number, msg: string): Promise<T> {
  * For clients that can't render progressive output (e.g. Telegram bot).
  */
 export async function runChat(opts: StreamChatOptions): Promise<string> {
+  const fallbacks = pickFallback(opts.locale);
   let accumulated = '';
   for await (const evt of streamChat(opts)) {
     if (evt.type === 'token') accumulated += evt.text;
     if (evt.type === 'done')  return evt.fullText;
     if (evt.type === 'error') return `⚠ ${evt.message}`;
   }
-  return accumulated || '(sin respuesta)';
+  return accumulated || fallbacks.empty;
 }

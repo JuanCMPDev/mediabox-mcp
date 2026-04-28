@@ -1,0 +1,21 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "Default capabilities for the Mediabox desktop shell. Custom #[tauri::command] handlers (get_runtime_config, restart_sidecar, wizard::*) are allowed by default; only plugin commands and window operations require explicit permissions here.",
+  "windows": ["main"],
+  "permissions": [
+    "core:default",
+    "core:window:allow-close",
+    "core:window:allow-minimize",
+    "core:window:allow-toggle-maximize",
+    "core:window:allow-unmaximize",
+    "core:window:allow-is-maximized",
+    "core:window:allow-start-dragging",
+    "core:webview:allow-internal-toggle-devtools",
+    "shell:default",
+    "shell:allow-open",
+    "dialog:default",
+    "fs:default",
+    "process:default"
+  ]
+}

@@ -1,0 +1,184 @@
+/* ── Backdrop ─────────────────────────────────────────────────────────────── */
+.backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0 0 0 / 0.4);
+  z-index: 200;
+  animation: fadeIn 150ms ease;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+/* ── Drawer panel ─────────────────────────────────────────────────────────── */
+.drawer {
+  position:    fixed;
+  top:         0;
+  right:       0;
+  bottom:      0;
+  width:       min(560px, 100vw);
+  z-index:     201;
+  display:     flex;
+  flex-direction: column;
+  background:  var(--glass-bg, rgba(15 17 26 / 0.97));
+  border-left: 1px solid var(--glass-border, rgba(255 255 255 / 0.08));
+  backdrop-filter: blur(24px);
+  animation:   slideIn 180ms cubic-bezier(0.25, 0.46, 0.45, 0.94);
+}
+
+@keyframes slideIn {
+  from { transform: translateX(100%); }
+  to   { transform: translateX(0); }
+}
+
+/* ── Header ───────────────────────────────────────────────────────────────── */
+.header {
+  display:     flex;
+  align-items: center;
+  justify-content: space-between;
+  padding:     14px 16px 12px;
+  border-bottom: 1px solid var(--glass-border, rgba(255 255 255 / 0.07));
+  flex-shrink: 0;
+}
+
+.headerTitle {
+  display:     flex;
+  align-items: center;
+  gap:         8px;
+}
+
+.title {
+  font-size:   var(--fs-base, 0.9rem);
+  font-weight: 600;
+  color:       var(--text-primary, #e2e8f0);
+}
+
+/* ── Log area ─────────────────────────────────────────────────────────────── */
+.logArea {
+  flex:        1;
+  overflow-y:  auto;
+  overflow-x:  hidden;
+  padding:     8px 14px;
+  font-family: var(--font-mono, "JetBrains Mono", "Fira Code", monospace);
+  font-size:   11.5px;
+  line-height: 1.55;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255 255 255 / 0.1) transparent;
+}
+
+.logLine {
+  color:      var(--text-secondary, #94a3b8);
+  word-break: break-all;
+  white-space: pre-wrap;
+  min-height: 18px;
+  padding:    1px 0;
+}
+
+.logLine:hover { background: rgba(255 255 255 / 0.03); }
+
+.centeredMsg {
+  display:     flex;
+  align-items: center;
+  justify-content: center;
+  gap:         8px;
+  padding:     32px 16px;
+  color:       var(--text-muted, #64748b);
+  font-size:   var(--fs-sm, 0.8rem);
+  font-family: inherit;
+}
+
+.doneMsg {
+  display:     flex;
+  align-items: center;
+  gap:         6px;
+  padding:     10px 0 2px;
+  color:       #4ade80;
+  font-size:   var(--fs-xs, 0.72rem);
+  border-top:  1px solid rgba(74 222 128 / 0.2);
+  margin-top:  8px;
+}
+
+.errorMsg {
+  display:     flex;
+  align-items: center;
+  gap:         6px;
+  padding:     10px 0 2px;
+  color:       #f87171;
+  font-size:   var(--fs-xs, 0.72rem);
+  border-top:  1px solid rgba(248 113 113 / 0.2);
+  margin-top:  8px;
+}
+
+/* ── Footer ───────────────────────────────────────────────────────────────── */
+.footer {
+  display:     flex;
+  align-items: center;
+  gap:         8px;
+  padding:     8px 14px;
+  border-top:  1px solid var(--glass-border, rgba(255 255 255 / 0.07));
+  flex-shrink: 0;
+  font-size:   var(--fs-xs, 0.72rem);
+  color:       var(--text-muted, #64748b);
+}
+
+.lineCount { margin-left: auto; }
+
+.applyBtn {
+  display:      flex;
+  align-items:  center;
+  gap:          5px;
+  background:   rgba(129 140 248 / 0.2);
+  border:       1px solid rgba(129 140 248 / 0.4);
+  border-radius: 6px;
+  color:        #a5b4fc;
+  font-size:    var(--fs-xs, 0.72rem);
+  font-weight:  500;
+  padding:      4px 12px;
+  cursor:       pointer;
+  transition:   background 150ms;
+}
+
+.applyBtn:hover   { background: rgba(129 140 248 / 0.32); }
+.applyBtn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.retryBtn {
+  display:      flex;
+  align-items:  center;
+  gap:          5px;
+  background:   rgba(255 255 255 / 0.06);
+  border:       1px solid rgba(255 255 255 / 0.12);
+  border-radius: 6px;
+  color:        var(--text-secondary, #94a3b8);
+  font-size:    var(--fs-xs, 0.72rem);
+  padding:      4px 10px;
+  cursor:       pointer;
+  transition:   background 150ms;
+}
+
+.retryBtn:hover { background: rgba(255 255 255 / 0.1); }
+
+/* ── Icon button ──────────────────────────────────────────────────────────── */
+.iconBtn {
+  display:     flex;
+  align-items: center;
+  justify-content: center;
+  width:       28px;
+  height:      28px;
+  border:      none;
+  border-radius: 6px;
+  background:  transparent;
+  color:       var(--text-muted, #64748b);
+  cursor:      pointer;
+  transition:  background 150ms, color 150ms;
+  flex-shrink: 0;
+}
+
+.iconBtn:hover {
+  background: rgba(255 255 255 / 0.07);
+  color:      var(--text-secondary, #94a3b8);
+}
+
+@keyframes spin { to { transform: rotate(360deg); } }
+.spin { animation: spin 1s linear infinite; }

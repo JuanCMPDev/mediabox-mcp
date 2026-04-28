@@ -11,7 +11,12 @@ import './styles/reset.css';
 import './styles/theme.css';
 import './styles/globals.css';
 
+// Initialise i18next before any component renders so useTranslation() never
+// races with the bundle load (PR 3.4d).
+import '@/lib/i18n';
+
 import App from './App';
+import { BootGate } from '@/components/layout/BootGate';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -27,8 +32,10 @@ const queryClient = new QueryClient({
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
-    <QueryClientProvider client={queryClient}>
-      <App />
-    </QueryClientProvider>
+    <BootGate>
+      <QueryClientProvider client={queryClient}>
+        <App />
+      </QueryClientProvider>
+    </BootGate>
   </React.StrictMode>
 );

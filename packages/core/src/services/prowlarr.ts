@@ -109,28 +109,60 @@ async function addApplication(
   }
 }
 
-/** Configure FlareSolverr as an indexer proxy in Prowlarr. */
+/** Configure FlareSolverr as an indexer proxy in Prowlarr.
+ *
+ * Prowlarr's indexer proxies are inert without a tag — the proxy only routes
+ * traffic for indexers that carry a matching tag. So we ensure a `flaresolverr`
+ * tag exists, attach it to the proxy, and tell the user to apply that same tag
+ * to any Cloudflare-protected indexer they add later. */
 export async function configureFlareSolverr(
   input: ProwlarrInput,
   onEvent: EventHandler,
 ): Promise<void> {
   const { baseUrl, apiKey } = input;
+  const TAG_LABEL = "flaresolverr";
+
+  // 1. Ensure the `flaresolverr` tag exists; reuse if it does.
+  const tagId = await ensureTag(baseUrl, apiKey, TAG_LABEL);
+
+  // 2. Skip the proxy creation if it already exists, but make sure the tag is
+  //    attached — older deploys created the proxy without one.
   const existingRes = await fetchWithRetry(`${baseUrl}/api/v1/indexerProxy`, {
     headers: headers(apiKey),
   });
   const existing = (await existingRes.json()) as Array<{
+    id: number;
     name: string;
     implementation: string;
+    tags: number[];
+    [key: string]: any;
   }>;
-  if (existing.some((p) => p.implementation === "FlareSolverr")) {
-    onEvent({
-      kind: "log",
-      level: "info",
-      message: "Prowlarr: FlareSolverr proxy already configured",
-    });
+  const existingProxy = existing.find((p) => p.implementation === "FlareSolverr");
+  if (existingProxy) {
+    if (!existingProxy.tags.includes(tagId)) {
+      // Attach the tag so the proxy actually applies to tagged indexers.
+      const updated = { ...existingProxy, tags: [...existingProxy.tags, tagId] };
+      await fetchWithRetry(`${baseUrl}/api/v1/indexerProxy/${existingProxy.id}`, {
+        method: "PUT",
+        headers: headers(apiKey),
+        body: JSON.stringify(updated),
+      });
+      onEvent({
+        kind: "success",
+        phase: "configure:flaresolverr",
+        message: `Prowlarr: attached "${TAG_LABEL}" tag to existing FlareSolverr proxy`,
+      });
+    } else {
+      onEvent({
+        kind: "log",
+        level: "info",
+        message: "Prowlarr: FlareSolverr proxy already configured",
+      });
+    }
     return;
   }
 
+  // 3. Create the proxy from the schema, populating the host and the tag.
   const schemaRes = await fetchWithRetry(`${baseUrl}/api/v1/indexerProxy/schema`, {
     headers: headers(apiKey),
   });
@@ -146,7 +178,7 @@ export async function configureFlareSolverr(
     if (field.name === "host") field.value = "http://flaresolverr:8191/";
   }
 
-  const body = { ...fsSchema, name: "FlareSolverr" };
+  const body = { ...fsSchema, name: "FlareSolverr", tags: [tagId] };
   const res = await fetchWithRetry(`${baseUrl}/api/v1/indexerProxy`, {
     method: "POST",
     headers: headers(apiKey),
@@ -160,6 +192,32 @@ export async function configureFlareSolverr(
   onEvent({
     kind: "success",
     phase: "configure:flaresolverr",
-    message: "Prowlarr: FlareSolverr proxy configured",
+    message: `Prowlarr: FlareSolverr proxy configured with "${TAG_LABEL}" tag — apply it to any Cloudflare-protected indexer.`,
   });
+}
+
+/** Find a Prowlarr tag by label, creating it if it doesn't exist. */
+async function ensureTag(
+  baseUrl: string,
+  apiKey: string,
+  label: string,
+): Promise<number> {
+  const listRes = await fetchWithRetry(`${baseUrl}/api/v1/tag`, {
+    headers: headers(apiKey),
+  });
+  const tags = (await listRes.json()) as Array<{ id: number; label: string }>;
+  const existing = tags.find((t) => t.label === label);
+  if (existing) return existing.id;
+
+  const createRes = await fetchWithRetry(`${baseUrl}/api/v1/tag`, {
+    method: "POST",
+    headers: headers(apiKey),
+    body: JSON.stringify({ label }),
+  });
+  if (!createRes.ok) {
+    const text = await createRes.text();
+    throw new Error(`Prowlarr: Failed to create tag "${label}": ${createRes.status} ${text}`);
+  }
+  const created = (await createRes.json()) as { id: number };
+  return created.id;
 }

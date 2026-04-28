@@ -29,11 +29,14 @@ function buildTelegramEnv(config: DeployConfig): string[] {
   return env;
 }
 
-/** Environment array for LinuxServer containers */
+/** Environment array for LinuxServer containers — emitted as `${VAR}`
+ * references with the deploy-time value as a default, so PATCH /env can
+ * rewrite PUID/PGID/TZ in `.env` and a `docker compose up -d --force-recreate`
+ * picks them up without a wizard re-run. */
 function lsEnv(config: DeployConfig): string[] {
   return [
-    `PUID=${config.system.puid}`,
-    `PGID=${config.system.pgid}`,
+    `PUID=\${PUID:-${config.system.puid}}`,
+    `PGID=\${PGID:-${config.system.pgid}}`,
     "TZ=${TZ:-UTC}",
   ];
 }
@@ -45,10 +48,19 @@ function port(mapping: string, bindLocal: boolean): string {
 
 export function generateDockerCompose(config: DeployConfig): string {
   const { deployment, paths: mediaPaths, services: svc } = config;
-  const mov = ensureRelative(mediaPaths.movies);
-  const tv = ensureRelative(mediaPaths.tv);
+  // Media paths are emitted as `${MOVIES_PATH}` etc. references with the
+  // deploy-time value as a default, so PATCH /env in PR 3.4a can rewrite
+  // them in `.env` and a recreate picks them up. ensureRelative() is only
+  // needed for the embedded default — at runtime Docker Compose reads the
+  // current `.env` and substitutes whatever's there.
+  const mov   = ensureRelative(mediaPaths.movies);
+  const tv    = ensureRelative(mediaPaths.tv);
   const anime = ensureRelative(mediaPaths.anime);
   const music = ensureRelative(mediaPaths.music);
+  const movRef   = "${MOVIES_PATH:-" + mov + "}";
+  const tvRef    = "${TV_PATH:-"     + tv + "}";
+  const animeRef = "${ANIME_PATH:-"  + anime + "}";
+  const musicRef = "${MUSIC_PATH:-"  + music + "}";
   const bindLocal = deployment.mode === "vps" || deployment.mode === "tunnel";
   const ghcrMcpImage = `${GHCR_MCP_IMAGE_BASE}:\${IMAGE_TAG:-${deployment.imageTag}}`;
   const ghcrTelegramImage = `${GHCR_TELEGRAM_IMAGE_BASE}:\${IMAGE_TAG:-${deployment.imageTag}}`;
@@ -67,10 +79,10 @@ export function generateDockerCompose(config: DeployConfig): string {
     environment: lsEnv(config),
     volumes: [
       "./config/jellyfin:/config",
-      `${mov}:/data/movies`,
-      `${tv}:/data/tv`,
-      `${music}:/data/music`,
-      `${anime}:/data/anime`,
+      `${movRef}:/data/movies`,
+      `${tvRef}:/data/tv`,
+      `${musicRef}:/data/music`,
+      `${animeRef}:/data/anime`,
     ],
     restart: "unless-stopped",
     deploy: { resources: { limits: { memory: "4G" } } },
@@ -101,10 +113,10 @@ export function generateDockerCompose(config: DeployConfig): string {
       "QBIT_PASSWORD=${QBIT_PASSWORD}",
     ],
     volumes: [
-      `${mov}:/data/movies`,
-      `${tv}:/data/tv`,
-      `${music}:/data/music`,
-      `${anime}:/data/anime`,
+      `${movRef}:/data/movies`,
+      `${tvRef}:/data/tv`,
+      `${musicRef}:/data/music`,
+      `${animeRef}:/data/anime`,
       "./downloads:/downloads",
     ],
     restart: "unless-stopped",
@@ -183,7 +195,7 @@ export function generateDockerCompose(config: DeployConfig): string {
     networks: ["mediabox-net"],
     ports: [port("7878:7878", bindLocal)],
     environment: lsEnv(config),
-    volumes: [`./config/radarr:/config`, `${mov}:/movies`, "./downloads:/downloads"],
+    volumes: [`./config/radarr:/config`, `${movRef}:/movies`, "./downloads:/downloads"],
     restart: "unless-stopped",
     depends_on: ["qbittorrent", "prowlarr"],
   };
@@ -196,8 +208,8 @@ export function generateDockerCompose(config: DeployConfig): string {
     environment: lsEnv(config),
     volumes: [
       "./config/sonarr:/config",
-      `${tv}:/tv`,
-      `${anime}:/anime`,
+      `${tvRef}:/tv`,
+      `${animeRef}:/anime`,
       "./downloads:/downloads",
     ],
     restart: "unless-stopped",
@@ -212,7 +224,7 @@ export function generateDockerCompose(config: DeployConfig): string {
       networks: ["mediabox-net"],
       ports: [port("6767:6767", bindLocal)],
       environment: lsEnv(config),
-      volumes: [`./config/bazarr:/config`, `${mov}:/movies`, `${tv}:/tv`],
+      volumes: [`./config/bazarr:/config`, `${movRef}:/movies`, `${tvRef}:/tv`],
       restart: "unless-stopped",
     };
   }

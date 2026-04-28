@@ -16,5 +16,7 @@
   grid-area: main;
   position: relative;
   z-index: 1;
-  overflow: hidden;
+  overflow-y: auto;
+  overflow-x: hidden;
+  min-height: 0;
 }

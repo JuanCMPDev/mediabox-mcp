@@ -1,0 +1,245 @@
+{
+  "stepTitles": {
+    "language": "Idioma",
+    "preflight": "Pre-vuelo",
+    "deployment": "Despliegue",
+    "system": "Sistema",
+    "paths": "Rutas de medios",
+    "services": "Servicios",
+    "ai": "Asistente de IA",
+    "telegram": "Bot de Telegram",
+    "review": "Revisión",
+    "deploying": "Desplegando",
+    "prowlarr": "Configurar Prowlarr"
+  },
+  "stepSubtitles": {
+    "language": "Elige el idioma para el asistente y la aplicación. Puedes cambiarlo más tarde desde Configuración.",
+    "preflight": "Asegúrate de que Docker esté listo antes de comenzar.",
+    "deployment": "¿Cómo debe exponerse el stack y dónde residen los archivos de orquestación?",
+    "system": "Algunos parámetros del host que Docker necesita conocer.",
+    "paths": "Carpetas donde Sonarr y Radarr mantendrán tus medios organizados.",
+    "services": "Credenciales para la interfaz web de cada servicio.",
+    "ai": "Opcional: habilita el chat de IA en la aplicación y elige un proveedor de LLM.",
+    "telegram": "Opcional: conecta un bot de Telegram para usar la IA desde tu teléfono.",
+    "review": "Última oportunidad para revisar antes de iniciar el despliegue.",
+    "deploying": "Esto puede tomar unos minutos la primera vez.",
+    "prowlarr": "Añade al menos un indexador para que el stack pueda buscar contenido."
+  },
+  "buttons": {
+    "back": "Atrás",
+    "continue": "Continuar",
+    "finish": "Finalizar",
+    "startDeploy": "Iniciar despliegue"
+  },
+  "language": {
+    "intro": "Elige el idioma que usará Mediabox para el asistente y el resto de la aplicación.",
+    "options": {
+      "en": "English",
+      "es": "Español"
+    },
+    "hint": {
+      "en": "Todo el texto se traduce al inglés (predeterminado).",
+      "es": "Las traducciones aún están en proceso — cualquier falta se mostrará en inglés por ahora."
+    },
+    "footnote": "Puedes cambiar esto en cualquier momento desde Configuración → Preferencias."
+  },
+  "ai": {
+    "intro": "El asistente de IA responde preguntas, muestra el estado y ejecuta acciones. Omite este paso y configúralo más tarde desde Configuración si lo deseas.",
+    "providerLabel": "Proveedor de LLM",
+    "providers": {
+      "none": "Sin IA",
+      "openrouter": "OpenRouter",
+      "google": "Google AI"
+    },
+    "hints": {
+      "none": "Omite el asistente de IA por ahora. El soporte local de Ollama llegará en la fase 4.",
+      "openrouter": "Una clave, acceso a Claude, GPT-4 y más. Consigue una en openrouter.ai/keys.",
+      "google": "Gemini vía Google AI Studio. Opción más barata para prototipar.",
+      "openrouterModel": "Recomendado: <1>openai/gpt-4o</1> o <3>google/gemini-2.5-flash</3>.",
+      "googleModel": "Recomendado: <1>gemini-2.5-flash</1>. Déjalo en blanco para usar el predeterminado del SDK."
+    },
+    "apiKeyLabel": "Clave de API",
+    "modelLabel": "Modelo",
+    "googleModelLabel": "Modelo (opcional)"
+  },
+  "paths": {
+    "intro": "Rutas absolutas recomendadas en Linux; rutas relativas se resuelven contra la carpeta del stack. Las carpetas se crean en el primer despliegue si no existen.",
+    "movies": "Películas",
+    "tv": "Series",
+    "anime": "Anime",
+    "music": "Música"
+  },
+  "system": {
+    "timezoneLabel": "Zona horaria",
+    "timezoneHint": "Formato IANA (<1>Continente/Ciudad</1>). Autodetectado de tu navegador.",
+    "puidLabel": "PUID",
+    "puidHint": "ID de usuario con el que Docker escribe archivos.",
+    "pgidLabel": "PGID",
+    "pgidHint": "ID de grupo, generalmente el mismo que PUID.",
+    "idsHint": "En Linux, ejecuta <1>id -u</1> e <3>id -g</3> en una terminal para encontrar tus IDs. En Windows/macOS los predeterminados <5>1000:1000</5> casi siempre funcionan."
+  },
+  "telegram": {
+    "intro": "El bot de Telegram refleja el chat de IA de la aplicación en tu teléfono. Necesitarás un token de bot de <1>@BotFather</1> y un proveedor de IA configurado.",
+    "enableLabel": "Habilitar bot de Telegram",
+    "enableOptions": {
+      "off": "No, gracias",
+      "on": "Sí, habilitar"
+    },
+    "needsAi": "Vuelve y configura un proveedor de IA primero — el bot necesita uno para responder.",
+    "tokenLabel": "Token de bot",
+    "tokenHint": "Habla con <1>@BotFather</1> en Telegram y crea un nuevo bot con <3>/newbot</3>.",
+    "usersLabel": "IDs de usuario permitidos",
+    "usersHint": "Separados por comas. Déjalo en blanco para permitir a cualquiera. Encuentra tu ID vía <1>@userinfobot</1>."
+  },
+  "preflight": {
+    "intro": "Mediabox necesita Docker para ejecutar el stack. Revisión rápida primero.",
+    "dockerInstalled": "Docker instalado",
+    "daemonRunning": "Demonio de Docker en ejecución",
+    "startDesktop": "Iniciar Docker Desktop",
+    "composeAvailable": "plugin docker compose",
+    "cantContinue": "No se puede continuar todavía.",
+    "checkFailed": "Una comprobación falló. Verifica que Docker Desktop se esté ejecutando y reintenta.",
+    "installDocker": "Instalar Docker",
+    "retry": "Reintentar"
+  },
+  "prowlarr": {
+    "intro": "Sonarr y Radarr necesitan al menos un indexador en Prowlarr para buscar. Abre Prowlarr, añade cualquier indexador que te funcione, y podrás continuar.",
+    "openBtn": "Abrir Prowlarr",
+    "waiting": "Esperando a Prowlarr…",
+    "zeroIndexers": "<1>0 indexadores</1> · Abre Prowlarr y añade al menos uno.",
+    "ready": "<1>{{count}} indexador</1> configurado. Listo para continuar.",
+    "readyPlural": "<1>{{count}} indexadores</1> configurados. Listo para continuar.",
+    "tip": "Consejo: si un indexador está bloqueado por Cloudflare, etiquétalo <1>flaresolverr</1> — ya hemos conectado el proxy, y esa etiqueta enruta su tráfico a través de FlareSolverr automáticamente.",
+    "skipBtn": "Omitir — Lo haré más tarde"
+  },
+  "review": {
+    "intro": "Revisa tu configuración antes de desplegar. El despliegue descarga imágenes de Docker, inicia cada servicio, espera a que estén listos y conecta las claves de API entre ellos. Toma de 3 a 8 minutos dependiendo de tu conexión.",
+    "sections": {
+      "deployment": "Despliegue",
+      "system": "Sistema",
+      "mediaPaths": "Rutas de medios",
+      "services": "Servicios",
+      "ai": "IA",
+      "telegram": "Telegram"
+    },
+    "keys": {
+      "mode": "Modo",
+      "stackAt": "Stack en",
+      "imageTag": "Tag de imagen",
+      "domain": "Dominio",
+      "timezone": "Zona horaria",
+      "uidGid": "UID/GID",
+      "jellyfinAdmin": "Admin de Jellyfin",
+      "qbit": "qBittorrent",
+      "pyload": "PyLoad",
+      "bazarr": "Bazarr",
+      "provider": "Proveedor",
+      "apiKey": "Clave de API",
+      "status": "Estado",
+      "token": "Token",
+      "users": "Usuarios"
+    },
+    "values": {
+      "qbitSet": "admin / ••• fijado",
+      "noPassword": "sin contraseña",
+      "pyloadDefault": "pyload / pyload (por defecto)",
+      "enabled": "habilitado",
+      "disabled": "deshabilitado",
+      "none": "ninguno",
+      "missing": "falta",
+      "anyone": "cualquiera",
+      "obscured": "••• {{last4}}"
+    }
+  },
+  "services": {
+    "intro": "Las contraseñas se guardan en el archivo <1>.env</1> del stack. Guárdalas en un gestor de contraseñas si quieres iniciar sesión en la interfaz web de cada servicio más tarde.",
+    "adminUsername": "Nombre de usuario admin",
+    "password": "Contraseña",
+    "qbitHint": "El nombre de usuario de la interfaz web es siempre <1>admin</1>. La contraseña que fijes aquí se aplica automáticamente.",
+    "pyloadHint": "PyLoad inicia con credenciales por defecto <1>pyload / pyload</1>. La imagen oficial no permite cambiarlas al desplegar — rótalas más tarde desde la interfaz web de PyLoad.",
+    "minChars": "Mín. 8 caracteres",
+    "hidePassword": "Ocultar contraseña",
+    "showPassword": "Mostrar contraseña",
+    "errorMinChars": "Al menos 8 caracteres."
+  },
+  "shell": {
+    "stepProgress": "Paso {{current}} de {{total}}"
+  },
+  "deployProgress": {
+    "phases": {
+      "configValidate": "Validando configuración",
+      "generateDirectories": "Creando carpetas",
+      "generateEnv": "Escribiendo .env",
+      "generateCompose": "Escribiendo docker-compose.yml",
+      "generateQbittorrent": "Pre-configurando qBittorrent",
+      "generateCaddy": "Escribiendo Caddyfile",
+      "deployPrepareImages": "Descargando imágenes de Docker",
+      "deployStart": "Iniciando contenedores",
+      "deployHealth": "Esperando a que los servicios estén listos",
+      "discoverApiKeys": "Descubriendo claves de API",
+      "configureJellyfin": "Configurando Jellyfin",
+      "configureSonarr": "Configurando Sonarr",
+      "configureRadarr": "Configurando Radarr",
+      "configureProwlarr": "Configurando Prowlarr",
+      "configureQbittorrent": "Conectando qBittorrent",
+      "configureFlaresolverr": "Conectando FlareSolverr",
+      "configureArrAuth": "Conectando autenticación de servicios",
+      "configureJellyfinLibraries": "Creando bibliotecas de Jellyfin",
+      "writeEnvUpdate": "Actualizando .env con claves descubiertas",
+      "deployRestart": "Reiniciando contenedores"
+    },
+    "status": {
+      "starting": "Preparando despliegue…",
+      "done": "¡Hecho! Stack desplegado.",
+      "failed": "Despliegue finalizado con errores",
+      "error": "Despliegue fallido"
+    },
+    "kinds": {
+      "start":    "inicio",
+      "progress": "progreso",
+      "success":  "éxito",
+      "warn":     "aviso",
+      "error":    "error",
+      "log":      "log"
+    },
+    "summary": {
+      "total": "Total: {{seconds}}s",
+      "warnings": "· {{count}} advertencia",
+      "warningsPlural": "· {{count}} advertencias"
+    },
+    "waiting": "Esperando…",
+    "btn": {
+      "cancel": "Cancelar",
+      "backToWizard": "Volver al asistente",
+      "retry": "Reintentar"
+    }
+  },
+  "deployment": {
+    "modeLabel": "Modo de despliegue",
+    "modes": {
+      "local": "Local",
+      "vps": "VPS Público",
+      "tunnel": "Túnel de Cloudflare"
+    },
+    "hints": {
+      "local": "Accesible solo desde tu red local. Lo más sencillo para uso en casa.",
+      "vps": "Servidor público con Caddy + Let's Encrypt.",
+      "tunnel": "Stack local expuesto a través de un Túnel de Cloudflare — sin puertos abiertos."
+    },
+    "folderLabel": "Carpeta del stack",
+    "browse": "Explorar",
+    "folderHint": "Escribiremos <1>docker-compose.yml</1>, <3>.env</3>, y <5>config/</5> aquí.",
+    "domainLabel": "Dominio base",
+    "emailLabel": "Email de Let's Encrypt",
+    "tunnelTokenLabel": "Token del Túnel de Cloudflare",
+    "tunnelTokenHint": "Consíguelo en Cloudflare Zero Trust → Networks → Tunnels.",
+    "imageTagLabel": "Tag de imagen",
+    "imageTagHint": "Fija un tag específico (ej. <1>v2.1.0</1>) para producción en lugar de <3>latest</3>.",
+    "probe": {
+      "checking": "Comprobando compatibilidad del sistema de archivos…",
+      "incompatible": "<1>Sistema de archivos incompatible{{fsLabel}}.</1> Sonarr, Radarr y Prowlarr no iniciarán aquí — este sistema de archivos no soporta el modo WAL de SQLite (típico en montajes 9P de WSL2, SMB y NFS). <5>Usa <1>C:\\</1> para la carpeta del stack</5> y apunta tus rutas de medios a tu disco preferido en el siguiente paso.",
+      "nonSystem": "<1>Disco no de sistema detectado{{fsLabel}}.</1> Docker Desktop + WSL2 pueden tener problemas de bloqueo de archivos en discos que no sean <5>C:\\</5>. Si Sonarr/Radarr/Prowlarr fallan al iniciar, mueve el stack a <9>C:\\</9>.",
+      "ok": "El sistema de archivos se ve bien{{fsLabel}}."
+    }
+  }
+}

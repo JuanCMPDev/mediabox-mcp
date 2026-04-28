@@ -76,22 +76,32 @@
   color: var(--on-surface-variant);
 }
 
-/* Traffic-light window controls stub (for Tauri) */
+/* Traffic-light window controls (macOS-style, Tauri-wired) */
 .windowControls {
   display: flex;
   gap: 6px;
+  -webkit-app-region: no-drag;
+  app-region: no-drag;
 }
 
 .wc {
   width: 12px;
   height: 12px;
   border-radius: var(--radius-full);
-  opacity: 0.4;
-  transition: opacity var(--transition-fast);
+  opacity: 0.7;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  transition: opacity var(--transition-fast), transform var(--transition-fast);
 }
 
 .wc:hover {
   opacity: 1;
+  transform: scale(1.1);
+}
+
+.wc:active {
+  transform: scale(0.92);
 }
 
 .wc.close   { background: #ff5f57; }

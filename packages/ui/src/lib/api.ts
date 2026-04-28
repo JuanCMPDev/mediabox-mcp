@@ -6,18 +6,30 @@ import type {
   ServiceEndpoint,
   ChatInfo,
   ChatHistoryEntry,
+  SetupInfo,
+  EnvUpdate,
+  EnvUpdateResult,
+  RestartServicesResult,
 } from '@mediabox/contracts';
 
-const BASE = import.meta.env.VITE_API_URL || 'http://localhost:3000';
-const KEY  = import.meta.env.VITE_INTERNAL_API_KEY || '';
+import { getRuntimeConfig } from './runtime-config';
+import i18n from './i18n';
 
-const HEADERS = () => ({
-  Authorization:  `Bearer ${KEY}`,
-  'Content-Type': 'application/json',
-});
+const HEADERS = () => {
+  const { internalApiKey } = getRuntimeConfig();
+  return {
+    Authorization:    `Bearer ${internalApiKey}`,
+    'Content-Type':   'application/json',
+    // i18next exposes the active language synchronously after init; the
+    // mcp-server's localeMiddleware reads this to pick its translation
+    // bundle (PR 3.4d).
+    'Accept-Language': i18n.language || 'en',
+  };
+};
 
 async function get<T>(path: string): Promise<T> {
-  const res = await fetch(`${BASE}${path}`, {
+  const { apiUrl } = getRuntimeConfig();
+  const res = await fetch(`${apiUrl}${path}`, {
     headers: HEADERS(),
     signal: AbortSignal.timeout(10_000),
   });
@@ -25,18 +37,46 @@ async function get<T>(path: string): Promise<T> {
   return res.json() as Promise<T>;
 }
 
-async function post(path: string, body?: unknown): Promise<void> {
-  const res = await fetch(`${BASE}${path}`, {
+async function post<T = void>(path: string, body?: unknown, timeoutMs = 10_000): Promise<T> {
+  const { apiUrl } = getRuntimeConfig();
+  const res = await fetch(`${apiUrl}${path}`, {
     method: 'POST',
     headers: HEADERS(),
     body:   body ? JSON.stringify(body) : undefined,
-    signal: AbortSignal.timeout(10_000),
+    signal: AbortSignal.timeout(timeoutMs),
   });
   if (!res.ok) throw new Error(`API ${res.status}: ${await res.text()}`);
+  if (res.status === 204) return undefined as T;
+  const text = await res.text();
+  return (text ? JSON.parse(text) : undefined) as T;
+}
+
+async function patch<T = void>(path: string, body?: unknown, timeoutMs = 15_000): Promise<T> {
+  const { apiUrl } = getRuntimeConfig();
+  const res = await fetch(`${apiUrl}${path}`, {
+    method: 'PATCH',
+    headers: HEADERS(),
+    body:   body ? JSON.stringify(body) : undefined,
+    signal: AbortSignal.timeout(timeoutMs),
+  });
+  if (!res.ok) throw new Error(`API ${res.status}: ${await res.text()}`);
+  const text = await res.text();
+  return (text ? JSON.parse(text) : undefined) as T;
+}
+
+async function getText(path: string): Promise<string> {
+  const { apiUrl } = getRuntimeConfig();
+  const res = await fetch(`${apiUrl}${path}`, {
+    headers: HEADERS(),
+    signal: AbortSignal.timeout(10_000),
+  });
+  if (!res.ok) throw new Error(`API ${res.status}: ${path}`);
+  return res.text();
 }
 
 async function del(path: string): Promise<void> {
-  const res = await fetch(`${BASE}${path}`, {
+  const { apiUrl } = getRuntimeConfig();
+  const res = await fetch(`${apiUrl}${path}`, {
     method:  'DELETE',
     headers: HEADERS(),
     signal:  AbortSignal.timeout(10_000),
@@ -80,5 +120,46 @@ export const api = {
   },
   clearChat(conversationId: string) {
     return del(`/api/chat/${conversationId}`);
+  },
+
+  // ── Setup admin (Settings panel) ───────────────────────────────────────────
+  setupInfo(): Promise<SetupInfo> {
+    return get('/api/setup/info');
+  },
+  setupEnvRaw(): Promise<string> {
+    return getText('/api/setup/env-raw');
+  },
+  setupPatchEnv(updates: EnvUpdate): Promise<EnvUpdateResult> {
+    return patch<EnvUpdateResult>('/api/setup/env', updates);
+  },
+  setupRestartServices(services: string[]): Promise<RestartServicesResult> {
+    return post<RestartServicesResult>('/api/setup/restart-services', { services }, 5 * 60_000);
+  },
+  setupRecreateServices(services: string[]) {
+    return post<{ recreated: string[]; errors: Array<{ service: string; message: string }> }>(
+      '/api/setup/recreate-services',
+      { services },
+      10 * 60_000,
+    );
+  },
+  setupStackRestart() { return post('/api/setup/stack/restart', undefined, 5 * 60_000); },
+  setupStackStop()    { return post('/api/setup/stack/stop',    undefined, 60_000); },
+  setupStackStart()   { return post('/api/setup/stack/start',   undefined, 2 * 60_000); },
+  setupApplyUpdates() { return post<{ ok: boolean }>('/api/setup/apply-updates', undefined, 10 * 60_000); },
+  setupJellyfinPassword(currentPassword: string, newPassword: string) {
+    return post<{ ok: boolean }>('/api/setup/jellyfin/password', { currentPassword, newPassword }, 30_000);
+  },
+  setupRefreshJellyfinLibrary() {
+    return post<{ ok: boolean }>('/api/setup/jellyfin/refresh-library', undefined, 15_000);
+  },
+  setupRegenerateApiKey(service: 'sonarr' | 'radarr' | 'prowlarr') {
+    return post<{ ok: boolean; restartRequired: string[] }>(
+      '/api/setup/regenerate-api-key',
+      { service },
+      5 * 60_000,
+    );
+  },
+  setupProwlarrIndexers() {
+    return get<{ count: number; url: string }>('/api/setup/prowlarr/indexers');
   },
 };

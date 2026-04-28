@@ -1,18 +1,16 @@
 import { execa } from "execa";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
-import type {
-  Deployer,
-  DeployerContext,
-  HealthCheck,
-} from "@mediabox/core";
-import { pollUntilReady, sleep, tryParseApiKey } from "@mediabox/core";
+
+import type { Deployer, DeployerContext, HealthCheck } from "./types.js";
+import { pollUntilReady, sleep } from "../utils/http.js";
+import { tryParseApiKey } from "../utils/xml.js";
 
 /**
  * Local DockerCliDeployer: shells out to `docker compose` via execa and
- * interacts with the filesystem directly. Used by create-mediabox in its
- * default (local) mode. Remote/Tauri deployers implement the same interface
- * with different IO primitives.
+ * interacts with the filesystem directly. Consumed by `create-mediabox`
+ * (CLI front-end) and by `mcp-server` (desktop wizard front-end). A future
+ * RemoteDeployer would implement the same interface over SSH.
  */
 export class DockerCliDeployer implements Deployer {
   async prepareImages(ctx: DeployerContext): Promise<void> {

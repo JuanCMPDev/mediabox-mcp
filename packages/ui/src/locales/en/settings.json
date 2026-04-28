@@ -1,0 +1,188 @@
+{
+  "title": "Settings",
+  "subtitle": "Changes affect the deployed stack. Affected containers restart automatically when you save.",
+  "refresh": "Refresh",
+  "stack": {
+    "title": "Stack",
+    "location": "Location",
+    "mode": "Mode",
+    "imageTag": "Image tag",
+    "baseDomain": "Base domain",
+    "appVersion": "App version"
+  },
+  "ai": {
+    "title": "AI assistant",
+    "subtitle": "Saving restarts the in-app chat and Telegram bot.",
+    "provider": "Provider",
+    "noAi": "No AI",
+    "openRouter": "OpenRouter",
+    "googleAi": "Google AI",
+    "apiKey": "API key",
+    "setLeaveBlank": "set — leave blank to keep",
+    "replaceWithNew": "•••• replace with new key",
+    "model": "Model",
+    "updated": "AI provider updated"
+  },
+  "telegram": {
+    "title": "Telegram bot",
+    "subtitle": "Mirrors the AI chat to your phone. Saving restarts the bot.",
+    "status": "Status",
+    "disabled": "Disabled",
+    "enabled": "Enabled",
+    "botToken": "Bot token",
+    "replaceToken": "•••• replace with new token",
+    "allowedUsers": "Allowed user IDs",
+    "blankAnyone": "blank = anyone",
+    "tokenRequired": "A bot token is required to enable Telegram",
+    "updated": "Telegram updated"
+  },
+  "passwords": {
+    "qbitTitle": "qBittorrent password",
+    "qbitSubtitle": "Username is always admin. Saving rotates the password and restarts qBittorrent.",
+    "qbitLabel": "qBittorrent",
+    "pyloadTitle": "PyLoad credentials",
+    "pyloadSubtitle": "PyLoad's image always starts with default credentials. Rotate them from PyLoad's web UI if needed.",
+    "username": "Username",
+    "password": "Password",
+    "notSet": "not set",
+    "min8": "Min. 8 characters",
+    "save": "Save",
+    "atLeast8": "At least 8 characters.",
+    "updated": "{{label}} password updated",
+    "jellyfinTitle": "Jellyfin admin password",
+    "jellyfinNotSet": "Admin user not set. Re-run the wizard to configure it.",
+    "jellyfinSubtitle": "User: {{user}}. The change is applied directly in Jellyfin.",
+    "currentPassword": "Current password",
+    "newPassword": "New password",
+    "changePassword": "Change password",
+    "jellyfinUpdated": "Jellyfin password updated"
+  },
+  "apiKeys": {
+    "title": "*arr API keys",
+    "subtitle": "Generate a fresh API key for Sonarr, Radarr, or Prowlarr.",
+    "sonarr": "Sonarr",
+    "radarr": "Radarr",
+    "prowlarr": "Prowlarr",
+    "confirmTitle": "Rotate {{label}} API key",
+    "confirmMessage": "{{label}} will be briefly restarted while we rotate its API key. Anything still using the old key will need to be reconfigured. Continue?",
+    "rotated": "{{label}} API key rotated",
+    "rotate": "Rotate",
+    "set": "set"
+  },
+  "services": {
+    "title": "Services",
+    "subtitle": "Click any to open its web UI in your browser.",
+    "user": "user: ",
+    "apiKey": "API key",
+    "password": "password",
+    "noKey": "no key",
+    "noPassword": "no password",
+    "viewLogs": "View {{name}} logs",
+    "openBrowser": "Open in browser"
+  },
+  "system": {
+    "title": "System",
+    "subtitle": "Saving recreates the affected containers (1-2 minutes).",
+    "timezone": "Timezone",
+    "ianaHint": "IANA format (e.g. <1>Europe/Madrid</1>, <3>America/Argentina/Buenos_Aires</3>).",
+    "puidPgid": "PUID / PGID",
+    "idHint": "User and group IDs LinuxServer containers run as. Run <1>id -u</1> and <3>id -g</3> on Linux to find yours; <5>1000:1000</5> works on Windows/macOS.",
+    "updated": "System settings updated",
+    "confirmMessage": "Saving will recreate every container in the stack so the new values take effect. This usually takes 1-2 minutes; ongoing downloads pause and resume automatically. Continue?",
+    "confirmTitle": "Apply system changes"
+  },
+  "mediaPaths": {
+    "title": "Media paths",
+    "subtitle": "Where Sonarr, Radarr, and Jellyfin look for your library on disk. Saving recreates the affected containers.",
+    "movies": "Movies",
+    "tv": "TV",
+    "anime": "Anime",
+    "music": "Music",
+    "hint": "Path changes don't move existing media — copy or move files yourself before saving so the containers find your library at the new location.",
+    "updated": "Media paths updated",
+    "confirmMessage": "Saving rewrites the bind-mount sources in .env and recreates Sonarr / Radarr / Jellyfin / mcp-server. Existing media files at the OLD paths are NOT moved — copy or move them yourself before saving if you need to. Continue?",
+    "confirmTitle": "Apply media path changes",
+    "browse": "Browse"
+  },
+  "preferences": {
+    "title": "Preferences",
+    "subtitle": "App-wide settings — saved to state.json and applied immediately.",
+    "refreshProfile": "Refresh profile",
+    "language": "Language",
+    "refreshUpdated": "Refresh profile updated",
+    "langUpdated": "Language updated",
+    "saveError": "Couldn't save preference: {{error}}",
+    "profiles": {
+      "realtime": "Real-time",
+      "realtimeHint": "Downloads 2 s · sessions 3 s · health 5 s · services 15 s",
+      "balanced": "Balanced",
+      "balancedHint": "Roughly 2× the realtime cadence — gentler on CPU and battery",
+      "battery": "Battery",
+      "batteryHint": "Roughly 6× the realtime cadence — minimal background traffic"
+    },
+    "locales": {
+      "en": "English",
+      "enHint": "Default — every UI string is translated.",
+      "es": "Español",
+      "esHint": "Stub — translations land in a follow-up PR; missing keys fall back to English."
+    },
+    "libraryRefresh": {
+      "label":   "Auto-refresh Jellyfin library",
+      "hint":    "Triggers a Jellyfin library scan on a schedule while the app is open. \"Off\" leaves Jellyfin's own scheduler in charge.",
+      "off":     "Off",
+      "hourly":  "Every hour",
+      "every6h": "Every 6 h",
+      "daily":   "Daily",
+      "updated": "Library refresh schedule updated"
+    }
+  },
+  "lifecycle": {
+    "title": "Stack lifecycle",
+    "subtitle": "Global actions on every container.",
+    "startAll": "Start all",
+    "restartAll": "Restart all",
+    "stopAll": "Stop all",
+    "confirmMessage": "This will {{verb}} every container in the stack. Continue?",
+    "restartToast": "Stack restarted",
+    "restartTitle": "Restart stack",
+    "stopToast": "Stack stopped",
+    "stopTitle": "Stop stack",
+    "startToast": "Stack started",
+    "startTitle": "Start stack",
+    "restartVerb": "restart",
+    "stopVerb": "stop",
+    "startVerb": "start"
+  },
+  "updates": {
+    "title": "Updates",
+    "subtitle": "Pull the latest Docker images and restart only what changed.",
+    "check": "Check for updates"
+  },
+  "advanced": {
+    "title": "Advanced",
+    "openFolder": "Open stack folder",
+    "exportConfig": "Export config…",
+    "importConfig": "Import config…",
+    "rerunWizard": "Re-run wizard",
+    "wizardHint": "Re-running the wizard only clears <1>state.json</1>. Docker containers keep running — to start completely fresh, also run <3>docker compose down -v</3> in the stack folder.",
+    "openError": "Couldn't open stack folder: {{error}}",
+    "exportSuccess": "Backup saved ({{parts}})",
+    "exportError": "Couldn't export: {{error}}",
+    "importSuccess": "Restored: {{parts}}. Restarting sidecar…",
+    "importError": "Couldn't import: {{error}}",
+    "wizardCleared": "Wizard state cleared. Restart the app to see the wizard.",
+    "importConfirmMessage": "Importing overwrites your current state.json and .env with the contents of the zip. The Docker stack at the imported stackDir is NOT redeployed — open the wizard from \"Re-run wizard\" if you need to bring containers up at the new location. Continue?",
+    "importConfirmTitle": "Restore config from zip",
+    "wizardConfirmMessage": "This clears the wizard state but does NOT touch the deployed stack. Next launch will run the wizard again. Continue?",
+    "wizardConfirmTitle": "Re-run wizard"
+  },
+  "saveBar": {
+    "dirty": "Unsaved changes",
+    "save": "Save and restart"
+  },
+  "error": "Error: {{message}}",
+  "eyeToggle": {
+    "hide": "Hide password",
+    "show": "Show password"
+  }
+}

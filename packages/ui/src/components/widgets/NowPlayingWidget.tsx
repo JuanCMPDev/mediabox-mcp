@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Tv2, MessageSquareWarning, XCircle, Info, Send, X, WifiOff } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 import styles from './NowPlayingWidget.module.css';
 import { GlassCard }  from '@/components/atoms/GlassCard';
 import { IconButton } from '@/components/atoms/IconButton';
@@ -19,10 +20,11 @@ interface NowPlayingWidgetProps {
 }
 
 export function NowPlayingWidget({ session, isLoading, error }: NowPlayingWidgetProps) {
+  const { t } = useTranslation();
   return (
     <GlassCard className={styles.widget}>
       <div className={styles.header}>
-        <div className={styles.headerTitle}><Tv2 size={14} />Jellyfin Active Stream</div>
+        <div className={styles.headerTitle}><Tv2 size={14} />{t('dashboard.nowPlaying.title')}</div>
       </div>
 
       {isLoading && !session && <SessionSkeleton />}
@@ -30,14 +32,14 @@ export function NowPlayingWidget({ session, isLoading, error }: NowPlayingWidget
       {error && !session && (
         <div className={styles.empty}>
           <WifiOff size={36} color="var(--error)" />
-          <p>Cannot reach Jellyfin</p>
+          <p>{t('dashboard.nowPlaying.cannotReach')}</p>
         </div>
       )}
 
       {!isLoading && !error && !session && (
         <div className={styles.empty}>
           <Tv2 size={36} />
-          <p>No active streams</p>
+          <p>{t('dashboard.nowPlaying.noStreams')}</p>
         </div>
       )}
 
@@ -47,6 +49,7 @@ export function NowPlayingWidget({ session, isLoading, error }: NowPlayingWidget
 }
 
 function SessionView({ session }: { session: PlaybackSession }) {
+  const { t } = useTranslation();
   const [imgError, setImgError] = useState(false);
   const [mode, setMode]         = useState<AdminMode>('idle');
   const [msgHeader, setMsgHeader] = useState('');
@@ -61,8 +64,8 @@ function SessionView({ session }: { session: PlaybackSession }) {
   function handleKillConfirm() {
     if (!session.jellyfinSessionId) return;
     killSession.mutate(session.jellyfinSessionId, {
-      onSuccess: () => { toast(`Stream for ${session.userName} terminated`, 'success'); setMode('idle'); },
-      onError:   (e) => { toast(`Kill failed: ${e.message}`, 'error'); setMode('idle'); },
+      onSuccess: () => { toast(t('dashboard.nowPlaying.streamTerminated', { user: session.userName }), 'success'); setMode('idle'); },
+      onError:   (e) => { toast(t('dashboard.nowPlaying.killFailed', { message: e.message }), 'error'); setMode('idle'); },
     });
   }
 
@@ -72,10 +75,10 @@ function SessionView({ session }: { session: PlaybackSession }) {
       { sessionId: session.jellyfinSessionId, header: msgHeader || 'Admin', text: msgText },
       {
         onSuccess: () => {
-          toast(`Message sent to ${session.userName}`, 'success');
+          toast(t('dashboard.nowPlaying.messageSent', { user: session.userName }), 'success');
           setMode('idle'); setMsgHeader(''); setMsgText('');
         },
-        onError: (e) => toast(`Send failed: ${e.message}`, 'error'),
+        onError: (e) => toast(t('dashboard.nowPlaying.sendFailed', { message: e.message }), 'error'),
       }
     );
   }
@@ -103,12 +106,12 @@ function SessionView({ session }: { session: PlaybackSession }) {
       <div className={styles.info}>
         <div className={styles.nowTag}>
           <div className={styles.pulseDot} />
-          {session.isPlaying ? 'Playing' : 'Paused'}
+          {session.isPlaying ? t('dashboard.nowPlaying.playing') : t('dashboard.nowPlaying.paused')}
         </div>
         <div className={styles.title}>{session.mediaTitle}</div>
         <div className={styles.subtitle}>{session.mediaSubtitle}</div>
         <div className={styles.user}>
-          Watching as{' '}
+          {t('dashboard.nowPlaying.watchingAs')}{' '}
           <span style={{ color: 'var(--on-surface)' }}>{session.userName}</span>
           {session.deviceName && (
             <span style={{ color: 'var(--on-surface-muted)', fontSize: 11 }}> · {session.deviceName}</span>
@@ -129,13 +132,13 @@ function SessionView({ session }: { session: PlaybackSession }) {
         <div className={styles.adminArea}>
           {mode === 'idle' && (
             <div className={styles.controls}>
-              <IconButton title="Session Info" onClick={() => setMode('show-info')}>
+              <IconButton title={t('dashboard.nowPlaying.sessionInfoTitle')} onClick={() => setMode('show-info')}>
                 <Info size={16} />
               </IconButton>
-              <IconButton title="Send Message to User" onClick={() => setMode('send-message')}>
+              <IconButton title={t('dashboard.nowPlaying.sendMessageTitle')} onClick={() => setMode('send-message')}>
                 <MessageSquareWarning size={16} />
               </IconButton>
-              <IconButton title="Kill Stream" onClick={() => setMode('confirm-kill')}>
+              <IconButton title={t('dashboard.nowPlaying.killStreamTitle')} onClick={() => setMode('confirm-kill')}>
                 <XCircle size={16} color="var(--error)" />
               </IconButton>
             </div>
@@ -144,15 +147,15 @@ function SessionView({ session }: { session: PlaybackSession }) {
           {mode === 'show-info' && (
             <div className={styles.inlinePanel}>
               <div className={styles.inlineRow}>
-                <span className={styles.infoKey}>Session ID</span>
+                <span className={styles.infoKey}>{t('dashboard.nowPlaying.sessionId')}</span>
                 <span className={styles.infoVal}>{session.jellyfinSessionId?.slice(0, 16)}…</span>
               </div>
               <div className={styles.inlineRow}>
-                <span className={styles.infoKey}>Device</span>
+                <span className={styles.infoKey}>{t('dashboard.nowPlaying.device')}</span>
                 <span className={styles.infoVal}>{session.deviceName ?? '—'}</span>
               </div>
               <button className={styles.dismissBtn} onClick={() => setMode('idle')}>
-                <X size={13} /> Close
+                <X size={13} /> {t('dashboard.nowPlaying.close')}
               </button>
             </div>
           )}
@@ -160,19 +163,19 @@ function SessionView({ session }: { session: PlaybackSession }) {
           {mode === 'confirm-kill' && (
             <div className={styles.inlinePanel}>
               <span className={styles.confirmText}>
-                Terminate stream for <strong>{session.userName}</strong>?
+                {t('dashboard.nowPlaying.killStreamTitle')} — <strong>{session.userName}</strong>?
               </span>
               <div className={styles.inlineBtns}>
                 <GlassButton
                   variant="secondary" size="sm"
                   onClick={() => setMode('idle')}
-                >Cancel</GlassButton>
+                >{t('dashboard.nowPlaying.cancel')}</GlassButton>
                 <GlassButton
                   variant="primary" size="sm"
                   onClick={handleKillConfirm}
                   disabled={killSession.isPending}
                 >
-                  {killSession.isPending ? 'Killing…' : 'Kill Stream'}
+                  {killSession.isPending ? t('dashboard.nowPlaying.killing') : t('dashboard.nowPlaying.killStreamBtn')}
                 </GlassButton>
               </div>
             </div>
@@ -183,18 +186,18 @@ function SessionView({ session }: { session: PlaybackSession }) {
               <GlassInput
                 value={msgHeader}
                 onChange={setMsgHeader}
-                placeholder="Header (optional)"
+                placeholder={t('dashboard.nowPlaying.headerPlaceholder')}
               />
               <GlassInput
                 value={msgText}
                 onChange={setMsgText}
-                placeholder="Message text…"
+                placeholder={t('dashboard.nowPlaying.messagePlaceholder')}
                 onKeyDown={(e) => e.key === 'Enter' && handleSendMessage()}
                 autoFocus
               />
               <div className={styles.inlineBtns}>
                 <GlassButton variant="secondary" size="sm" onClick={() => setMode('idle')}>
-                  <X size={13} /> Cancel
+                  <X size={13} /> {t('dashboard.nowPlaying.cancel')}
                 </GlassButton>
                 <GlassButton
                   variant="primary" size="sm"
@@ -202,7 +205,7 @@ function SessionView({ session }: { session: PlaybackSession }) {
                   disabled={!msgText.trim() || messageUser.isPending}
                 >
                   <Send size={13} />
-                  {messageUser.isPending ? 'Sending…' : 'Send'}
+                  {messageUser.isPending ? t('dashboard.nowPlaying.sending') : t('dashboard.nowPlaying.sendBtn')}
                 </GlassButton>
               </div>
             </div>

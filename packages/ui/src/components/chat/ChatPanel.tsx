@@ -1,4 +1,5 @@
 import { MessageSquare, Trash2 } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 import styles from './ChatPanel.module.css';
 import { GlassCard }       from '@/components/atoms/GlassCard';
 import { MessageList }     from './MessageList';
@@ -8,6 +9,7 @@ import { useChat }         from '@/lib/use-chat';
 import { useState }        from 'react';
 
 export function ChatPanel() {
+  const { t } = useTranslation();
   const { messages, isStreaming, activeTool, send, clear } = useChat();
   const [input, setInput] = useState('');
   const [confirmClear, setConfirmClear] = useState(false);
@@ -31,23 +33,28 @@ export function ChatPanel() {
         <div className={styles.headerLeft}>
           <MessageSquare size={18} color="var(--primary)" />
           <div>
-            <div className={styles.headerTitle}>MCP Console</div>
-            <div className={styles.headerSub}>AI-powered media assistant</div>
+            <div className={styles.headerTitle}>
+              {t('chat.title')}
+              <span className={styles.betaBadge}>Beta</span>
+            </div>
+            <div className={styles.headerSub}>
+              {t('chat.subtitle')}
+            </div>
           </div>
         </div>
 
         <div className={styles.headerRight}>
           {confirmClear ? (
             <div className={styles.confirmRow}>
-              <span className={styles.confirmLabel}>Clear conversation?</span>
-              <button className={styles.confirmYes} onClick={handleClear}>Yes</button>
-              <button className={styles.confirmNo}  onClick={() => setConfirmClear(false)}>No</button>
+              <span className={styles.confirmLabel}>{t('chat.clearConfirm')}</span>
+              <button className={styles.confirmYes} onClick={handleClear}>{t('chat.yes')}</button>
+              <button className={styles.confirmNo}  onClick={() => setConfirmClear(false)}>{t('chat.no')}</button>
             </div>
           ) : (
             <button
               className={styles.clearBtn}
               onClick={() => setConfirmClear(true)}
-              title="Clear conversation"
+              title={t('chat.clearTitle')}
               disabled={messages.length === 0}
             >
               <Trash2 size={14} />
@@ -77,7 +84,7 @@ export function ChatPanel() {
           disabled={isStreaming}
         />
         <div className={styles.hint}>
-          {isStreaming ? 'Generating…' : 'Press Enter to send'}
+          {isStreaming ? t('chat.generating') : t('chat.pressEnter')}
         </div>
       </div>
     </GlassCard>

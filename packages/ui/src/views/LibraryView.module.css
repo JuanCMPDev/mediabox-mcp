@@ -4,48 +4,125 @@
   display: flex;
   flex-direction: column;
   gap: var(--gutter);
+  max-width: 920px;
+  margin: 0 auto;
+  width: 100%;
 }
 
-.placeholder {
-  flex: 1;
+/* ── Header ───────────────────────────────────────────────────────────────── */
+
+.header {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.title {
+  font: 700 24px var(--font-sans);
+  color: var(--on-surface);
+  margin: 0;
+  letter-spacing: -0.01em;
+}
+
+.subtitle {
+  font: 14px var(--font-sans);
+  color: var(--on-surface-variant);
+  margin: 0;
+  line-height: 1.5;
+  max-width: 640px;
+}
+
+/* ── Folder grid ──────────────────────────────────────────────────────────── */
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: var(--space-2);
+}
+
+.card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: 18px 18px 14px;
+  cursor: pointer;
+  transition: transform var(--transition-fast), border-color var(--transition-fast);
+}
+
+.card:hover {
+  transform: translateY(-1px);
+  border-color: rgba(173, 198, 255, 0.22);
+}
+
+.cardHeader {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.cardIcon {
+  width: 38px;
+  height: 38px;
+  border-radius: var(--radius-md);
+  background: rgba(173, 198, 255, 0.10);
+  color: var(--primary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.cardName {
+  font: 600 15px var(--font-sans);
+  color: var(--on-surface);
+}
+
+.cardPath {
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Consolas, monospace;
+  font-size: 11px;
+  color: var(--on-surface-muted);
+  background: rgba(255, 255, 255, 0.04);
+  padding: 6px 8px;
+  border-radius: var(--radius-sm);
+  word-break: break-all;
+  line-height: 1.4;
+}
+
+.cardActions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 6px;
+  margin-top: auto;
+}
+
+/* ── Hint ─────────────────────────────────────────────────────────────────── */
+
+.hint {
+  font: 12px var(--font-sans);
+  color: var(--on-surface-muted);
+  background: var(--glass-tint);
+  padding: 10px 14px;
+  border-radius: var(--radius-md);
+  line-height: 1.5;
+}
+
+.hint strong {
+  color: var(--on-surface);
+  font-weight: 600;
+}
+
+/* ── Empty / loading ──────────────────────────────────────────────────────── */
+
+.empty {
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 16px;
-  color: var(--on-surface-variant);
-  opacity: 0.5;
-}
-
-.icon {
-  width: 64px;
-  height: 64px;
-  border-radius: var(--radius-xl);
-  background: rgba(255, 255, 255, 0.06);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.title {
-  font-size: 18px;
-  font-weight: 600;
-  color: var(--on-surface-variant);
-}
-
-.subtitle {
+  gap: 12px;
+  padding: 48px;
+  color: var(--on-surface-muted);
   font-size: 14px;
-  text-align: center;
-  max-width: 320px;
 }
 
-.badge {
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--primary);
-  background: rgba(173, 198, 255, 0.10);
-  padding: 4px 10px;
-  border-radius: var(--radius-full);
-}
+.spin { animation: library-spin 0.9s linear infinite; }
+@keyframes library-spin { to { transform: rotate(360deg); } }

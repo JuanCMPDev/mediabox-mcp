@@ -1,4 +1,5 @@
 import type { DeployConfig } from "../config/types.js";
+import { toPosix } from "../utils/paths.js";
 
 /**
  * Discovered API keys that can be injected after services are up.
@@ -16,7 +17,13 @@ export interface DiscoveredKeys {
  * overwrites them via `updateEnvKeys`.
  */
 export function generateEnv(config: DeployConfig, keys?: DiscoveredKeys): string {
-  const { deployment, system, services, mcp, telegram } = config;
+  const { deployment, system, paths, services, mcp, ai, telegram } = config;
+  // The AI assistant and the Telegram bot share an LLM provider in practice
+  // (the wizard collects one set of credentials and feeds both). The
+  // canonical source is `config.ai`; we fall back to `telegram.llm` for
+  // older callers that still populate the LLM only inside Telegram. Either
+  // way we end up with one effective LLM config that drives the env vars.
+  const effectiveLlm = ai ?? telegram?.llm;
 
   const lines: string[] = [
     "# =============================================================================",
@@ -27,15 +34,34 @@ export function generateEnv(config: DeployConfig, keys?: DiscoveredKeys): string
     `DEPLOYMENT_MODE=${deployment.mode}`,
     ...(deployment.baseDomain ? [`BASE_DOMAIN=${deployment.baseDomain}`] : []),
     "",
+    "# Host parameters (PR 3.4a edits these via Settings → System)",
     `TZ=${system.timezone}`,
+    `PUID=${system.puid}`,
+    `PGID=${system.pgid}`,
     "",
-    "# Service API Keys (auto-populated by setup wizard)",
+    "# Media paths (PR 3.4a edits these via Settings → Media paths)",
+    // Docker Compose requires POSIX-style paths even on Windows; toPosix
+    // converts backslashes so ${MOVIES_PATH} etc. interpolate correctly
+    // into bind-mount sources at compose-up time.
+    `MOVIES_PATH=${toPosix(paths.movies)}`,
+    `TV_PATH=${toPosix(paths.tv)}`,
+    `ANIME_PATH=${toPosix(paths.anime)}`,
+    `MUSIC_PATH=${toPosix(paths.music)}`,
+    "",
+    "# Service Credentials & API Keys (auto-populated by setup wizard)",
+    `JELLYFIN_ADMIN_USER=${services.jellyfin.adminUsername}`,
     `JELLYFIN_API_KEY=${keys?.jellyfinApiKey ?? ""}`,
     `SONARR_API_KEY=${keys?.sonarrApiKey ?? ""}`,
     `RADARR_API_KEY=${keys?.radarrApiKey ?? ""}`,
     `QBIT_PASSWORD=${services.qbittorrent.password}`,
-    `PYLOAD_USER=${services.pyload.username}`,
-    `PYLOAD_PASSWORD=${services.pyload.password}`,
+    // PyLoad-ng's lscr image creates a single hardcoded account on first
+    // run: pyload:pyload. Username can't be changed via the image's env
+    // vars or our deploy-time API calls, so we pin it to the default.
+    // The password starts as the default and the configure:pyload step
+    // rotates it to the wizard's value after the container is healthy
+    // (rewriting this line in the same .env once the rotation succeeds).
+    `PYLOAD_USER=pyload`,
+    `PYLOAD_PASSWORD=pyload`,
     "",
     "# MCP Server",
     `MCP_PUBLIC_URL=${mcp.publicUrl}`,
@@ -51,25 +77,37 @@ export function generateEnv(config: DeployConfig, keys?: DiscoveredKeys): string
     );
   }
 
+  // LLM provider — written whenever the user picks a non-`none` provider
+  // in the wizard, regardless of whether they enabled the Telegram bot.
+  // Without this, the in-app AI assistant stayed silent on first launch
+  // because nothing wrote `LLM_PROVIDER` etc. to .env, even though the
+  // user had filled in the AI step. (Settings → AI assistant patches the
+  // same vars after the fact, which is why re-entering creds there
+  // "fixed" it before this change.)
+  if (effectiveLlm) {
+    lines.push(
+      "",
+      "# AI assistant (LLM provider)",
+      `LLM_PROVIDER=${effectiveLlm.kind}`,
+    );
+    if (effectiveLlm.kind === "openrouter") {
+      lines.push(
+        `OPENROUTER_API_KEY=${effectiveLlm.apiKey}`,
+        `LLM_MODEL=${effectiveLlm.model}`,
+      );
+    } else if (effectiveLlm.kind === "google") {
+      lines.push(`GOOGLE_AI_API_KEY=${effectiveLlm.apiKey}`);
+      if (effectiveLlm.model) {
+        lines.push(`LLM_MODEL=${effectiveLlm.model}`);
+      }
+    }
+  }
+
   if (telegram) {
     lines.push(
       "",
       "# Telegram Bot",
       `TELEGRAM_BOT_TOKEN=${telegram.botToken}`,
-      `LLM_PROVIDER=${telegram.llm.kind}`,
-    );
-    if (telegram.llm.kind === "openrouter") {
-      lines.push(
-        `OPENROUTER_API_KEY=${telegram.llm.apiKey}`,
-        `LLM_MODEL=${telegram.llm.model}`,
-      );
-    } else if (telegram.llm.kind === "google") {
-      lines.push(`GOOGLE_AI_API_KEY=${telegram.llm.apiKey}`);
-      if (telegram.llm.model) {
-        lines.push(`LLM_MODEL=${telegram.llm.model}`);
-      }
-    }
-    lines.push(
       `ALLOWED_TELEGRAM_USERS=${telegram.allowedUserIds.join(",")}`,
     );
   }

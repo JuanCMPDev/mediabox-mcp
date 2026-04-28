@@ -3,18 +3,18 @@
  * Each line from the server is a JSON-serialized ChatEvent.
  * ──────────────────────────────────────────────────────────────────────── */
 import type { ChatEvent } from '@mediabox/contracts';
-
-const BASE = import.meta.env.VITE_API_URL || 'http://localhost:3000';
-const KEY  = import.meta.env.VITE_INTERNAL_API_KEY || '';
+import { getRuntimeConfig } from './runtime-config';
 
 export async function* streamChat(
   message: string,
   conversationId?: string,
 ): AsyncGenerator<ChatEvent> {
-  const res = await fetch(`${BASE}/api/chat/stream`, {
+  const { apiUrl, internalApiKey } = getRuntimeConfig();
+
+  const res = await fetch(`${apiUrl}/api/chat/stream`, {
     method: 'POST',
     headers: {
-      Authorization:  `Bearer ${KEY}`,
+      Authorization:  `Bearer ${internalApiKey}`,
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({ message, conversationId }),

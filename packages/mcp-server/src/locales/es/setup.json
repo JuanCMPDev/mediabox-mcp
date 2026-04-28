@@ -1,0 +1,40 @@
+{
+  "errors": {
+    "stackUnavailable": "STACK_DIR no está configurado — el asistente no se ha completado.",
+    "envEmpty": "el valor de {{key}} debe ser una cadena",
+    "envRejected": "la clave no está en la lista de permitidos",
+    "envFileMissing": "No se encontró el .env del stack",
+    "deployActive": "Ya hay un despliegue en progreso",
+    "configRequired": "config es obligatorio",
+    "workDirRequired": "workDir es obligatorio",
+    "configInvalid": "Configuración no válida",
+    "servicesRequired": "services[] es obligatorio y no debe estar vacío"
+  },
+  "jellyfin": {
+    "currentPasswordRequired": "currentPassword y newPassword son obligatorios",
+    "passwordTooShort": "newPassword debe tener al menos 8 caracteres",
+    "adminUserNotConfigured": "JELLYFIN_ADMIN_USER no está configurado",
+    "currentPasswordWrong": "La contraseña actual es incorrecta",
+    "responseStatus": "Jellyfin devolvió {{status}}",
+    "authMalformed": "Respuesta de autenticación de Jellyfin mal formada (falta token o ID de usuario)",
+    "passwordRejected": "Jellyfin rechazó el cambio de contraseña ({{status}})",
+    "unreachable": "No se pudo conectar con Jellyfin: {{message}}",
+    "apiKeyMissing": "JELLYFIN_API_KEY aún no está en .env — termina el asistente primero."
+  },
+  "prowlarr": {
+    "apiKeyMissing": "PROWLARR_API_KEY aún no está en .env — puede que el despliegue no haya terminado.",
+    "responseStatus": "Prowlarr devolvió {{status}}",
+    "unreachable": "No se pudo conectar con Prowlarr: {{message}}"
+  },
+  "regen": {
+    "serviceInvalid": "el servicio debe ser uno de: {{services}}",
+    "stackUnavailable": "STACK_DIR no está configurado — el asistente no se ha completado.",
+    "configNotFound": "No se encontró config.xml en {{path}}: {{message}}",
+    "noApiKeyElement": "No hay elemento <ApiKey> en {{path}}",
+    "updateFailed": "No se pudo actualizar {{file}} o .env: {{message}}",
+    "composeFailed": "docker compose {{command}} falló: {{message}}"
+  },
+  "logs": {
+    "unknownService": "Servicio desconocido \"{{service}}\". Permitidos: {{allowed}}."
+  }
+}

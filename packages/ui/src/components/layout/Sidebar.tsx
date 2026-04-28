@@ -4,23 +4,36 @@ import {
   MessageSquare,
   Settings,
 } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 import styles from './Sidebar.module.css';
 import type { View } from '@/lib/types';
 
-const NAV_ITEMS: { id: View; label: string; Icon: React.ElementType }[] = [
-  { id: 'dashboard', label: 'Dashboard',   Icon: LayoutDashboard },
-  { id: 'library',   label: 'Library',     Icon: Film },
-  { id: 'chat',      label: 'MCP Console', Icon: MessageSquare },
-  { id: 'settings',  label: 'Settings',    Icon: Settings },
+interface NavItem {
+  /** Translation key under `nav.*` — resolved via `t()` at render time. */
+  id:    View;
+  Icon:  React.ElementType;
+  beta?: boolean;
+}
+
+const NAV_ITEMS: NavItem[] = [
+  { id: 'dashboard', Icon: LayoutDashboard },
+  { id: 'library',   Icon: Film },
+  { id: 'chat',      Icon: MessageSquare, beta: true },
+  { id: 'settings',  Icon: Settings },
 ];
 
 interface SidebarProps {
-  activeView: View;
+  activeView:   View;
   onViewChange: (view: View) => void;
   serverOnline: boolean;
+  /** Hide the chat tab when no LLM provider is configured. */
+  aiEnabled:    boolean;
 }
 
-export function Sidebar({ activeView, onViewChange, serverOnline }: SidebarProps) {
+export function Sidebar({ activeView, onViewChange, serverOnline, aiEnabled }: SidebarProps) {
+  const { t } = useTranslation();
+  const visibleItems = aiEnabled ? NAV_ITEMS : NAV_ITEMS.filter(item => item.id !== 'chat');
+
   return (
     <aside className={styles.sidebar}>
       <div className={styles.brand}>
@@ -34,8 +47,8 @@ export function Sidebar({ activeView, onViewChange, serverOnline }: SidebarProps
       </div>
 
       <nav className={styles.nav}>
-        <div className={styles.sectionLabel}>Navigation</div>
-        {NAV_ITEMS.map(({ id, label, Icon }) => (
+        <div className={styles.sectionLabel}>{t('sidebar.navigation')}</div>
+        {visibleItems.map(({ id, Icon, beta }) => (
           <button
             key={id}
             type="button"
@@ -45,7 +58,8 @@ export function Sidebar({ activeView, onViewChange, serverOnline }: SidebarProps
             onClick={() => onViewChange(id)}
           >
             <Icon size={18} className={styles.navIcon} />
-            {label}
+            <span>{t(`nav.${id}`)}</span>
+            {beta && <span className={styles.betaBadge}>Beta</span>}
           </button>
         ))}
       </nav>
@@ -60,7 +74,7 @@ export function Sidebar({ activeView, onViewChange, serverOnline }: SidebarProps
           <div className={styles.serverInfo}>
             <span className={styles.serverName}>Mediabox</span>
             <span className={styles.serverMeta}>
-              {serverOnline ? 'MCP Connected' : 'MCP Offline'}
+              {serverOnline ? t('sidebar.mcpConnected') : t('sidebar.mcpOffline')}
             </span>
           </div>
         </div>
