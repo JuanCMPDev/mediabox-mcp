@@ -81,6 +81,7 @@ pub async fn spawn(app: AppHandle) -> Result<(), Box<dyn std::error::Error + Sen
     // reads `LLM_PROVIDER` + `LLM_MODEL` (not `OPENROUTER_MODEL` etc.); without
     // them the provider falls back to defaults and the API call 400s.
     const FORWARDED: &[&str] = &[
+        "JELLYFIN_ADMIN_USER",
         "JELLYFIN_API_KEY",
         "SONARR_API_KEY",
         "RADARR_API_KEY",
@@ -104,6 +105,17 @@ pub async fn spawn(app: AppHandle) -> Result<(), Box<dyn std::error::Error + Sen
         if let Some(value) = stack_env.get(*key) {
             cmd = cmd.env(*key, value);
             forwarded_count += 1;
+        }
+    }
+
+    // Fallback: deployments built before JELLYFIN_ADMIN_USER was written to
+    // .env (the env generator only added it later) need the username from
+    // state.json's configSummary so the Settings panel doesn't show "no
+    // configurado" forever.
+    if !stack_env.contains_key("JELLYFIN_ADMIN_USER") {
+        if let Some(user) = load_jellyfin_admin_user(&app) {
+            cmd = cmd.env("JELLYFIN_ADMIN_USER", &user);
+            log::info!("[sidecar] JELLYFIN_ADMIN_USER injected from configSummary fallback");
         }
     }
     if forwarded_count > 0 {
@@ -167,6 +179,20 @@ pub async fn spawn(app: AppHandle) -> Result<(), Box<dyn std::error::Error + Sen
     });
 
     Ok(())
+}
+
+/// Reads `state.json` and pulls `configSummary.jellyfinAdminUser`, used as a
+/// fallback when the deployed `.env` predates the `JELLYFIN_ADMIN_USER` line.
+fn load_jellyfin_admin_user(app: &AppHandle) -> Option<String> {
+    let config_dir = app.path().app_config_dir().ok()?;
+    let raw = std::fs::read_to_string(config_dir.join("state.json")).ok()?;
+    let state: serde_json::Value = serde_json::from_str(&raw).ok()?;
+    state
+        .get("configSummary")?
+        .get("jellyfinAdminUser")?
+        .as_str()
+        .filter(|s| !s.is_empty())
+        .map(String::from)
 }
 
 /// Reads `state.json` to find `stackDir`, then parses `<stackDir>/.env` into
