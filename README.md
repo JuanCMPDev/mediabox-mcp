@@ -5,11 +5,11 @@
 <h1 align="center">Mediabox MCP</h1>
 
 <p align="center">
-  Self-hosted media server with AI-powered management via MCP
+  Self-hosted media server with AI-powered management via MCP & Desktop App
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-1.2.2-blue" alt="Version">
+  <img src="https://img.shields.io/badge/version-2.1.0--beta.0-blue" alt="Version">
   <img src="https://img.shields.io/badge/license-MIT-green" alt="License">
   <img src="https://img.shields.io/badge/docker-compose-2496ED?logo=docker&logoColor=white" alt="Docker">
   <img src="https://img.shields.io/badge/TypeScript-3178C6?logo=typescript&logoColor=white" alt="TypeScript">
@@ -37,6 +37,8 @@ Supports **Local** (home network), **VPS** (with [Caddy](https://caddyserver.com
 
 ### Architecture
 
+Mediabox MCP has evolved into a full monorepo ecosystem. It not only offers an AI-managed media server backend but now includes a **Desktop App (Tauri)** and a dedicated **React UI**.
+
 ```
                         Internet
                            │
@@ -46,33 +48,34 @@ Supports **Local** (home network), **VPS** (with [Caddy](https://caddyserver.com
               │   :80 / :443 (HTTPS)    │
               └────────────┬────────────┘
                            │ mediabox-net
-┌──────────────────────────┼──────────────────────────────┐
-│                          ▼                              │
-│  ┌──────────────────────────────────────────────────┐   │
-│  │                Your AI Client                     │  │
-│  │      (Claude / Telegram Bot / Any MCP Client)     │  │
-│  └──────────────────┬───────────────────────────────┘   │
-│                     │ MCP Protocol (Streamable HTTP)     │
-│                     ▼                                   │
-│  ┌──────────────────────────────────────────────────┐   │
-│  │               MCP Server (:3000)                  │  │
-│  │     25 tools · OAuth2 · Express · TypeScript      │  │
-│  └──┬──────────┬──────────┬──────────┬──────────┬───┘   │
-│     ▼          ▼          ▼          ▼          ▼       │
-│  Jellyfin   Sonarr    Radarr    qBittorrent   PyLoad    │
-│   :8096     :8989     :7878      :8085        :8000     │
-│     │          │          │          │                   │
-│     │       Prowlarr  ◄───┘          │                  │
-│     │        :9696                   │                  │
-│     │          │                     │                  │
-│     │     FlareSolverr               │                  │
-│     │        :8191                   │                  │
-│     ▼                                ▼                  │
-│  ┌──────────────────────────────────────────────────┐   │
-│  │               Shared Media Volume                 │  │
-│  │       /data/movies · /data/tv · /data/anime       │  │
-│  └──────────────────────────────────────────────────┘   │
-└─────────────────────────────────────────────────────────┘
+┌──────────────────────────┼──────────────────────────────────────┐
+│                          ▼                                      │
+│  ┌──────────────────────────────────────────────────────────┐   │
+│  │                Client Interfaces                         │   │
+│  │  (Mediabox Desktop / Telegram Bot / Any MCP Client)      │   │
+│  └──────────────────┬───────────────────────────────────────┘   │
+│                     │ MCP Protocol (HTTP/REST/Sidecar)          │
+│                     ▼                                           │
+│  ┌──────────────────────────────────────────────────────────┐   │
+│  │               MCP Server (:3000)                         │   │
+│  │    Powered by @mediabox/chat-core & @mediabox/core       │   │
+│  │     25 tools · OAuth2 · Express · TypeScript             │   │
+│  └──┬──────────┬──────────┬──────────┬──────────┬───────────┘   │
+│     ▼          ▼          ▼          ▼          ▼               │
+│  Jellyfin   Sonarr    Radarr    qBittorrent   PyLoad            │
+│   :8096     :8989     :7878      :8085        :8000             │
+│     │          │          │          │                          │
+│     │       Prowlarr  ◄───┘          │                          │
+│     │        :9696                   │                          │
+│     │          │                     │                          │
+│     │     FlareSolverr               │                          │
+│     │        :8191                   │                          │
+│     ▼                                ▼                          │
+│  ┌──────────────────────────────────────────────────────────┐   │
+│  │               Shared Media Volume                        │   │
+│  │       /data/movies · /data/tv · /data/anime              │   │
+│  └──────────────────────────────────────────────────────────┘   │
+└─────────────────────────────────────────────────────────────────┘
   Local mode:   ports exposed directly
   VPS mode:     ports bound to 127.0.0.1 + Caddy reverse proxy
   Tunnel mode:  ports bound to 127.0.0.1 + Cloudflare Tunnel

@@ -6,11 +6,11 @@
 
 # Mediabox MCP — Español
 
-Servidor multimedia auto-alojado con gestión inteligente via [MCP](https://modelcontextprotocol.io/).
+Servidor multimedia auto-alojado con gestión inteligente via [MCP](https://modelcontextprotocol.io/) y una aplicación de escritorio nativa.
 
 ## ¿Qué es esto?
 
-Mediabox MCP es un stack de servidor multimedia basado en Docker que combina [Jellyfin](https://jellyfin.org/) con un servidor MCP (Model Context Protocol). Esto permite que cualquier asistente de IA — Claude, GPT, Gemini, o un bot de Telegram — administre tu biblioteca de medios completa con lenguaje natural.
+Mediabox MCP es un stack de servidor multimedia basado en Docker que combina [Jellyfin](https://jellyfin.org/) con un servidor MCP (Model Context Protocol) y una aplicación de Escritorio. Esto permite que cualquier asistente de IA — Claude, GPT, Gemini, nuestra App de Escritorio, o un bot de Telegram — administre tu biblioteca de medios completa con lenguaje natural.
 
 En vez de navegar múltiples interfaces web, simplemente dices *"descarga la última temporada de Mi Serie"* y el sistema se encarga de todo: buscar, descargar, organizar archivos y refrescar tu biblioteca.
 
@@ -140,29 +140,21 @@ ALLOWED_TELEGRAM_USERS=<tu ID de Telegram>
 
 ## Estructura del Proyecto
 
+Mediabox MCP se estructura como un monorepo que contiene varios paquetes:
+
 ```
 mediabox-mcp/
-├── docker-compose.yml          # Stack completo (9-10 servicios)
+├── docker-compose.yml          # Stack completo de servicios
 ├── .env.example                # Plantilla de variables de entorno
-├── mediabox-cli/               # CLI de setup (npx create-mediabox)
-│   └── src/
-│       ├── index.ts            # Entry point, orquesta las 4 fases
-│       ├── wizard.ts           # Prompts interactivos (modo despliegue, credenciales)
-│       ├── generator.ts        # Generación de archivos (.env, compose, Caddyfile, qbit)
-│       ├── orchestrator.ts     # Docker compose + polling de readiness
-│       ├── configurator.ts     # Auto-config via APIs de servicios
-│       ├── templates/          # Plantillas de .env, docker-compose, caddyfile, qbittorrent
-│       └── services/           # Jellyfin, Sonarr, Radarr, Prowlarr, qBit
-├── mcp-server/                 # Servidor MCP (TypeScript)
-│   └── src/
-│       ├── index.ts            # Express + transporte Streamable HTTP
-│       ├── config.ts           # Variables de entorno
-│       ├── auth.ts             # OAuth2 + auth por API key
-│       ├── helpers/            # Clientes API y utilidades
-│       └── tools/              # 25 herramientas MCP
-└── mcp-telegram-client/        # Bot de Telegram (opcional)
-    └── src/
-        └── index.ts            # Grammy + OpenRouter/Gemini
+├── packages/
+│   ├── chat-core/              # Motor compartido de IA + tools de MCP
+│   ├── contracts/              # Tipos compartidos para APIs
+│   ├── core/                   # Motor de orquestación (generación, clientes API)
+│   ├── desktop/                # App de escritorio Tauri que incluye UI y MCP sidecar
+│   ├── mcp-server/             # Servidor MCP y REST (TypeScript + Express)
+│   ├── mcp-telegram-client/    # Cliente de Telegram (opcional)
+│   ├── mediabox-cli/           # CLI interactivo (npx create-mediabox)
+│   └── ui/                     # UI de React para la app de escritorio
 ```
 
 ## Contribuir

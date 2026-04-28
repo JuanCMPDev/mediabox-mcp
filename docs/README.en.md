@@ -6,11 +6,11 @@
 
 # Mediabox MCP — English
 
-Self-hosted media server with AI-powered management via [MCP](https://modelcontextprotocol.io/).
+Self-hosted media server with AI-powered management via [MCP](https://modelcontextprotocol.io/) and a dedicated Desktop app.
 
 ## What is this?
 
-Mediabox MCP is a Docker-based media server stack that combines [Jellyfin](https://jellyfin.org/) with an MCP (Model Context Protocol) server. This lets any AI assistant — Claude, GPT, Gemini, or a Telegram bot — manage your entire media library through natural language.
+Mediabox MCP is a Docker-based media server stack that combines [Jellyfin](https://jellyfin.org/) with an MCP (Model Context Protocol) server and a native Desktop interface. This lets any AI assistant — Claude, GPT, Gemini, our Desktop App, or a Telegram bot — manage your entire media library through natural language.
 
 Instead of clicking through multiple web UIs, you just say *"download the latest season of My Show"* and the system handles everything: searching, downloading, organizing files, and refreshing your library.
 
@@ -140,29 +140,21 @@ ALLOWED_TELEGRAM_USERS=<your Telegram user ID>
 
 ## Project Structure
 
+Mediabox MCP is structured as a monorepo containing several packages:
+
 ```
 mediabox-mcp/
-├── docker-compose.yml          # Full service stack (9-10 services)
+├── docker-compose.yml          # Full service stack
 ├── .env.example                # Environment variable template
-├── mediabox-cli/               # CLI setup wizard (npx create-mediabox)
-│   └── src/
-│       ├── index.ts            # Entry point, orchestrates 4 phases
-│       ├── wizard.ts           # Interactive prompts (deployment mode, credentials)
-│       ├── generator.ts        # File generation (.env, compose, Caddyfile, qbit)
-│       ├── orchestrator.ts     # Docker compose + readiness polling
-│       ├── configurator.ts     # Auto-config via service APIs
-│       ├── templates/          # .env, docker-compose, caddyfile, qbittorrent
-│       └── services/           # Jellyfin, Sonarr, Radarr, Prowlarr, qBit
-├── mcp-server/                 # MCP server (TypeScript)
-│   └── src/
-│       ├── index.ts            # Express + Streamable HTTP transport
-│       ├── config.ts           # Environment variables
-│       ├── auth.ts             # OAuth2 + API key auth
-│       ├── helpers/            # API clients & utilities
-│       └── tools/              # 25 MCP tools
-└── mcp-telegram-client/        # Telegram bot (optional)
-    └── src/
-        └── index.ts            # Grammy + OpenRouter/Gemini
+├── packages/
+│   ├── chat-core/              # Shared LLM + MCP tool-calling engine
+│   ├── contracts/              # Shared API contract types across packages
+│   ├── core/                   # Headless orchestration engine & API clients
+│   ├── desktop/                # Tauri desktop shell bundling UI & MCP sidecar
+│   ├── mcp-server/             # MCP & REST server (TypeScript + Express)
+│   ├── mcp-telegram-client/    # Optional Telegram bot integration
+│   ├── mediabox-cli/           # CLI setup wizard (npx create-mediabox)
+│   └── ui/                     # React UI for the Desktop App
 ```
 
 ## Contributing
