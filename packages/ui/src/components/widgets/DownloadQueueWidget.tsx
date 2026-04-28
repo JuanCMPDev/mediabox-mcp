@@ -1,30 +1,12 @@
 import { useState } from 'react';
 import { Download, ArrowUp, Pause, Play, Trash2, Check, X, WifiOff } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 import styles from './DownloadQueueWidget.module.css';
 import { GlassCard } from '@/components/atoms/GlassCard';
 import { Skeleton }  from '@/components/atoms/Skeleton';
 import { usePauseDownload, useResumeDownload, useDeleteDownload } from '@/lib/mutations';
 import { useToast } from '@/lib/toast';
-import type { Download as DownloadItem, DownloadStatus } from '@mediabox/contracts';
-
-const STATUS_LABEL: Record<DownloadStatus, string> = {
-  downloading: 'Downloading',
-  seeding:     'Seeding',
-  paused:      'Paused',
-  completed:   'Completed',
-  error:       'Error',
-};
-
-function renderMeta(item: DownloadItem): React.ReactNode {
-  switch (item.status) {
-    case 'downloading': return `${item.speed} · ETA ${item.eta}`;
-    case 'seeding':
-      return <><ArrowUp size={11} style={{ display:'inline', verticalAlign:'-1px' }} />{' '}Up {item.uploadSpeed ?? '—'}</>;
-    case 'paused':    return 'Paused';
-    case 'completed': return 'Completed';
-    case 'error':     return 'Error';
-  }
-}
+import type { Download as DownloadItem } from '@mediabox/contracts';
 
 // Extract qBit hash from unified id ("qbit:abc123" → "abc123")
 function qbitHash(id: string): string | null {
@@ -38,13 +20,14 @@ interface DownloadQueueWidgetProps {
 }
 
 export function DownloadQueueWidget({ downloads, isLoading, error }: DownloadQueueWidgetProps) {
+  const { t } = useTranslation();
   const active = downloads.filter(d => d.status === 'downloading').length;
 
   return (
     <GlassCard className={styles.widget}>
       <div className={styles.header}>
-        <div className={styles.headerLeft}><Download size={14} />Download Queue</div>
-        {active > 0 && <span className={styles.countBadge}>{active} active</span>}
+        <div className={styles.headerLeft}><Download size={14} />{t('dashboard.downloads.title')}</div>
+        {active > 0 && <span className={styles.countBadge}>{t('dashboard.downloads.active', { count: active })}</span>}
       </div>
 
       {isLoading && downloads.length === 0 && (
@@ -56,14 +39,14 @@ export function DownloadQueueWidget({ downloads, isLoading, error }: DownloadQue
       {error && downloads.length === 0 && (
         <div className={styles.errorState}>
           <WifiOff size={22} color="var(--error)" />
-          <span>Cannot reach download client</span>
+          <span>{t('dashboard.downloads.cannotReach')}</span>
         </div>
       )}
 
       {downloads.length > 0 && (
         <div className={styles.list}>
           {downloads.map(item => (
-            <DownloadItem key={item.id} item={item} />
+            <DownloadItemRow key={item.id} item={item} />
           ))}
         </div>
       )}
@@ -71,7 +54,19 @@ export function DownloadQueueWidget({ downloads, isLoading, error }: DownloadQue
   );
 }
 
-function DownloadItem({ item }: { item: DownloadItem }) {
+function renderMeta(item: DownloadItem, t: (key: string, opts?: Record<string, unknown>) => string): React.ReactNode {
+  switch (item.status) {
+    case 'downloading': return t('dashboard.downloads.etaPattern', { speed: item.speed, eta: item.eta });
+    case 'seeding':
+      return <><ArrowUp size={11} style={{ display:'inline', verticalAlign:'-1px' }} />{' '}{t('dashboard.downloads.uploading', { speed: item.uploadSpeed ?? '—' })}</>;
+    case 'paused':    return t('dashboard.downloads.status.paused');
+    case 'completed': return t('dashboard.downloads.status.completed');
+    case 'error':     return t('dashboard.downloads.status.error');
+  }
+}
+
+function DownloadItemRow({ item }: { item: DownloadItem }) {
+  const { t } = useTranslation();
   const [confirmDelete, setConfirmDelete] = useState(false);
   const { toast } = useToast();
 
@@ -89,24 +84,24 @@ function DownloadItem({ item }: { item: DownloadItem }) {
   function handlePause() {
     if (!hash) return;
     pauseDownload.mutate(hash, {
-      onSuccess: () => toast('Torrent paused', 'success'),
-      onError:   (e) => toast(`Pause failed: ${e.message}`, 'error'),
+      onSuccess: () => toast(t('dashboard.downloads.torrentPaused'), 'success'),
+      onError:   (e) => toast(t('dashboard.downloads.pauseFailed', { message: e.message }), 'error'),
     });
   }
 
   function handleResume() {
     if (!hash) return;
     resumeDownload.mutate(hash, {
-      onSuccess: () => toast('Torrent resumed', 'success'),
-      onError:   (e) => toast(`Resume failed: ${e.message}`, 'error'),
+      onSuccess: () => toast(t('dashboard.downloads.torrentResumed'), 'success'),
+      onError:   (e) => toast(t('dashboard.downloads.resumeFailed', { message: e.message }), 'error'),
     });
   }
 
   function handleDelete(deleteFiles: boolean) {
     if (!hash) return;
     deleteDownload.mutate({ hash, deleteFiles }, {
-      onSuccess: () => { toast('Torrent deleted', 'success'); setConfirmDelete(false); },
-      onError:   (e) => { toast(`Delete failed: ${e.message}`, 'error'); setConfirmDelete(false); },
+      onSuccess: () => { toast(t('dashboard.downloads.torrentDeleted'), 'success'); setConfirmDelete(false); },
+      onError:   (e) => { toast(t('dashboard.downloads.deleteFailed', { message: e.message }), 'error'); setConfirmDelete(false); },
     });
   }
 
@@ -116,25 +111,25 @@ function DownloadItem({ item }: { item: DownloadItem }) {
         <span className={styles.itemName} title={item.name}>{item.name}</span>
         <div className={styles.itemRight}>
           <span className={`${styles.statusBadge} ${styles[item.status]}`}>
-            {STATUS_LABEL[item.status]}
+            {t(`dashboard.downloads.status.${item.status}`)}
           </span>
           {hasActions && !confirmDelete && (
             <div className={styles.actions}>
               {canPause  && (
-                <button className={styles.actionBtn} title="Pause" onClick={handlePause}
+                <button className={styles.actionBtn} title={t('dashboard.downloads.actions.pause')} onClick={handlePause}
                   disabled={pauseDownload.isPending}>
                   <Pause size={12} />
                 </button>
               )}
               {canResume && (
-                <button className={styles.actionBtn} title="Resume" onClick={handleResume}
+                <button className={styles.actionBtn} title={t('dashboard.downloads.actions.resume')} onClick={handleResume}
                   disabled={resumeDownload.isPending}>
                   <Play size={12} />
                 </button>
               )}
               {canDelete && (
                 <button className={`${styles.actionBtn} ${styles.actionDanger}`}
-                  title="Delete" onClick={() => setConfirmDelete(true)}>
+                  title={t('dashboard.downloads.actions.delete')} onClick={() => setConfirmDelete(true)}>
                   <Trash2 size={12} />
                 </button>
               )}
@@ -142,17 +137,17 @@ function DownloadItem({ item }: { item: DownloadItem }) {
           )}
           {confirmDelete && (
             <div className={styles.confirmRow}>
-              <span className={styles.confirmLabel}>Delete files?</span>
+              <span className={styles.confirmLabel}>{t('dashboard.downloads.deleteFiles')}</span>
               <button className={`${styles.actionBtn} ${styles.actionDanger}`}
-                title="Delete with files" onClick={() => handleDelete(true)}
+                title={t('dashboard.downloads.actions.deleteWithFiles')} onClick={() => handleDelete(true)}
                 disabled={deleteDownload.isPending}>
                 <Trash2 size={12} />+
               </button>
-              <button className={styles.actionBtn} title="Remove from queue only"
+              <button className={styles.actionBtn} title={t('dashboard.downloads.actions.removeFromQueue')}
                 onClick={() => handleDelete(false)} disabled={deleteDownload.isPending}>
                 <Check size={12} />
               </button>
-              <button className={styles.actionBtn} title="Cancel" onClick={() => setConfirmDelete(false)}>
+              <button className={styles.actionBtn} title={t('dashboard.downloads.actions.cancel')} onClick={() => setConfirmDelete(false)}>
                 <X size={12} />
               </button>
             </div>
@@ -166,7 +161,7 @@ function DownloadItem({ item }: { item: DownloadItem }) {
 
       <div className={styles.itemMeta}>
         <span className={styles.size}>{item.size}</span>
-        <span className={styles.metaRight}>{renderMeta(item)}</span>
+        <span className={styles.metaRight}>{renderMeta(item, t)}</span>
       </div>
     </div>
   );

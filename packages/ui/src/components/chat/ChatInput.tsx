@@ -1,4 +1,5 @@
 import { SendHorizonal } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 import styles from './ChatInput.module.css';
 import { GlassInput } from '@/components/atoms/GlassInput';
 
@@ -10,6 +11,8 @@ interface ChatInputProps {
 }
 
 export function ChatInput({ value, onChange, onSend, disabled = false }: ChatInputProps) {
+  const { t } = useTranslation();
+
   function handleKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
     if (e.key === 'Enter' && !e.shiftKey && value.trim()) {
       e.preventDefault();
@@ -24,7 +27,7 @@ export function ChatInput({ value, onChange, onSend, disabled = false }: ChatInp
         value={value}
         onChange={onChange}
         onKeyDown={handleKeyDown}
-        placeholder="Ask Mediabox anything…"
+        placeholder={t('chat.askPlaceholder')}
         disabled={disabled}
         autoFocus
       />
@@ -33,7 +36,7 @@ export function ChatInput({ value, onChange, onSend, disabled = false }: ChatInp
         type="button"
         onClick={onSend}
         disabled={disabled || !value.trim()}
-        title="Send"
+        title={t('chat.send')}
       >
         <SendHorizonal size={18} />
       </button>
