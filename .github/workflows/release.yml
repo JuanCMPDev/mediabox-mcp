@@ -20,22 +20,27 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - platform: macos-latest      # Apple Silicon (aarch64)
+          # macOS — `macos-13` (Intel) was retired by GH on 2025-12-04, so we
+          # build a Universal binary on the Apple Silicon runner instead. It
+          # runs natively on both M-series and Intel Macs (Apple's recommended
+          # path since 2020). Tauri requires a sidecar per arch; we build both
+          # via Bun (cross-compile from a single host) and lipo handles the rest.
+          - platform: macos-latest
             target: aarch64-apple-darwin
-            args: ''
-          - platform: macos-13          # Intel (x86_64)
-            target: x86_64-apple-darwin
-            args: ''
+            extraTarget: x86_64-apple-darwin
+            args: '--target universal-apple-darwin'
           # AppImage is currently disabled — linuxdeploy fails silently in CI
           # under Tauri 2 even with libfuse2 + APPIMAGE_EXTRACT_AND_RUN. Ship
           # `.deb` only for now; revisit AppImage support once upstream is
           # stable. Debian/Ubuntu (the largest Linux desktop slice) get a
           # working installer either way.
-          - platform: ubuntu-22.04      # x86_64 Linux (.deb)
+          - platform: ubuntu-22.04
             target: x86_64-unknown-linux-gnu
+            extraTarget: ''
             args: '--bundles deb'
-          - platform: windows-latest    # x86_64 Windows (.msi + .exe)
+          - platform: windows-latest
             target: x86_64-pc-windows-msvc
+            extraTarget: ''
             args: ''
 
     runs-on: ${{ matrix.platform }}
@@ -63,6 +68,10 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ matrix.target }}
+
+      - name: Add extra Rust target (universal builds)
+        if: matrix.extraTarget != ''
+        run: rustup target add ${{ matrix.extraTarget }}
 
       - uses: oven-sh/setup-bun@v2
         with:
@@ -97,7 +106,18 @@ jobs:
       # Compiles `mcp-server` into a single executable named
       # `mediabox-mcp-<host-triple>(.exe)` under packages/desktop/src-tauri/binaries/
       # — exactly where Tauri looks for it via tauri.conf.json#bundle.externalBin.
-      - name: Build sidecar (bun --compile)
+      - name: Build sidecar (host triple)
+        run: npm run sidecar:build
+
+      # For Universal macOS builds Tauri looks for sidecars under BOTH
+      # `mediabox-mcp-aarch64-apple-darwin` and `mediabox-mcp-x86_64-apple-darwin`,
+      # then `lipo`s the wrapping binary. Bun cross-compiles freely between
+      # macOS arches from a single host, so this just calls the same script
+      # with TAURI_TARGET pointing at the other triple.
+      - name: Build sidecar (extra triple, for universal)
+        if: matrix.extraTarget != ''
+        env:
+          TAURI_TARGET: ${{ matrix.extraTarget }}
         run: npm run sidecar:build
 
       - name: Build & publish Tauri release
@@ -116,8 +136,7 @@ jobs:
 
             ### Install
             - **Windows:** download the `.msi` or `-setup.exe`
-            - **macOS (Apple Silicon):** download the `aarch64.dmg`
-            - **macOS (Intel):** download the `x64.dmg`
+            - **macOS (Universal — Apple Silicon + Intel):** download the `universal.dmg`
             - **Linux (Debian/Ubuntu):** `.deb`
 
             > Beta builds are unsigned. Windows SmartScreen and macOS Gatekeeper
