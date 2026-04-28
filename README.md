@@ -5,13 +5,14 @@
 <h1 align="center">Mediabox MCP</h1>
 
 <p align="center">
-  Self-hosted media server with AI-powered management via MCP & Desktop App
+  Self-hosted media server with AI-powered management via MCP, a native Desktop App, and a Telegram bot
 </p>
 
 <p align="center">
   <img src="https://img.shields.io/badge/version-2.1.0--beta.0-blue" alt="Version">
   <img src="https://img.shields.io/badge/license-MIT-green" alt="License">
   <img src="https://img.shields.io/badge/docker-compose-2496ED?logo=docker&logoColor=white" alt="Docker">
+  <img src="https://img.shields.io/badge/Tauri-2-FFC131?logo=tauri&logoColor=white" alt="Tauri">
   <img src="https://img.shields.io/badge/TypeScript-3178C6?logo=typescript&logoColor=white" alt="TypeScript">
 </p>
 
@@ -23,7 +24,17 @@
 
 ---
 
-### Quick Start
+### Three ways to run it
+
+| Surface | Use case | Entry point |
+|---------|----------|-------------|
+| **Desktop App (Tauri)** | Local-first install with a built-in setup wizard, dashboard, AI chat, log viewer, and one-click updates. The MCP server runs as a bundled sidecar — no external Node install needed. | `npm run dev:desktop` / packaged release |
+| **CLI wizard** | Headless deploy on a server. Same orchestration engine the Desktop wizard uses, exposed as a one-shot interactive prompt. | `npx create-mediabox` |
+| **Headless MCP server** | Plug the running stack into Claude Desktop, ChatGPT, Gemini, an OpenAI-compatible client, or the optional Telegram bot — over OAuth-protected `Streamable HTTP`. | `https://your-domain.com/mcp` |
+
+All three share the same Docker stack, the same `@mediabox/core` orchestration pipeline, and the same set of MCP tools.
+
+### Quick Start (CLI)
 
 ```bash
 npx create-mediabox
@@ -33,11 +44,20 @@ One command. Answer a few questions. The CLI sets up the full stack automaticall
 
 Supports **Local** (home network), **VPS** (with [Caddy](https://caddyserver.com/) and automatic HTTPS), and **Cloudflare Tunnel** (public access from home without opening ports) deployments.
 
-> Requires Docker, Docker Compose, and Node.js >= 20. Use `--local-build` to build images from source instead of pulling from registry.
+> Requires Docker, Docker Compose, and Node.js >= 22. Use `--local-build` to build images from source. Use `--generate-only` to write config files without starting Docker.
+
+### Quick Start (Desktop App)
+
+```bash
+git clone https://github.com/JuanCMPDev/mediabox-mcp.git
+cd mediabox-mcp
+npm install
+npm run dev:desktop
+```
+
+> Desktop builds need Rust (for Tauri) and [Bun](https://bun.sh/) (compiles the Node sidecar into a single executable via `bun build --compile`). On first launch the app walks you through a 9-step wizard — pick a language, run the Docker pre-flight check, set deployment mode, paths, credentials, optional AI provider, then deploy. The wizard streams live progress back into the UI.
 
 ### Architecture
-
-Mediabox MCP has evolved into a full monorepo ecosystem. It not only offers an AI-managed media server backend but now includes a **Desktop App (Tauri)** and a dedicated **React UI**.
 
 ```
                         Internet
@@ -51,15 +71,16 @@ Mediabox MCP has evolved into a full monorepo ecosystem. It not only offers an A
 ┌──────────────────────────┼──────────────────────────────────────┐
 │                          ▼                                      │
 │  ┌──────────────────────────────────────────────────────────┐   │
-│  │                Client Interfaces                         │   │
-│  │  (Mediabox Desktop / Telegram Bot / Any MCP Client)      │   │
+│  │                Client Surfaces                           │   │
+│  │  Mediabox Desktop · Telegram Bot · any MCP client        │   │
+│  │  (Claude, ChatGPT, Gemini, custom)                       │   │
 │  └──────────────────┬───────────────────────────────────────┘   │
-│                     │ MCP Protocol (HTTP/REST/Sidecar)          │
+│                     │ MCP (Streamable HTTP) · REST · NDJSON     │
 │                     ▼                                           │
 │  ┌──────────────────────────────────────────────────────────┐   │
 │  │               MCP Server (:3000)                         │   │
-│  │    Powered by @mediabox/chat-core & @mediabox/core       │   │
-│  │     25 tools · OAuth2 · Express · TypeScript             │   │
+│  │  /mcp · /api/dashboard · /api/chat · /api/setup          │   │
+│  │  30 MCP tools · OAuth2 · @mediabox/chat-core · core      │   │
 │  └──┬──────────┬──────────┬──────────┬──────────┬───────────┘   │
 │     ▼          ▼          ▼          ▼          ▼               │
 │  Jellyfin   Sonarr    Radarr    qBittorrent   PyLoad            │
@@ -73,7 +94,7 @@ Mediabox MCP has evolved into a full monorepo ecosystem. It not only offers an A
 │     ▼                                ▼                          │
 │  ┌──────────────────────────────────────────────────────────┐   │
 │  │               Shared Media Volume                        │   │
-│  │       /data/movies · /data/tv · /data/anime              │   │
+│  │       /data/movies · /data/tv · /data/anime · /music     │   │
 │  └──────────────────────────────────────────────────────────┘   │
 └─────────────────────────────────────────────────────────────────┘
   Local mode:   ports exposed directly
@@ -81,25 +102,29 @@ Mediabox MCP has evolved into a full monorepo ecosystem. It not only offers an A
   Tunnel mode:  ports bound to 127.0.0.1 + Cloudflare Tunnel
 ```
 
-### MCP Tools (25)
+In the Desktop App the same MCP server runs as a Tauri sidecar (compiled to a native executable with `bun build --compile`), bound to `127.0.0.1` on a random port and authed via an ephemeral internal API key. The webview talks to it over HTTP exactly like a remote deploy.
+
+### MCP Tools (30)
 
 | Category | Tools | Description |
 |----------|-------|-------------|
 | **Jellyfin** | `server_status` `activity_log` `search_media` `show_details` | Library browsing, monitoring, playback history |
-| **Library** | `manage_library` `manage_files` `rename_episodes` `fix_subtitles` | File ops, subtitle conversion, batch renaming |
-| **Sonarr** | `series_search` `series_status` `series_remove` `series_releases` `series_grab` | TV/anime management with auto ID resolution |
-| **Radarr** | `movie_search` `movie_status` `movie_remove` `movie_releases` `movie_grab` | Movie management with duplicate prevention |
+| **Library** | `manage_library` `manage_files` `rename_episodes` `get_library_state` `fix_subtitles` | File ops, subtitle conversion, batch renaming, cross-service state queries |
+| **Sonarr** | `series_search` `series_status` `series_remove` `series_releases` `series_grab` `series_import` `series_rescan` | TV/anime management with auto ID resolution |
+| **Radarr** | `movie_search` `movie_status` `movie_remove` `movie_releases` `movie_grab` `movie_import` `movie_rescan` | Movie management with duplicate prevention |
 | **Downloads** | `download_add` `download_direct` `download_status` `cancel_downloads` | Direct URLs, PyLoad, queue management, orphan cleanup |
 | **Maintenance** | `optimize_media` `cleanup_server` `check_jobs` | Strip tracks, clean server, monitor jobs |
 
-### What does the CLI do?
+The Desktop chat groups these into a smaller set of high-level *virtual tools* (e.g. `series`, `movies`, `downloads`) that the LLM picks first, then the engine routes the chosen action to the right MCP tool.
 
-The `create-mediabox` CLI replaces ~15 manual setup steps with a single interactive wizard:
+### What does the wizard do?
 
-1. **Asks** for your preferences — deployment mode (Local/VPS/Tunnel), media paths, passwords, timezone, optional Telegram bot
-2. **Generates** `.env`, `docker-compose.yml`, `Caddyfile` (VPS), and pre-configures qBittorrent
-3. **Starts** all Docker containers and waits for each service to be ready
-4. **Auto-configures** the entire stack via service APIs:
+The Desktop wizard and the `create-mediabox` CLI share the same orchestration pipeline (`@mediabox/core`). Both replace ~15 manual setup steps with a single flow:
+
+1. **Ask** for your preferences — deployment mode (Local/VPS/Tunnel), media paths, credentials, timezone, optional AI provider (OpenRouter or Google AI), optional Telegram bot
+2. **Generate** `.env`, `docker-compose.yml`, `Caddyfile` (VPS), and pre-configures qBittorrent
+3. **Start** all Docker containers and wait for each service to be ready
+4. **Auto-configure** the entire stack via service APIs:
    - Extracts Sonarr/Radarr/Prowlarr API keys
    - Runs Jellyfin setup wizard, creates admin user and API key
    - Configures qBittorrent as download client in Sonarr/Radarr
@@ -107,7 +132,26 @@ The `create-mediabox` CLI replaces ~15 manual setup steps with a single interact
    - Sets up FlareSolverr proxy and Jellyfin media libraries
    - Sets web UI credentials across all services
 
-After setup, the only manual step is adding your torrent indexers in Prowlarr.
+After setup, the only manual step is adding your torrent indexers in Prowlarr — the Desktop App walks you through it as a final wizard screen.
+
+### Repository layout
+
+```
+mediabox-mcp/
+├── docker-compose.yml          # Full service stack
+├── .env.example                # Environment variable template
+└── packages/
+    ├── chat-core/              # LLM + MCP tool-calling engine (OpenRouter + Gemini)
+    ├── contracts/              # Shared API types between server and UI
+    ├── core/                   # Orchestration engine: generators, deployer, service clients
+    ├── desktop/                # Tauri 2 desktop shell (bundles UI + MCP sidecar)
+    ├── mcp-server/             # Express MCP + REST server (TypeScript)
+    ├── mcp-telegram-client/    # Optional Telegram bot client
+    ├── mediabox-cli/           # `npx create-mediabox` interactive wizard
+    └── ui/                     # React UI for the Desktop App (Vite + TanStack Query + i18next)
+```
+
+See [docs/README.en.md](docs/README.en.md) (or [Español](docs/README.es.md)) for full installation, manual setup, and connection instructions.
 
 ---
 
