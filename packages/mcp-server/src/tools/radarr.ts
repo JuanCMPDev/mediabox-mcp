@@ -135,21 +135,33 @@ export function registerRadarrTools(server: McpServer): void {
         await radarrApi("queue/bulk?removeFromClient=true&blocklist=false", "DELETE", { ids: dupes.map((r: any) => r.id) } as any);
       }
     }
-    await radarrApi("release", "POST", { guid, indexerId });
 
-    // Poll the queue briefly so the LLM has authoritative state without
-    // making a separate verify call. Radarr-to-qBit propagation usually
-    // completes within ~1s, but we've seen the chat assistant report a
-    // false-error when it polled the queue immediately after release POST
-    // and saw 0 records. Returning the queue entry inline closes that gap.
+    // Radarr's POST /release can return 4xx when qBittorrent is slow to
+    // acknowledge a magnet (DHT metadata fetch can take 5-30s) — yet qBit
+    // accepts it asynchronously and the download starts. Treat the POST as
+    // best-effort and poll the queue regardless of throw, so we don't tell
+    // the user "failed" when the download is alive.
+    let postError: unknown;
+    try {
+      await radarrApi("release", "POST", { guid, indexerId });
+    } catch (err) {
+      postError = err;
+    }
+
+    // Poll up to ~10s when the POST threw (gives qBit time to fetch magnet
+    // metadata), or ~2s on the happy path (Radarr usually populates the
+    // queue within ~1s).
     if (resolved) {
-      for (let i = 0; i < 5; i++) {
+      const attempts = postError ? 25 : 5;
+      for (let i = 0; i < attempts; i++) {
         await new Promise(r => setTimeout(r, 400));
         const q = await radarrApi("queue?pageSize=200");
         const found = (q.records || []).find((r: any) => r.movieId === resolved);
         if (found) {
           return textResult({
-            message: "Release accepted and queued",
+            message: postError
+              ? "Release accepted (download client took longer than usual to acknowledge — the download is now live in the queue)"
+              : "Release accepted and queued",
             queued: {
               title:    found.title,
               status:   found.status,
@@ -161,6 +173,11 @@ export function registerRadarrTools(server: McpServer): void {
         }
       }
     }
+
+    // Queue still empty after the extended poll. If POST threw, surface the
+    // real error — the grab genuinely failed. Otherwise it's the propagation
+    // race the message warns about.
+    if (postError) throw postError;
     return textResult({
       message: "Release accepted by Radarr — download client will pick it up shortly",
       replaced: resolved ? true : undefined,

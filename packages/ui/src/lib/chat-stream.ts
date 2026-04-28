@@ -4,6 +4,7 @@
  * ──────────────────────────────────────────────────────────────────────── */
 import type { ChatEvent } from '@mediabox/contracts';
 import { getRuntimeConfig } from './runtime-config';
+import i18n from './i18n';
 
 export async function* streamChat(
   message: string,
@@ -16,6 +17,10 @@ export async function* streamChat(
     headers: {
       Authorization:  `Bearer ${internalApiKey}`,
       'Content-Type': 'application/json',
+      // mcp-server's localeMiddleware reads this and threads it into the
+      // system prompt so the LLM answers in the user's preferred language.
+      // Without it the server defaults to English regardless of UI locale.
+      'Accept-Language': i18n.language || 'en',
     },
     body: JSON.stringify({ message, conversationId }),
   });

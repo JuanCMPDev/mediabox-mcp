@@ -214,19 +214,30 @@ export function registerSonarrTools(server: McpServer): void {
         await sonarrApi("queue/bulk?removeFromClient=true&blocklist=false", "DELETE", { ids: dupes.map((r: any) => r.id) } as any);
       }
     }
-    await sonarrApi("release", "POST", { guid, indexerId });
 
-    // Poll the queue briefly so the LLM has authoritative state without
-    // making a separate verify call (which can hit Sonarr before the new
-    // download has propagated, leading to a false "no entry found").
+    // Sonarr's POST /release can return 4xx when qBittorrent is slow to
+    // acknowledge a magnet (DHT metadata fetch can take 5-30s) — yet qBit
+    // accepts it asynchronously and the download starts. Poll the queue
+    // regardless of throw so we don't tell the user "failed" when the
+    // download is alive.
+    let postError: unknown;
+    try {
+      await sonarrApi("release", "POST", { guid, indexerId });
+    } catch (err) {
+      postError = err;
+    }
+
     if (episodeId) {
-      for (let i = 0; i < 5; i++) {
+      const attempts = postError ? 25 : 5;  // ~10s on throw, ~2s on happy path
+      for (let i = 0; i < attempts; i++) {
         await new Promise(r => setTimeout(r, 400));
         const q = await sonarrApi("queue?pageSize=200");
         const found = (q.records || []).find((r: any) => r.episodeId === episodeId);
         if (found) {
           return textResult({
-            message: "Release accepted and queued",
+            message: postError
+              ? "Release accepted (download client took longer than usual to acknowledge — the download is now live in the queue)"
+              : "Release accepted and queued",
             queued: {
               series:   found.series?.title,
               episode:  found.episode ? `S${String(found.episode.seasonNumber).padStart(2, "0")}E${String(found.episode.episodeNumber).padStart(2, "0")}` : undefined,
@@ -239,6 +250,8 @@ export function registerSonarrTools(server: McpServer): void {
         }
       }
     }
+
+    if (postError) throw postError;
     return textResult({
       message: "Release accepted by Sonarr — download client will pick it up shortly",
       replaced: episodeId ? true : undefined,

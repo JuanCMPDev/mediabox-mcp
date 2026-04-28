@@ -176,7 +176,7 @@ export const VIRTUAL_TOOLS: Record<string, VirtualToolDef> = {
   present_choices: {
     name: 'present_choices',
     description:
-      "UI helper — render clickable option cards. THIS IS THE DEFAULT for any pick: multi-result searches, release pickers (movies/series action:'releases'), season/episode rangers, replace-vs-keep. Never list options as text bullets when present_choices applies. Each item.value MUST contain every ID and disambiguator the next turn needs (e.g. 'Descargá la release con guid=X indexerId=Y movieId=Z'). The user clicks a card and that exact value becomes their next message. Call this tool ALONE (no other tool calls in the same response) and emit zero or one short sentence of text alongside it. Cap to 4–8 items — pre-filter (drop 0-seeder, drop rejected, take top scores).",
+      "UI helper — render clickable option cards. THIS IS MANDATORY for any pick the user has to make: multi-result searches (>1 hit), release pickers (movies/series action:'releases' with >1 result), season/episode rangers, replace-vs-keep. NEVER list options as text bullets when present_choices applies — the user click won't carry IDs and the next tool call will fail. Each item.value MUST be a verbatim instruction with EVERY ID the next turn needs (e.g. \"Grab this release: guid=<guid> indexerId=<n> movieId=<m>\"). The user clicks a card and that exact value becomes their next message — there is no other way for IDs to round-trip. Call this tool ALONE (no other tool calls in the same response) with zero or one short sentence of text alongside it (in the user's locale). Cap to 4–8 items — pre-filter (drop 0-seeder, drop rejected, take top scores).",
     parameters: {
       type: 'object',
       properties: {
