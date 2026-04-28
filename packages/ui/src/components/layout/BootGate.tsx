@@ -1,4 +1,5 @@
 import { useEffect, useState, type ReactNode } from 'react';
+import { useTranslation } from 'react-i18next';
 import { loadRuntimeConfig } from '@/lib/runtime-config';
 import styles from './BootGate.module.css';
 
@@ -17,6 +18,7 @@ interface Props {
  * to its random port. In browser dev this is instantaneous.
  */
 export function BootGate({ children }: Props) {
+  const { t } = useTranslation();
   const [state, setState] = useState<BootState>({ status: 'loading' });
 
   useEffect(() => {
@@ -38,13 +40,13 @@ export function BootGate({ children }: Props) {
         <div className={styles.spinner} aria-hidden />
         {state.status === 'loading' && (
           <>
-            <h1 className={styles.title}>Starting Mediabox OS</h1>
-            <p className={styles.subtitle}>Bringing up the local service…</p>
+            <h1 className={styles.title}>{t('boot.starting')}</h1>
+            <p className={styles.subtitle}>{t('boot.subtitle')}</p>
           </>
         )}
         {state.status === 'failed' && (
           <>
-            <h1 className={styles.titleError}>Couldn&apos;t start the service</h1>
+            <h1 className={styles.titleError}>{t('boot.failed')}</h1>
             <p className={styles.subtitle}>{state.error}</p>
           </>
         )}

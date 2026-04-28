@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next';
 import type { WizardDraft } from '@/lib/wizard-types';
 import styles from './ReviewStep.module.css';
 
@@ -6,56 +7,56 @@ interface Props {
 }
 
 export function ReviewStep({ draft }: Props) {
+  const { t } = useTranslation('wizard');
+
   return (
     <>
       <p className="wizard-hint" style={{ margin: 0 }}>
-        Review your settings before deploying. The deploy pulls Docker images, starts each service,
-        waits for them to become healthy, and wires up the API keys between them. Takes 3–8 minutes
-        depending on your connection.
+        {t('review.intro')}
       </p>
 
       <div className={styles.summary}>
-        <Section title="Deployment">
-          <Row k="Mode"        v={draft.deployment.mode} />
-          <Row k="Stack at"    v={draft.workDir} mono />
-          <Row k="Image tag"   v={draft.deployment.imageTag} />
+        <Section title={t('review.sections.deployment')}>
+          <Row k={t('review.keys.mode')}        v={draft.deployment.mode} />
+          <Row k={t('review.keys.stackAt')}    v={draft.workDir} mono />
+          <Row k={t('review.keys.imageTag')}   v={draft.deployment.imageTag} />
           {draft.deployment.mode !== 'local' && (
-            <Row k="Domain" v={draft.deployment.baseDomain} />
+            <Row k={t('review.keys.domain')} v={draft.deployment.baseDomain} />
           )}
         </Section>
 
-        <Section title="System">
-          <Row k="Timezone" v={draft.system.timezone} />
-          <Row k="UID/GID"  v={`${draft.system.puid}:${draft.system.pgid}`} />
+        <Section title={t('review.sections.system')}>
+          <Row k={t('review.keys.timezone')} v={draft.system.timezone} />
+          <Row k={t('review.keys.uidGid')}  v={`${draft.system.puid}:${draft.system.pgid}`} />
         </Section>
 
-        <Section title="Media paths">
-          <Row k="Movies" v={draft.paths.movies} mono />
-          <Row k="TV"     v={draft.paths.tv}     mono />
-          <Row k="Anime"  v={draft.paths.anime}  mono />
-          <Row k="Music"  v={draft.paths.music}  mono />
+        <Section title={t('review.sections.mediaPaths')}>
+          <Row k={t('paths.movies')} v={draft.paths.movies} mono />
+          <Row k={t('paths.tv')}     v={draft.paths.tv}     mono />
+          <Row k={t('paths.anime')}  v={draft.paths.anime}  mono />
+          <Row k={t('paths.music')}  v={draft.paths.music}  mono />
         </Section>
 
-        <Section title="Services">
-          <Row k="Jellyfin admin" v={draft.services.jellyfinAdminUsername} />
-          <Row k="qBittorrent"    v={draft.services.qbitPassword.length > 0 ? 'admin / ••• set' : 'no password'} />
-          <Row k="PyLoad"         v="pyload / pyload (default)" />
-          <Row k="Bazarr"         v={draft.services.bazarrEnabled ? 'enabled' : 'disabled'} />
+        <Section title={t('review.sections.services')}>
+          <Row k={t('review.keys.jellyfinAdmin')} v={draft.services.jellyfinAdminUsername} />
+          <Row k={t('review.keys.qbit')}    v={draft.services.qbitPassword.length > 0 ? t('review.values.qbitSet') : t('review.values.noPassword')} />
+          <Row k={t('review.keys.pyload')}         v={t('review.values.pyloadDefault')} />
+          <Row k={t('review.keys.bazarr')}         v={draft.services.bazarrEnabled ? t('review.values.enabled') : t('review.values.disabled')} />
         </Section>
 
-        <Section title="AI">
-          <Row k="Provider" v={draft.ai.provider === 'none' ? 'none' : draft.ai.provider} />
+        <Section title={t('review.sections.ai')}>
+          <Row k={t('review.keys.provider')} v={draft.ai.provider === 'none' ? t('review.values.none') : draft.ai.provider} />
           {draft.ai.provider !== 'none' && (
-            <Row k="API key" v={draft.ai.apiKey ? `••• ${draft.ai.apiKey.slice(-4)}` : 'missing'} mono />
+            <Row k={t('review.keys.apiKey')} v={draft.ai.apiKey ? t('review.values.obscured', { last4: draft.ai.apiKey.slice(-4) }) : t('review.values.missing')} mono />
           )}
         </Section>
 
-        <Section title="Telegram">
-          <Row k="Status" v={draft.telegram.enabled ? 'enabled' : 'disabled'} />
+        <Section title={t('review.sections.telegram')}>
+          <Row k={t('review.keys.status')} v={draft.telegram.enabled ? t('review.values.enabled') : t('review.values.disabled')} />
           {draft.telegram.enabled && (
             <>
-              <Row k="Token" v={draft.telegram.botToken ? `••• ${draft.telegram.botToken.slice(-4)}` : 'missing'} mono />
-              <Row k="Users" v={draft.telegram.allowedUserIds || 'anyone'} />
+              <Row k={t('review.keys.token')} v={draft.telegram.botToken ? t('review.values.obscured', { last4: draft.telegram.botToken.slice(-4) }) : t('review.values.missing')} mono />
+              <Row k={t('review.keys.users')} v={draft.telegram.allowedUserIds || t('review.values.anyone')} />
             </>
           )}
         </Section>

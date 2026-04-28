@@ -48,10 +48,11 @@ export function streamServiceLogs(
   service: string,
   res: Response,
   tail = 200,
+  t?: (key: string, opts?: any) => string,
 ): void {
   const cwd = stackDir();
   if (!cwd) {
-    res.write(JSON.stringify({ type: "closed", reason: "error", message: "STACK_DIR not set — wizard has not completed yet." }) + "\n");
+    res.write(JSON.stringify({ type: "closed", reason: "error", message: t ? t("errors.stackUnavailable") : "STACK_DIR not set — wizard has not completed yet." }) + "\n");
     res.end();
     return;
   }

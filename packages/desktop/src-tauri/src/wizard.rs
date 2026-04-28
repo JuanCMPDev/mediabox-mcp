@@ -36,6 +36,25 @@ pub struct AppState {
     /// settings panel; never contains passwords or API keys (those live only
     /// in the stack `.env` and are loaded by the sidecar at startup).
     pub config_summary: Option<ConfigSummary>,
+    /// User-tunable app preferences (PR 3.4c) — refresh intervals, locale.
+    /// Optional so older state.json files keep parsing.
+    pub app_preferences: Option<AppPreferences>,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AppPreferences {
+    /// One of "realtime" | "balanced" | "battery". Controls dashboard
+    /// query refresh intervals (mapped client-side; the Rust shell just
+    /// persists the string).
+    pub refresh_profile: String,
+    /// BCP-47 locale code, e.g. "en", "es". Used by the i18n layer (PR 3.4d).
+    pub locale: String,
+    /// How often to kick a Jellyfin library scan, in minutes. `0` disables
+    /// the auto-refresh — the user can still trigger one manually from the
+    /// dashboard's library widget.
+    #[serde(default)]
+    pub library_refresh_minutes: u32,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]

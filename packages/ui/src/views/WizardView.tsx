@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { StepShell } from '@/components/wizard/StepShell';
 import { DeployProgress } from '@/components/wizard/DeployProgress';
+import { LanguageStep }   from '@/components/wizard/steps/LanguageStep';
 import { PreflightStep } from '@/components/wizard/steps/PreflightStep';
 import { DeploymentStep } from '@/components/wizard/steps/DeploymentStep';
 import { SystemStep } from '@/components/wizard/steps/SystemStep';
@@ -13,38 +15,31 @@ import { ProwlarrSetupStep } from '@/components/wizard/steps/ProwlarrSetupStep';
 import { useWizardDraft } from '@/lib/use-wizard-draft';
 import { useDeployStream } from '@/lib/use-deploy-stream';
 import { draftToDeployConfig } from '@/lib/wizard-types';
-import { defaultStackDir, setAppState, restartSidecar, type WorkdirProbe } from '@/lib/tauri-bridge';
+import { defaultStackDir, getAppState, setAppState, restartSidecar, type WorkdirProbe } from '@/lib/tauri-bridge';
 import { reloadRuntimeConfig } from '@/lib/runtime-config';
 
-const STEP_TITLES = [
-  'Pre-flight',
-  'Deployment',
-  'System',
-  'Media paths',
-  'Services',
-  'AI assistant',
-  'Telegram bot',
-  'Review',
-];
+/** Step index → translation key suffix. The LanguageStep is index 0; the
+ *  legacy "Pre-flight" step (and everything after it) shifts by one. */
+const STEP_KEYS = [
+  'language',
+  'preflight',
+  'deployment',
+  'system',
+  'paths',
+  'services',
+  'ai',
+  'telegram',
+  'review',
+] as const;
 
-const STEP_SUBTITLES = [
-  'Make sure Docker is ready before we start.',
-  'How should the stack be exposed, and where do the orchestration files live?',
-  'A few host parameters Docker needs to know.',
-  'Folders where Sonarr and Radarr will keep your organized media.',
-  'Credentials for each service’s web UI.',
-  'Optional: enable the in-app AI chat and pick an LLM provider.',
-  'Optional: connect a Telegram bot to use the AI from your phone.',
-  'Last chance to review before kicking off the deploy.',
-];
-
-const TOTAL_STEPS = STEP_TITLES.length;
+const TOTAL_STEPS = STEP_KEYS.length;
 
 interface Props {
   onComplete: () => void;
 }
 
 export function WizardView({ onComplete }: Props) {
+  const { t } = useTranslation('wizard');
   const { draft, setStep, update, updateNested, clear } = useWizardDraft();
   const { state: deployState, start, cancel, reset } = useDeployStream();
 
@@ -52,7 +47,7 @@ export function WizardView({ onComplete }: Props) {
   const [deploying, setDeploying]               = useState(false);
   const [workdirProbe, setWorkdirProbe]         = useState<WorkdirProbe | null>(null);
   // Set after deploy succeeds and the sidecar has been restarted with the
-  // freshly-written .env. Triggers the "Configurar Prowlarr" post-deploy step.
+  // freshly-written .env. Triggers the post-deploy "Set up Prowlarr" step.
   const [postDeployReady, setPostDeployReady]   = useState(false);
 
   // Pre-fill workDir on first mount with the OS-suggested default.
@@ -68,8 +63,10 @@ export function WizardView({ onComplete }: Props) {
 
   const canGoForward = (): boolean => {
     switch (draft.step) {
-      case 0: return preflightReady;
-      case 1: {
+      // 0 — Language: always valid (locale is preselected to "en").
+      case 0: return true;
+      case 1: return preflightReady;
+      case 2: {
         const d = draft.deployment;
         if (!draft.workDir.trim()) return false;
         if (!d.imageTag.trim()) return false;
@@ -80,9 +77,9 @@ export function WizardView({ onComplete }: Props) {
         if (workdirProbe !== null && !workdirProbe.sqliteCompatible) return false;
         return true;
       }
-      case 2: return draft.system.timezone.trim().length > 0;
-      case 3: return Object.values(draft.paths).every(p => p.trim().length > 0);
-      case 4: {
+      case 3: return draft.system.timezone.trim().length > 0;
+      case 4: return Object.values(draft.paths).every(p => p.trim().length > 0);
+      case 5: {
         // PyLoad credentials are not collected — its image hardcodes
         // pyload:pyload and we don't try to rotate them. The wizard step
         // only exposes Jellyfin + qBittorrent inputs.
@@ -91,18 +88,18 @@ export function WizardView({ onComplete }: Props) {
           && s.jellyfinAdminPassword.length >= 8
           && s.qbitPassword.length >= 8;
       }
-      case 5: {
+      case 6: {
         if (draft.ai.provider === 'none') return true;
         if (!draft.ai.apiKey.trim()) return false;
         if (draft.ai.provider === 'openrouter' && !draft.ai.model.trim()) return false;
         return true;
       }
-      case 6: {
+      case 7: {
         if (!draft.telegram.enabled) return true;
         if (draft.ai.provider === 'none') return false;
         return draft.telegram.botToken.trim().length > 0;
       }
-      case 7: return true;
+      case 8: return true;
       default: return false;
     }
   };
@@ -117,9 +114,12 @@ export function WizardView({ onComplete }: Props) {
   // sidecar can find the newly-written .env) and restart the sidecar so the
   // ProwlarrSetupStep's polling endpoint has PROWLARR_API_KEY in its env.
   // wizardCompletedAt stays null — App.tsx still routes us to the wizard until
-  // the user finishes the post-deploy step.
+  // the user finishes the post-deploy step. We MERGE with the current state so
+  // appPreferences (locale picked in step 0, refresh profile, etc.) survives.
   const beginPostDeploy = async () => {
+    const current = await getAppState();
     await setAppState({
+      ...current,
       wizardCompletedAt: null,
       stackDir:          draft.workDir,
       configSummary:     null,
@@ -131,9 +131,11 @@ export function WizardView({ onComplete }: Props) {
 
   // Phase 2 of post-deploy: write the full state and exit the wizard. Called
   // either when the user completes the ProwlarrSetupStep (≥1 indexer) or when
-  // they explicitly skip it.
+  // they explicitly skip it. Same merge pattern as beginPostDeploy.
   const finishWizard = async () => {
+    const current = await getAppState();
     await setAppState({
+      ...current,
       wizardCompletedAt: new Date().toISOString(),
       stackDir:          draft.workDir,
       configSummary: {
@@ -159,13 +161,15 @@ export function WizardView({ onComplete }: Props) {
     onComplete();
   };
 
+  const stepKey = STEP_KEYS[draft.step] ?? 'language';
+
   if (postDeployReady) {
     return (
       <StepShell
         stepIndex={TOTAL_STEPS - 1}
         totalSteps={TOTAL_STEPS}
-        title="Set up Prowlarr"
-        subtitle="Add at least one indexer so the stack can search for content."
+        title={t('stepTitles.prowlarr')}
+        subtitle={t('stepSubtitles.prowlarr')}
         hideNav
       >
         <ProwlarrSetupStep
@@ -181,8 +185,8 @@ export function WizardView({ onComplete }: Props) {
       <StepShell
         stepIndex={TOTAL_STEPS - 1}
         totalSteps={TOTAL_STEPS}
-        title="Deploying"
-        subtitle="This can take a few minutes the first time."
+        title={t('stepTitles.deploying')}
+        subtitle={t('stepSubtitles.deploying')}
         hideNav
       >
         <DeployProgress
@@ -199,16 +203,17 @@ export function WizardView({ onComplete }: Props) {
     <StepShell
       stepIndex={draft.step}
       totalSteps={TOTAL_STEPS}
-      title={STEP_TITLES[draft.step]!}
-      subtitle={STEP_SUBTITLES[draft.step]}
+      title={t(`stepTitles.${stepKey}`)}
+      subtitle={t(`stepSubtitles.${stepKey}`)}
       onBack={goBack}
       onForward={draft.step === TOTAL_STEPS - 1 ? launchDeploy : goForward}
       canGoBack={draft.step > 0}
       canGoForward={canGoForward()}
-      forwardLabel={draft.step === TOTAL_STEPS - 1 ? 'Start deploy' : undefined}
+      forwardLabel={draft.step === TOTAL_STEPS - 1 ? t('buttons.startDeploy') : undefined}
     >
-      {draft.step === 0 && <PreflightStep onReady={setPreflightReady} />}
-      {draft.step === 1 && (
+      {draft.step === 0 && <LanguageStep />}
+      {draft.step === 1 && <PreflightStep onReady={setPreflightReady} />}
+      {draft.step === 2 && (
         <DeploymentStep
           draft={draft}
           setWorkDir={v => update('workDir', v)}
@@ -216,12 +221,12 @@ export function WizardView({ onComplete }: Props) {
           onProbeResult={setWorkdirProbe}
         />
       )}
-      {draft.step === 2 && <SystemStep   draft={draft} setSystem={p => updateNested('system', p)} />}
-      {draft.step === 3 && <PathsStep    draft={draft} setPaths={p => updateNested('paths', p)} />}
-      {draft.step === 4 && <ServicesStep draft={draft} setServices={p => updateNested('services', p)} />}
-      {draft.step === 5 && <AIProviderStep draft={draft} setAI={p => updateNested('ai', p)} />}
-      {draft.step === 6 && <TelegramStep draft={draft} setTelegram={p => updateNested('telegram', p)} />}
-      {draft.step === 7 && <ReviewStep draft={draft} />}
+      {draft.step === 3 && <SystemStep   draft={draft} setSystem={p => updateNested('system', p)} />}
+      {draft.step === 4 && <PathsStep    draft={draft} setPaths={p => updateNested('paths', p)} />}
+      {draft.step === 5 && <ServicesStep draft={draft} setServices={p => updateNested('services', p)} />}
+      {draft.step === 6 && <AIProviderStep draft={draft} setAI={p => updateNested('ai', p)} />}
+      {draft.step === 7 && <TelegramStep draft={draft} setTelegram={p => updateNested('telegram', p)} />}
+      {draft.step === 8 && <ReviewStep draft={draft} />}
     </StepShell>
   );
 }

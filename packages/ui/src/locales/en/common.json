@@ -1,0 +1,189 @@
+{
+  "nav": {
+    "dashboard": "Dashboard",
+    "library": "Library",
+    "chat": "AI assistant",
+    "settings": "Settings"
+  },
+  "actions": {
+    "save": "Save",
+    "cancel": "Cancel",
+    "retry": "Retry",
+    "close": "Close",
+    "minimize": "Minimize",
+    "maximize": "Maximize",
+    "open": "Open",
+    "browse": "Browse",
+    "back": "Back",
+    "continue": "Continue",
+    "finish": "Finish",
+    "skip": "Skip",
+    "refresh": "Refresh"
+  },
+  "status": {
+    "idle": "idle",
+    "connecting": "connecting",
+    "live": "live",
+    "closed": "closed",
+    "error": "error",
+    "loading": "Loading…"
+  },
+  "boot": {
+    "starting": "Starting Mediabox OS",
+    "subtitle": "Bringing up the local service…",
+    "failed": "Couldn't start the service"
+  },
+  "topbar": {
+    "mcpConnected": "MCP server connected",
+    "mcpOffline": "MCP server offline"
+  },
+  "sidebar": {
+    "navigation": "Navigation",
+    "mcpConnected": "MCP Connected",
+    "mcpOffline": "MCP Offline"
+  },
+  "library": {
+    "movies": "Movies",
+    "tv": "TV",
+    "anime": "Anime",
+    "music": "Music",
+    "loading": "Loading library…",
+    "title": "Library",
+    "subtitle": "Quick access to your media folders. Browsing, search, and add-to-library are coming in a future iteration.",
+    "tip": "Tip:",
+    "tipText": "these folders are bind-mounted into Sonarr, Radarr, Bazarr, and Jellyfin. Anything you drop in here shows up in the stack within minutes.",
+    "openError": "Couldn't open {{label}}: {{error}}",
+    "notSet": "— not set —"
+  },
+  "logDrawer": {
+    "liveLogs": "live logs",
+    "tail": "Tail",
+    "nLines": "{{n}} lines",
+    "filterPlaceholder": "Filter…",
+    "pauseAutoScroll": "Pause auto-scroll",
+    "resumeAutoScroll": "Resume auto-scroll",
+    "clear": "Clear",
+    "connecting": "Connecting to {{displayName}}…",
+    "unknownError": "Unknown error",
+    "endOfStream": "— end of stream —",
+    "noLinesMatch": "No lines match the filter.",
+    "noLines": "No lines.",
+    "reconnect": "Reconnect"
+  },
+  "updateDrawer": {
+    "successToast": "Containers updated",
+    "errorToast": "Error: {{error}}",
+    "ariaLabel": "Update Docker images",
+    "title": "Update images",
+    "pulling": "Pulling latest images…",
+    "unknownError": "Unknown error",
+    "pullComplete": "Pull complete. Click \"Apply\" to restart containers with the new images.",
+    "containersRestarted": "Containers restarted with new images.",
+    "applying": "Applying…",
+    "applyUpdates": "Apply updates",
+    "nLines": "{{n}} lines"
+  },
+  "chat": {
+    "title":          "AI assistant",
+    "subtitle":       "AI-powered media control — early preview, may misfire on complex requests.",
+    "clearTitle":     "Clear conversation",
+    "clearConfirm":   "Clear conversation?",
+    "yes":            "Yes",
+    "no":             "No",
+    "generating":     "Generating…",
+    "pressEnter":     "Press Enter to send",
+    "askPlaceholder": "Ask Mediabox anything…",
+    "send":           "Send",
+    "tools": {
+      "server_info":  "Querying server…",
+      "media_query":  "Searching library…",
+      "library_ops":  "Managing files…",
+      "series":       "Querying Sonarr…",
+      "movies":       "Querying Radarr…",
+      "downloads":    "Checking downloads…",
+      "optimize":     "Analyzing media…",
+      "maintenance":  "Running maintenance…",
+      "fallback":     "{{name}}…"
+    }
+  },
+  "dashboard": {
+    "nowPlaying": {
+      "title":              "Jellyfin Active Stream",
+      "cannotReach":        "Cannot reach Jellyfin",
+      "noStreams":          "No active streams",
+      "playing":            "Playing",
+      "paused":             "Paused",
+      "watchingAs":         "Watching as",
+      "sessionInfoTitle":   "Session Info",
+      "sendMessageTitle":   "Send Message to User",
+      "killStreamTitle":    "Kill Stream",
+      "sessionId":          "Session ID",
+      "device":             "Device",
+      "close":              "Close",
+      "cancel":             "Cancel",
+      "killing":            "Killing…",
+      "killStreamBtn":      "Kill Stream",
+      "headerPlaceholder":  "Header (optional)",
+      "messagePlaceholder": "Message text…",
+      "sending":            "Sending…",
+      "sendBtn":            "Send",
+      "streamTerminated":   "Stream for {{user}} terminated",
+      "killFailed":         "Kill failed: {{message}}",
+      "messageSent":        "Message sent to {{user}}",
+      "sendFailed":         "Send failed: {{message}}"
+    },
+    "health": {
+      "title":       "Server Health",
+      "online":      "Online",
+      "offline":     "Offline",
+      "cannotReach": "Cannot reach server",
+      "cpu":         "CPU",
+      "ram":         "RAM",
+      "disk":        "Disk",
+      "uptime":      "Uptime",
+      "version":     "Version"
+    },
+    "downloads": {
+      "title":        "Download Queue",
+      "active":       "{{count}} active",
+      "cannotReach":  "Cannot reach download client",
+      "etaPattern":   "{{speed}} · ETA {{eta}}",
+      "uploading":    "Up {{speed}}",
+      "deleteFiles":  "Delete files?",
+      "torrentPaused":  "Torrent paused",
+      "torrentResumed": "Torrent resumed",
+      "torrentDeleted": "Torrent deleted",
+      "pauseFailed":    "Pause failed: {{message}}",
+      "resumeFailed":   "Resume failed: {{message}}",
+      "deleteFailed":   "Delete failed: {{message}}",
+      "status": {
+        "downloading": "Downloading",
+        "seeding":     "Seeding",
+        "paused":      "Paused",
+        "completed":   "Completed",
+        "error":       "Error"
+      },
+      "actions": {
+        "pause":           "Pause",
+        "resume":          "Resume",
+        "delete":          "Delete",
+        "deleteWithFiles": "Delete with files",
+        "removeFromQueue": "Remove from queue only",
+        "cancel":          "Cancel"
+      }
+    },
+    "library": {
+      "title":            "Library",
+      "movies":           "Movies",
+      "shows":            "Shows",
+      "episodes":         "Episodes",
+      "tracks":           "Tracks",
+      "totalSize":        "Total Library Size",
+      "cannotReach":      "Cannot reach Jellyfin",
+      "refresh":          "Refresh now",
+      "refreshing":       "Refreshing…",
+      "refreshTriggered": "Library scan started",
+      "refreshFailed":    "Refresh failed: {{message}}"
+    }
+  }
+}

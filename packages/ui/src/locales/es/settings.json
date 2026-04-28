@@ -1,0 +1,188 @@
+{
+  "title": "Ajustes",
+  "subtitle": "Los cambios afectan al stack. Los contenedores afectados se reinician automáticamente al guardar.",
+  "refresh": "Refrescar",
+  "stack": {
+    "title": "Stack",
+    "location": "Ubicación",
+    "mode": "Modo",
+    "imageTag": "Tag de imagen",
+    "baseDomain": "Dominio base",
+    "appVersion": "Versión de app"
+  },
+  "ai": {
+    "title": "Asistente de IA",
+    "subtitle": "Guardar reinicia el chat interno y el bot de Telegram.",
+    "provider": "Proveedor",
+    "noAi": "Sin IA",
+    "openRouter": "OpenRouter",
+    "googleAi": "Google AI",
+    "apiKey": "Clave de API",
+    "setLeaveBlank": "configurada — deja en blanco para mantener",
+    "replaceWithNew": "•••• reemplazar con clave nueva",
+    "model": "Modelo",
+    "updated": "Proveedor de IA actualizado"
+  },
+  "telegram": {
+    "title": "Bot de Telegram",
+    "subtitle": "Refleja el chat de IA en tu teléfono. Guardar reinicia el bot.",
+    "status": "Estado",
+    "disabled": "Desactivado",
+    "enabled": "Activado",
+    "botToken": "Token del bot",
+    "replaceToken": "•••• reemplaza con nuevo token",
+    "allowedUsers": "IDs de usuario permitidos",
+    "blankAnyone": "en blanco = cualquiera",
+    "tokenRequired": "Se requiere un token de bot para activar Telegram",
+    "updated": "Telegram actualizado"
+  },
+  "passwords": {
+    "qbitTitle": "Contraseña de qBittorrent",
+    "qbitSubtitle": "El usuario siempre es admin. Guardar rota la contraseña y reinicia qBittorrent.",
+    "qbitLabel": "qBittorrent",
+    "pyloadTitle": "Credenciales de PyLoad",
+    "pyloadSubtitle": "La imagen de PyLoad siempre inicia con credenciales por defecto. Rótales desde la interfaz web de PyLoad si es necesario.",
+    "username": "Usuario",
+    "password": "Contraseña",
+    "notSet": "no configurado",
+    "min8": "Mín. 8 caracteres",
+    "save": "Guardar",
+    "atLeast8": "Al menos 8 caracteres.",
+    "updated": "Contraseña de {{label}} actualizada",
+    "jellyfinTitle": "Contraseña de admin de Jellyfin",
+    "jellyfinNotSet": "Usuario admin no configurado. Vuelve a ejecutar el wizard para configurarlo.",
+    "jellyfinSubtitle": "Usuario: {{user}}. El cambio se aplica directamente en Jellyfin.",
+    "currentPassword": "Contraseña actual",
+    "newPassword": "Nueva contraseña",
+    "changePassword": "Cambiar contraseña",
+    "jellyfinUpdated": "Contraseña de Jellyfin actualizada"
+  },
+  "apiKeys": {
+    "title": "API keys de *arr",
+    "subtitle": "Genera una nueva API key para Sonarr, Radarr o Prowlarr.",
+    "sonarr": "Sonarr",
+    "radarr": "Radarr",
+    "prowlarr": "Prowlarr",
+    "confirmTitle": "Rotar API key de {{label}}",
+    "confirmMessage": "{{label}} se reiniciará brevemente mientras rotamos su API key. Cualquier cosa que siga usando la clave antigua tendrá que ser reconfigurada. ¿Continuar?",
+    "rotated": "API key de {{label}} rotada",
+    "rotate": "Rotar",
+    "set": "configurado"
+  },
+  "services": {
+    "title": "Servicios",
+    "subtitle": "Haz clic en cualquiera para abrir su interfaz web en tu navegador.",
+    "user": "usuario: ",
+    "apiKey": "Clave de API",
+    "password": "contraseña",
+    "noKey": "sin clave",
+    "noPassword": "sin contraseña",
+    "viewLogs": "Ver logs de {{name}}",
+    "openBrowser": "Abrir en el navegador"
+  },
+  "system": {
+    "title": "Sistema",
+    "subtitle": "Guardar recrea los contenedores afectados (1-2 minutos).",
+    "timezone": "Zona horaria",
+    "ianaHint": "Formato IANA (ej. <1>Europe/Madrid</1>, <3>America/Argentina/Buenos_Aires</3>).",
+    "puidPgid": "PUID / PGID",
+    "idHint": "IDs de usuario y grupo con los que se ejecutan los contenedores de LinuxServer. Ejecuta <1>id -u</1> e <3>id -g</3> en Linux para encontrar los tuyos; <5>1000:1000</5> funciona en Windows/macOS.",
+    "updated": "Ajustes de sistema actualizados",
+    "confirmMessage": "Guardar recreará cada contenedor en el stack para que los nuevos valores surtan efecto. Esto suele tardar 1-2 minutos; las descargas en curso se pausan y reanudan automáticamente. ¿Continuar?",
+    "confirmTitle": "Aplicar cambios de sistema"
+  },
+  "mediaPaths": {
+    "title": "Rutas de medios",
+    "subtitle": "Dónde Sonarr, Radarr y Jellyfin buscan tu biblioteca en disco. Guardar recrea los contenedores afectados.",
+    "movies": "Películas",
+    "tv": "TV",
+    "anime": "Anime",
+    "music": "Música",
+    "hint": "Los cambios de ruta no mueven los medios existentes — copia o mueve los archivos tú mismo antes de guardar para que los contenedores encuentren tu biblioteca en la nueva ubicación.",
+    "updated": "Rutas de medios actualizadas",
+    "confirmMessage": "Guardar reescribe las rutas bind-mount en el .env y recrea Sonarr / Radarr / Jellyfin / mcp-server. Los archivos multimedia existentes en las rutas ANTIGUAS NO se mueven — cópialos o muévelos tú mismo antes de guardar si lo necesitas. ¿Continuar?",
+    "confirmTitle": "Aplicar cambios de rutas de medios",
+    "browse": "Explorar"
+  },
+  "preferences": {
+    "title": "Preferencias",
+    "subtitle": "Ajustes de toda la app — se guardan en state.json y se aplican inmediatamente.",
+    "refreshProfile": "Perfil de refresco",
+    "language": "Idioma",
+    "refreshUpdated": "Perfil de refresco actualizado",
+    "langUpdated": "Idioma actualizado",
+    "saveError": "No se pudo guardar la preferencia: {{error}}",
+    "profiles": {
+      "realtime": "Tiempo real",
+      "realtimeHint": "Descargas 2 s · sesiones 3 s · salud 5 s · servicios 15 s",
+      "balanced": "Balanceado",
+      "balancedHint": "Aprox. 2× el intervalo de tiempo real — más suave con CPU y batería",
+      "battery": "Batería",
+      "batteryHint": "Aprox. 6× el intervalo de tiempo real — mínimo tráfico en segundo plano"
+    },
+    "locales": {
+      "en": "English",
+      "enHint": "Por defecto — todas las cadenas de la UI están traducidas.",
+      "es": "Español",
+      "esHint": "Stub — las traducciones llegan en un PR posterior; las claves faltantes recurren al inglés."
+    },
+    "libraryRefresh": {
+      "label":   "Auto-actualizar biblioteca de Jellyfin",
+      "hint":    "Lanza un escaneo de la biblioteca de Jellyfin con cierta periodicidad mientras la app está abierta. \"Off\" deja al programador interno de Jellyfin a cargo.",
+      "off":     "Off",
+      "hourly":  "Cada hora",
+      "every6h": "Cada 6 h",
+      "daily":   "Diaria",
+      "updated": "Periodicidad de actualización guardada"
+    }
+  },
+  "lifecycle": {
+    "title": "Ciclo de vida del stack",
+    "subtitle": "Acciones globales en todos los contenedores.",
+    "startAll": "Iniciar todos",
+    "restartAll": "Reiniciar todos",
+    "stopAll": "Detener todos",
+    "confirmMessage": "Esto va a {{verb}} todos los contenedores en el stack. ¿Continuar?",
+    "restartToast": "Stack reiniciado",
+    "restartTitle": "Reiniciar stack",
+    "stopToast": "Stack detenido",
+    "stopTitle": "Detener stack",
+    "startToast": "Stack iniciado",
+    "startTitle": "Iniciar stack",
+    "restartVerb": "reiniciar",
+    "stopVerb": "detener",
+    "startVerb": "iniciar"
+  },
+  "updates": {
+    "title": "Actualizaciones",
+    "subtitle": "Descarga las últimas imágenes de Docker y reinicia solo lo que cambió.",
+    "check": "Buscar actualizaciones"
+  },
+  "advanced": {
+    "title": "Avanzado",
+    "openFolder": "Abrir carpeta del stack",
+    "exportConfig": "Exportar config…",
+    "importConfig": "Importar config…",
+    "rerunWizard": "Re-ejecutar wizard",
+    "wizardHint": "Re-ejecutar el wizard solo borra <1>state.json</1>. Los contenedores Docker siguen funcionando — para empezar completamente desde cero, ejecuta también <3>docker compose down -v</3> en la carpeta del stack.",
+    "openError": "No se pudo abrir la carpeta del stack: {{error}}",
+    "exportSuccess": "Copia de seguridad guardada ({{parts}})",
+    "exportError": "No se pudo exportar: {{error}}",
+    "importSuccess": "Restaurado: {{parts}}. Reiniciando sidecar…",
+    "importError": "No se pudo importar: {{error}}",
+    "wizardCleared": "Estado del wizard borrado. Reinicia la app para ver el wizard.",
+    "importConfirmMessage": "Importar sobrescribe tu state.json y .env actuales con el contenido del zip. El stack de Docker en el stackDir importado NO se redespliega — abre el wizard desde \"Re-ejecutar wizard\" si necesitas levantar contenedores en la nueva ubicación. ¿Continuar?",
+    "importConfirmTitle": "Restaurar config desde zip",
+    "wizardConfirmMessage": "Esto borra el estado del wizard pero NO toca el stack desplegado. El próximo inicio ejecutará el wizard de nuevo. ¿Continuar?",
+    "wizardConfirmTitle": "Re-ejecutar wizard"
+  },
+  "saveBar": {
+    "dirty": "Cambios sin guardar",
+    "save": "Guardar y reiniciar"
+  },
+  "error": "Error: {{message}}",
+  "eyeToggle": {
+    "hide": "Ocultar contraseña",
+    "show": "Mostrar contraseña"
+  }
+}

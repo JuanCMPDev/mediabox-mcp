@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { X, Trash2, PauseCircle, PlayCircle, AlertCircle, Loader, CheckCircle } from 'lucide-react';
 import { useLogStream, type LogStreamStatus } from '@/lib/use-log-stream';
 import styles from './LogDrawer.module.css';
@@ -12,6 +13,7 @@ interface Props {
 const TAIL_OPTIONS = [100, 200, 500, 1000] as const;
 
 export function LogDrawer({ service, displayName, onClose }: Props) {
+  const { t } = useTranslation();
   const { lines, status, error, open, close, clear } = useLogStream();
   const [tail,       setTail]       = useState<number>(200);
   const [autoScroll, setAutoScroll] = useState(true);
@@ -46,9 +48,9 @@ export function LogDrawer({ service, displayName, onClose }: Props) {
           <div className={styles.headerTitle}>
             <StatusDot status={status} />
             <span className={styles.serviceName}>{displayName}</span>
-            <span className={styles.headerSub}>live logs</span>
+            <span className={styles.headerSub}>{t('logDrawer.liveLogs')}</span>
           </div>
-          <button className={styles.iconBtn} onClick={onClose} title="Close">
+          <button className={styles.iconBtn} onClick={onClose} title={t('actions.close')}>
             <X size={16} />
           </button>
         </div>
@@ -56,14 +58,14 @@ export function LogDrawer({ service, displayName, onClose }: Props) {
         {/* Controls */}
         <div className={styles.controls}>
           <div className={styles.controlGroup}>
-            <label className={styles.controlLabel}>Tail</label>
+            <label className={styles.controlLabel}>{t('logDrawer.tail')}</label>
             <select
               className={styles.select}
               value={tail}
               onChange={e => setTail(Number(e.target.value))}
             >
               {TAIL_OPTIONS.map(n => (
-                <option key={n} value={n}>{n} lines</option>
+                <option key={n} value={n}>{t('logDrawer.nLines', { n })}</option>
               ))}
             </select>
           </div>
@@ -71,7 +73,7 @@ export function LogDrawer({ service, displayName, onClose }: Props) {
           <div className={styles.controlGroup}>
             <input
               className={styles.searchInput}
-              placeholder="Filter…"
+              placeholder={t('logDrawer.filterPlaceholder')}
               value={search}
               onChange={e => setSearch(e.target.value)}
             />
@@ -80,12 +82,12 @@ export function LogDrawer({ service, displayName, onClose }: Props) {
           <button
             className={styles.iconBtn}
             onClick={() => setAutoScroll(a => !a)}
-            title={autoScroll ? 'Pause auto-scroll' : 'Resume auto-scroll'}
+            title={autoScroll ? t('logDrawer.pauseAutoScroll') : t('logDrawer.resumeAutoScroll')}
           >
             {autoScroll ? <PauseCircle size={15} /> : <PlayCircle size={15} />}
           </button>
 
-          <button className={styles.iconBtn} onClick={clear} title="Clear">
+          <button className={styles.iconBtn} onClick={clear} title={t('logDrawer.clear')}>
             <Trash2 size={15} />
           </button>
         </div>
@@ -104,14 +106,14 @@ export function LogDrawer({ service, displayName, onClose }: Props) {
           {status === 'connecting' && (
             <div className={styles.centeredMsg}>
               <Loader size={16} className={styles.spin} />
-              Connecting to {displayName}…
+              {t('logDrawer.connecting', { displayName })}
             </div>
           )}
 
           {status === 'error' && (
             <div className={styles.centeredMsg}>
               <AlertCircle size={16} />
-              {error ?? 'Unknown error'}
+              {error ?? t('logDrawer.unknownError')}
             </div>
           )}
 
@@ -123,22 +125,22 @@ export function LogDrawer({ service, displayName, onClose }: Props) {
           ))}
 
           {status === 'closed' && lines.length > 0 && (
-            <div className={styles.eofMsg}>— end of stream —</div>
+            <div className={styles.eofMsg}>{t('logDrawer.endOfStream')}</div>
           )}
 
           {(status === 'live' || status === 'closed') && filtered.length === 0 && (
-            <div className={styles.centeredMsg}>No lines{search ? ' match the filter' : ''}.</div>
+            <div className={styles.centeredMsg}>{search ? t('logDrawer.noLinesMatch') : t('logDrawer.noLines')}</div>
           )}
         </div>
 
         {/* Footer */}
         <div className={styles.footer}>
           <StatusDot status={status} />
-          <span className={styles.footerStatus}>{statusLabel(status)}</span>
-          <span className={styles.lineCount}>{lines.length.toLocaleString('en')} lines</span>
+          <span className={styles.footerStatus}>{t(`status.${status}`)}</span>
+          <span className={styles.lineCount}>{t('logDrawer.nLines', { n: lines.length.toLocaleString() })}</span>
           {(status === 'closed' || status === 'error') && (
             <button className={styles.retryBtn} onClick={() => void open(service, tail)}>
-              Reconnect
+              {t('logDrawer.reconnect')}
             </button>
           )}
         </div>
@@ -158,10 +160,6 @@ function StatusDot({ status }: { status: LogStreamStatus }) {
     error:      <AlertCircle size={12} className={`${styles.dotIcon} ${styles.dotError}`} />,
   };
   return <>{icon[status]}</>;
-}
-
-function statusLabel(s: LogStreamStatus) {
-  return { idle: 'idle', connecting: 'connecting', live: 'live', closed: 'closed', error: 'error' }[s];
 }
 
 /** Format an ISO timestamp to HH:MM:SS.mmm */

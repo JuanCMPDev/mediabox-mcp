@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { CheckCircle2, XCircle, Loader2, AlertTriangle, ExternalLink } from 'lucide-react';
 import { checkDocker } from '@/lib/tauri-bridge';
 import { GlassButton } from '@/components/atoms/GlassButton';
@@ -17,6 +18,7 @@ interface Props {
 }
 
 export function PreflightStep({ onReady }: Props) {
+  const { t } = useTranslation('wizard');
   const [status, setStatus] = useState<DockerStatus | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -48,22 +50,22 @@ export function PreflightStep({ onReady }: Props) {
   return (
     <div className={styles.preflight}>
       <p className={styles.intro}>
-        Mediabox needs Docker to run the stack. Quick check first.
+        {t('preflight.intro')}
       </p>
 
       <div className={styles.checks}>
         <Check
-          label="Docker installed"
+          label={t('preflight.dockerInstalled')}
           status={loading ? 'pending' : status?.installed ? 'ok' : 'fail'}
           detail={status?.version ?? undefined}
         />
         <Check
-          label="Docker daemon running"
+          label={t('preflight.daemonRunning')}
           status={loading ? 'pending' : status?.daemonRunning ? 'ok' : 'fail'}
-          detail={!status?.daemonRunning && status?.installed ? 'Start Docker Desktop' : undefined}
+          detail={!status?.daemonRunning && status?.installed ? t('preflight.startDesktop') : undefined}
         />
         <Check
-          label="docker compose plugin"
+          label={t('preflight.composeAvailable')}
           status={loading ? 'pending' : status?.composeAvailable ? 'ok' : 'fail'}
         />
       </div>
@@ -72,10 +74,10 @@ export function PreflightStep({ onReady }: Props) {
         <div className={styles.errorBox}>
           <AlertTriangle size={16} />
           <div>
-            <strong>Can&apos;t continue yet.</strong>
-            <p>{status.error || 'A check failed. Verify Docker Desktop is running, then retry.'}</p>
+            <strong>{t('preflight.cantContinue')}</strong>
+            <p>{status.error || t('preflight.checkFailed')}</p>
             <a href="https://docs.docker.com/get-docker/" target="_blank" rel="noopener" className={styles.link}>
-              Install Docker
+              {t('preflight.installDocker')}
               <ExternalLink size={12} />
             </a>
           </div>
@@ -85,7 +87,7 @@ export function PreflightStep({ onReady }: Props) {
       <div className={styles.retry}>
         <GlassButton variant="secondary" size="sm" onClick={probe} disabled={loading}>
           {loading ? <Loader2 size={14} className={styles.spin} /> : null}
-          Retry
+          {t('preflight.retry')}
         </GlassButton>
       </div>
     </div>

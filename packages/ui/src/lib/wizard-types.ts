@@ -61,8 +61,12 @@ export interface WizardDraft {
   };
 }
 
-export const DRAFT_VERSION = 1;
-export const DRAFT_STORAGE_KEY = 'mediabox:wizard-draft-v1';
+// PR 3.4d: bump from v1 → v2 because the wizard step indices shifted (added
+// LanguageStep at position 0). Stale v1 drafts would land users on the
+// wrong screen — useWizardDraft keys off this storage key so v1 drafts are
+// silently dropped and the user starts fresh on the language step.
+export const DRAFT_VERSION = 2;
+export const DRAFT_STORAGE_KEY = 'mediabox:wizard-draft-v2';
 
 export function detectTimezone(): string {
   try {
@@ -168,25 +172,39 @@ export function draftToDeployConfig(draft: WizardDraft): DeployConfig {
     },
   };
 
-  if (draft.telegram.enabled) {
+  // AI provider lives at the top level of DeployConfig now (was nested under
+  // telegram). env.ts always writes LLM_PROVIDER / OPENROUTER_API_KEY etc.
+  // when this is set, so the in-app AI assistant works even if the user
+  // skipped Telegram in the wizard.
+  if (draft.ai.provider === 'openrouter') {
+    config.ai = {
+      kind:   'openrouter',
+      apiKey: draft.ai.apiKey,
+      model:  draft.ai.model || 'openai/gpt-4o',
+    };
+  } else if (draft.ai.provider === 'google') {
+    config.ai = {
+      kind:   'google',
+      apiKey: draft.ai.apiKey,
+      ...(draft.ai.model && { model: draft.ai.model }),
+    };
+  }
+
+  if (draft.telegram.enabled && config.ai) {
     const ids = draft.telegram.allowedUserIds
       .split(',')
       .map(s => parseInt(s.trim(), 10))
       .filter(n => Number.isFinite(n));
 
-    if (draft.ai.provider === 'openrouter') {
-      config.telegram = {
-        botToken: draft.telegram.botToken,
-        allowedUserIds: ids,
-        llm: { kind: 'openrouter', apiKey: draft.ai.apiKey, model: draft.ai.model || 'anthropic/claude-3.5-sonnet' },
-      };
-    } else if (draft.ai.provider === 'google') {
-      config.telegram = {
-        botToken: draft.telegram.botToken,
-        allowedUserIds: ids,
-        llm: { kind: 'google', apiKey: draft.ai.apiKey, ...(draft.ai.model && { model: draft.ai.model }) },
-      };
-    }
+    config.telegram = {
+      botToken:       draft.telegram.botToken,
+      allowedUserIds: ids,
+      // Mirror the same LLM into telegram.llm for the bot. env.ts no longer
+      // writes the LLM vars from this — it reads `config.ai` — so this is
+      // just for the contracts shape today, but kept so the legacy fallback
+      // path in env.ts works for older callers.
+      llm: config.ai,
+    };
   }
 
   return config;

@@ -1,0 +1,189 @@
+{
+  "nav": {
+    "dashboard": "Panel de control",
+    "library": "Biblioteca",
+    "chat": "Asistente IA",
+    "settings": "Configuración"
+  },
+  "actions": {
+    "save": "Guardar",
+    "cancel": "Cancelar",
+    "retry": "Reintentar",
+    "close": "Cerrar",
+    "minimize": "Minimizar",
+    "maximize": "Maximizar",
+    "open": "Abrir",
+    "browse": "Explorar",
+    "back": "Volver",
+    "continue": "Continuar",
+    "finish": "Finalizar",
+    "skip": "Omitir",
+    "refresh": "Actualizar"
+  },
+  "status": {
+    "idle": "inactivo",
+    "connecting": "conectando",
+    "live": "en vivo",
+    "closed": "cerrado",
+    "error": "error",
+    "loading": "Cargando…"
+  },
+  "boot": {
+    "starting": "Iniciando Mediabox OS",
+    "subtitle": "Iniciando el servicio local…",
+    "failed": "No se pudo iniciar el servicio"
+  },
+  "topbar": {
+    "mcpConnected": "Servidor MCP conectado",
+    "mcpOffline": "Servidor MCP desconectado"
+  },
+  "sidebar": {
+    "navigation": "Navegación",
+    "mcpConnected": "MCP Conectado",
+    "mcpOffline": "MCP Desconectado"
+  },
+  "library": {
+    "movies": "Películas",
+    "tv": "Series",
+    "anime": "Anime",
+    "music": "Música",
+    "loading": "Cargando biblioteca…",
+    "title": "Biblioteca",
+    "subtitle": "Acceso rápido a tus carpetas multimedia. La exploración, búsqueda y agregar a la biblioteca llegarán en una futura versión.",
+    "tip": "Consejo:",
+    "tipText": "estas carpetas están montadas en Sonarr, Radarr, Bazarr y Jellyfin. Cualquier cosa que sueltes aquí aparecerá en el stack en cuestión de minutos.",
+    "openError": "No se pudo abrir {{label}}: {{error}}",
+    "notSet": "— no configurado —"
+  },
+  "logDrawer": {
+    "liveLogs": "logs en vivo",
+    "tail": "Tail",
+    "nLines": "{{n}} líneas",
+    "filterPlaceholder": "Filtrar…",
+    "pauseAutoScroll": "Pausar auto-scroll",
+    "resumeAutoScroll": "Reanudar auto-scroll",
+    "clear": "Limpiar",
+    "connecting": "Conectando a {{displayName}}…",
+    "unknownError": "Error desconocido",
+    "endOfStream": "— fin del stream —",
+    "noLinesMatch": "Ninguna línea coincide con el filtro.",
+    "noLines": "Sin líneas.",
+    "reconnect": "Reconectar"
+  },
+  "updateDrawer": {
+    "successToast": "Contenedores actualizados",
+    "errorToast": "Error: {{error}}",
+    "ariaLabel": "Actualizar imágenes de Docker",
+    "title": "Actualizar imágenes",
+    "pulling": "Descargando últimas imágenes…",
+    "unknownError": "Error desconocido",
+    "pullComplete": "Descarga completa. Haz clic en \"Aplicar\" para reiniciar los contenedores con las nuevas imágenes.",
+    "containersRestarted": "Contenedores reiniciados con nuevas imágenes.",
+    "applying": "Aplicando…",
+    "applyUpdates": "Aplicar actualizaciones",
+    "nLines": "{{n}} líneas"
+  },
+  "chat": {
+    "title":          "Asistente IA",
+    "subtitle":       "Control de medios con IA — vista previa, puede equivocarse en peticiones complejas.",
+    "clearTitle":     "Borrar conversación",
+    "clearConfirm":   "¿Borrar conversación?",
+    "yes":            "Sí",
+    "no":             "No",
+    "generating":     "Generando…",
+    "pressEnter":     "Pulsá Enter para enviar",
+    "askPlaceholder": "Preguntale lo que sea a Mediabox…",
+    "send":           "Enviar",
+    "tools": {
+      "server_info":  "Consultando el servidor…",
+      "media_query":  "Buscando en la biblioteca…",
+      "library_ops":  "Gestionando archivos…",
+      "series":       "Consultando Sonarr…",
+      "movies":       "Consultando Radarr…",
+      "downloads":    "Revisando descargas…",
+      "optimize":     "Analizando medios…",
+      "maintenance":  "Ejecutando mantenimiento…",
+      "fallback":     "{{name}}…"
+    }
+  },
+  "dashboard": {
+    "nowPlaying": {
+      "title":              "Stream activo de Jellyfin",
+      "cannotReach":        "No se puede conectar con Jellyfin",
+      "noStreams":          "Sin streams activos",
+      "playing":            "Reproduciendo",
+      "paused":             "En pausa",
+      "watchingAs":         "Viendo como",
+      "sessionInfoTitle":   "Info de la sesión",
+      "sendMessageTitle":   "Enviar mensaje al usuario",
+      "killStreamTitle":    "Detener stream",
+      "sessionId":          "ID de sesión",
+      "device":             "Dispositivo",
+      "close":              "Cerrar",
+      "cancel":             "Cancelar",
+      "killing":            "Deteniendo…",
+      "killStreamBtn":      "Detener stream",
+      "headerPlaceholder":  "Encabezado (opcional)",
+      "messagePlaceholder": "Texto del mensaje…",
+      "sending":            "Enviando…",
+      "sendBtn":            "Enviar",
+      "streamTerminated":   "Stream de {{user}} detenido",
+      "killFailed":         "Falló la detención: {{message}}",
+      "messageSent":        "Mensaje enviado a {{user}}",
+      "sendFailed":         "Falló el envío: {{message}}"
+    },
+    "health": {
+      "title":       "Estado del servidor",
+      "online":      "En línea",
+      "offline":     "Desconectado",
+      "cannotReach": "No se puede conectar con el servidor",
+      "cpu":         "CPU",
+      "ram":         "RAM",
+      "disk":        "Disco",
+      "uptime":      "Tiempo activo",
+      "version":     "Versión"
+    },
+    "downloads": {
+      "title":        "Cola de descargas",
+      "active":       "{{count}} activas",
+      "cannotReach":  "No se puede conectar con el cliente de descargas",
+      "etaPattern":   "{{speed}} · ETA {{eta}}",
+      "uploading":    "Subida {{speed}}",
+      "deleteFiles":  "¿Borrar archivos?",
+      "torrentPaused":  "Torrent pausado",
+      "torrentResumed": "Torrent reanudado",
+      "torrentDeleted": "Torrent borrado",
+      "pauseFailed":    "Falló al pausar: {{message}}",
+      "resumeFailed":   "Falló al reanudar: {{message}}",
+      "deleteFailed":   "Falló al borrar: {{message}}",
+      "status": {
+        "downloading": "Descargando",
+        "seeding":     "Sembrando",
+        "paused":      "Pausado",
+        "completed":   "Completado",
+        "error":       "Error"
+      },
+      "actions": {
+        "pause":           "Pausar",
+        "resume":          "Reanudar",
+        "delete":          "Borrar",
+        "deleteWithFiles": "Borrar con archivos",
+        "removeFromQueue": "Quitar solo de la cola",
+        "cancel":          "Cancelar"
+      }
+    },
+    "library": {
+      "title":            "Biblioteca",
+      "movies":           "Películas",
+      "shows":            "Series",
+      "episodes":         "Episodios",
+      "tracks":           "Pistas",
+      "totalSize":        "Tamaño total",
+      "cannotReach":      "No se puede conectar con Jellyfin",
+      "refresh":          "Actualizar ahora",
+      "refreshing":       "Actualizando…",
+      "refreshTriggered": "Escaneo de biblioteca iniciado",
+      "refreshFailed":    "Falló la actualización: {{message}}"
+    }
+  }
+}

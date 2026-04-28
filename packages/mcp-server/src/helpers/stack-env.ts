@@ -85,52 +85,87 @@ export async function patchEnvFile(updates: Record<string, string>): Promise<voi
  * the UI (or a malicious script in the webview) from breaking foundational
  * runtime config like INTERNAL_API_KEY, PORT, MCP_PUBLIC_URL, image_tag, etc.
  *
- * Each key maps to the docker-compose service(s) that must restart for the
- * change to take effect. "sidecar" means the desktop's bundled mcp-server
- * binary (handled by the Tauri restart_sidecar command).
+ * Each key declares a `strategy` and a `targets` list:
+ *   - "restart"  — services react to env changes by restarting the existing
+ *                  container (`docker compose restart`). Use for credentials
+ *                  the container reads at request time, or "sidecar" / the
+ *                  bundled telegram-bot which the Tauri shell respawns.
+ *   - "recreate" — Docker bakes the env var into the container at `up` time
+ *                  (TZ, PUID, PGID) or the value is part of a bind-mount
+ *                  spec (path vars). A simple restart is a no-op for these;
+ *                  the container has to be torn down and recreated against
+ *                  the updated `.env`. Use the special target `"all"` when
+ *                  the change affects every container in the stack.
  * ──────────────────────────────────────────────────────────────────────── */
-export const EDITABLE_ENV_KEYS: Record<string, string[]> = {
+export type EditableEnvStrategy = "restart" | "recreate";
+
+export interface EditableEnvSpec {
+  strategy: EditableEnvStrategy;
+  targets:  string[];
+}
+
+export const EDITABLE_ENV_KEYS: Record<string, EditableEnvSpec> = {
   // ── AI provider (chat in app + telegram bot) ──────────────────────────────
-  LLM_PROVIDER:        ["sidecar", "telegram-bot"],
-  OPENROUTER_API_KEY:  ["sidecar", "telegram-bot"],
-  GOOGLE_AI_API_KEY:   ["sidecar", "telegram-bot"],
-  LLM_MODEL:           ["sidecar", "telegram-bot"],
+  LLM_PROVIDER:        { strategy: "restart", targets: ["sidecar", "telegram-bot"] },
+  OPENROUTER_API_KEY:  { strategy: "restart", targets: ["sidecar", "telegram-bot"] },
+  GOOGLE_AI_API_KEY:   { strategy: "restart", targets: ["sidecar", "telegram-bot"] },
+  LLM_MODEL:           { strategy: "restart", targets: ["sidecar", "telegram-bot"] },
 
   // ── Telegram bot config ───────────────────────────────────────────────────
-  TELEGRAM_BOT_TOKEN:      ["telegram-bot"],
-  ALLOWED_TELEGRAM_USERS:  ["telegram-bot"],
+  TELEGRAM_BOT_TOKEN:      { strategy: "restart", targets: ["telegram-bot"] },
+  ALLOWED_TELEGRAM_USERS:  { strategy: "restart", targets: ["telegram-bot"] },
 
   // ── Service credentials ───────────────────────────────────────────────────
   // qBittorrent stores its actual password as a PBKDF2 hash inside
   // qBittorrent.conf — patchEnvFile regenerates that file. The qbittorrent
   // container has to be stopped before we edit (otherwise it overwrites
   // our hash on SIGTERM); the PATCH /env handler does that dance, so we
-  // don't return "qbittorrent" in restartRequired here. The sidecar still
+  // don't return "qbittorrent" in restart targets here. The sidecar still
   // needs to restart so its qBit client uses the new password.
-  QBIT_PASSWORD:    ["sidecar"],
+  QBIT_PASSWORD:    { strategy: "restart", targets: ["sidecar"] },
   // PyLoad's actual user/password live in its own DB and are not read from
   // env vars. Changing these just syncs mcp-server's auth credentials —
   // the user must change the real password through PyLoad's UI first.
-  PYLOAD_USER:      ["sidecar"],
-  PYLOAD_PASSWORD:  ["sidecar"],
+  PYLOAD_USER:      { strategy: "restart", targets: ["sidecar"] },
+  PYLOAD_PASSWORD:  { strategy: "restart", targets: ["sidecar"] },
+
+  // ── Infrastructure (PR 3.4a) ──────────────────────────────────────────────
+  // Media paths are referenced from docker-compose.yml as ${VAR} bind-mount
+  // sources, so a `restart` keeps the old mount and silently does nothing.
+  // We need to recreate the affected containers against the new `.env`.
+  MOVIES_PATH:  { strategy: "recreate", targets: ["radarr", "jellyfin", "mcp-server"] },
+  TV_PATH:      { strategy: "recreate", targets: ["sonarr", "jellyfin", "mcp-server"] },
+  ANIME_PATH:   { strategy: "recreate", targets: ["sonarr", "jellyfin", "mcp-server"] },
+  MUSIC_PATH:   { strategy: "recreate", targets: ["jellyfin", "mcp-server"] },
+  // TZ / PUID / PGID are baked into every container's env at `up` time;
+  // recreating the whole stack is the cleanest way to apply them. The
+  // "all" sentinel translates to `docker compose up -d --force-recreate`
+  // (no service arg) inside the recreate handler.
+  TZ:    { strategy: "recreate", targets: ["all"] },
+  PUID:  { strategy: "recreate", targets: ["all"] },
+  PGID:  { strategy: "recreate", targets: ["all"] },
 };
 
 export function filterEditable(updates: Record<string, string>): {
   accepted:  Record<string, string>;
   rejected:  string[];
   restarts:  Set<string>;
+  recreates: Set<string>;
 } {
   const accepted: Record<string, string> = {};
   const rejected: string[] = [];
-  const restarts = new Set<string>();
+  const restarts  = new Set<string>();
+  const recreates = new Set<string>();
 
   for (const [k, v] of Object.entries(updates)) {
-    if (k in EDITABLE_ENV_KEYS) {
-      accepted[k] = v;
-      for (const svc of EDITABLE_ENV_KEYS[k]!) restarts.add(svc);
-    } else {
+    const spec = EDITABLE_ENV_KEYS[k];
+    if (!spec) {
       rejected.push(k);
+      continue;
     }
+    accepted[k] = v;
+    const bucket = spec.strategy === "restart" ? restarts : recreates;
+    for (const svc of spec.targets) bucket.add(svc);
   }
-  return { accepted, rejected, restarts };
+  return { accepted, rejected, restarts, recreates };
 }

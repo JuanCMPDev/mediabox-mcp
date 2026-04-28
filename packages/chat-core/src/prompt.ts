@@ -1,8 +1,21 @@
 /* ─── System prompt — verbatim from @mediabox/mcp-telegram-client ───────────
  * Source of truth for LLM behavior. Changing this affects BOTH the browser
  * chat (via chat-core) and, once 2.3e is done, the Telegram bot.
+ *
+ * The first line tells the model which language to answer in — it switches
+ * with the user's preferred locale (PR 3.4d). Everything else is in English
+ * because LLM instruction-following is most reliable with English-language
+ * directives, even when the model is asked to reply in Spanish/etc.
  * ──────────────────────────────────────────────────────────────────────── */
-export const SYSTEM_PROMPT = `You are a multimedia server assistant managing Jellyfin, Sonarr, Radarr, qBittorrent, and PyLoad. Respond in Spanish, concisely.
+
+export type PromptLocale = "en" | "es";
+
+const LANGUAGE_LINE: Record<PromptLocale, string> = {
+  en: "Respond in English, concisely.",
+  es: "Respond in Spanish, concisely.",
+};
+
+const PROMPT_BODY = `
 
 ## Core principles
 
@@ -104,3 +117,21 @@ After starting a download, verify it entered the queue with series(action:"statu
 ## Response format
 
 Keep answers short and direct. Use simple lists for options. Avoid complex markdown formatting.`;
+
+/**
+ * Build the LLM system prompt for the user's preferred locale. The body of
+ * the prompt stays English (LLM tool-following is most reliable with English
+ * directives) — only the "Respond in X" line changes. Unknown locales fall
+ * back to English so the chat keeps working if the UI sends a future tag we
+ * don't recognise yet.
+ */
+export function buildSystemPrompt(locale: PromptLocale | string | undefined | null): string {
+  const tag: PromptLocale =
+    locale === "es" || locale === "en" ? locale : "en";
+  return `You are a multimedia server assistant managing Jellyfin, Sonarr, Radarr, qBittorrent, and PyLoad. ${LANGUAGE_LINE[tag]}${PROMPT_BODY}`;
+}
+
+/** @deprecated Pass an explicit locale via `buildSystemPrompt(locale)`.
+ *  Kept as the English variant so legacy callers (Telegram bot etc.) stay
+ *  working until they're migrated. */
+export const SYSTEM_PROMPT = buildSystemPrompt("en");

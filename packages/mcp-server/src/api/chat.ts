@@ -69,6 +69,9 @@ chatRouter.post("/stream", async (req: Request, res: Response): Promise<void> =>
       provider,
       mcpCall,
       historyStore: chatHistory,
+      // PR 3.4d: thread the user's preferred locale to the system prompt so
+      // the LLM responds in the requested language.
+      locale: req.locale,
     })) {
       if (closed) break;
       emit(evt);

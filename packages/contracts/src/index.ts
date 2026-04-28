@@ -152,6 +152,16 @@ export interface DeployConfig {
   paths:      MediaPathsConfig;
   services:   ServicesConfig;
   mcp:        McpConfig;
+  /**
+   * LLM provider for the in-app AI assistant. Optional — present only when
+   * the user picks a non-`none` provider in the wizard. Independent of
+   * Telegram so users who skip Telegram still get the AI assistant working.
+   *
+   * env.ts uses this to write `LLM_PROVIDER`, `LLM_MODEL`, and the matching
+   * `OPENROUTER_API_KEY` / `GOOGLE_AI_API_KEY` to `.env` regardless of
+   * whether Telegram is configured.
+   */
+  ai?:        LLMProviderConfig;
   telegram?:  TelegramConfig;
 }
 
@@ -316,8 +326,15 @@ export interface EnvUpdate {
 export interface EnvUpdateResult {
   /** Keys that were actually written to disk (filtered against allowlist). */
   updated: string[];
-  /** Containers (or "sidecar") whose state needs a restart to take effect. */
+  /** Containers (or "sidecar") whose state needs a `restart` to take effect. */
   restartRequired: string[];
+  /**
+   * Containers that need to be `recreated` (`docker compose up -d
+   * --force-recreate`) — Docker bakes some env vars into the container at
+   * `up` time (TZ, PUID, PGID, bind-mount sources), so a simple restart is
+   * a no-op for those. The special value `"all"` means every container.
+   */
+  recreateRequired: string[];
   /** Validation issues (per-key) — non-empty means the patch was rejected. */
   errors: Array<{ key: string; message: string }>;
 }

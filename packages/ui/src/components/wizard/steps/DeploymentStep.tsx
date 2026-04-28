@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { Trans, useTranslation } from 'react-i18next';
 import { AlertTriangle, CheckCircle, Folder, Loader, XCircle } from 'lucide-react';
 import { GlassInput }       from '@/components/atoms/GlassInput';
 import { GlassButton }      from '@/components/atoms/GlassButton';
@@ -16,6 +17,7 @@ interface Props {
 }
 
 export function DeploymentStep({ draft, setWorkDir, setDeployment, onProbeResult }: Props) {
+  const { t } = useTranslation('wizard');
   const [probe,   setProbe]   = useState<WorkdirProbe | null>(null);
   const [probing, setProbing] = useState(false);
 
@@ -61,25 +63,25 @@ export function DeploymentStep({ draft, setWorkDir, setDeployment, onProbeResult
   return (
     <>
       <div className="wizard-field">
-        <label className="wizard-label">Deployment mode</label>
+        <label className="wizard-label">{t('deployment.modeLabel')}</label>
         <SegmentedControl
           value={draft.deployment.mode}
           onChange={v => setDeployment({ mode: v as WizardDraft['deployment']['mode'] })}
           options={[
-            { value: 'local',  label: 'Local' },
-            { value: 'vps',    label: 'Public VPS' },
-            { value: 'tunnel', label: 'Cloudflare Tunnel' },
+            { value: 'local',  label: t('deployment.modes.local') },
+            { value: 'vps',    label: t('deployment.modes.vps') },
+            { value: 'tunnel', label: t('deployment.modes.tunnel') },
           ]}
         />
         <span className="wizard-hint">
-          {draft.deployment.mode === 'local'  && 'Reachable only from your LAN. Simplest for home use.'}
-          {draft.deployment.mode === 'vps'    && "Public server with Caddy + Let's Encrypt."}
-          {draft.deployment.mode === 'tunnel' && 'Local stack exposed through a Cloudflare Tunnel — no open ports.'}
+          {draft.deployment.mode === 'local'  && t('deployment.hints.local')}
+          {draft.deployment.mode === 'vps'    && t('deployment.hints.vps')}
+          {draft.deployment.mode === 'tunnel' && t('deployment.hints.tunnel')}
         </span>
       </div>
 
       <div className="wizard-field">
-        <label className="wizard-label">Stack folder</label>
+        <label className="wizard-label">{t('deployment.folderLabel')}</label>
         <div style={{ display: 'flex', gap: 8 }}>
           <div style={{ flex: 1 }}>
             <GlassInput
@@ -90,19 +92,21 @@ export function DeploymentStep({ draft, setWorkDir, setDeployment, onProbeResult
           </div>
           <GlassButton variant="secondary" size="md" onClick={browse}>
             <Folder size={14} />
-            Browse
+            {t('deployment.browse')}
           </GlassButton>
         </div>
         <span className="wizard-hint">
-          We&apos;ll write <code>docker-compose.yml</code>, <code>.env</code>, and <code>config/</code> here.
+          <Trans i18nKey="deployment.folderHint" t={t}>
+            We&apos;ll write <code>docker-compose.yml</code>, <code>.env</code>, and <code>config/</code> here.
+          </Trans>
         </span>
 
-        <WorkdirBanner probe={probe} probing={probing} />
+        <WorkdirBanner probe={probe} probing={probing} t={t} />
       </div>
 
       {(draft.deployment.mode === 'vps' || draft.deployment.mode === 'tunnel') && (
         <div className="wizard-field">
-          <label className="wizard-label">Base domain</label>
+          <label className="wizard-label">{t('deployment.domainLabel')}</label>
           <GlassInput
             value={draft.deployment.baseDomain}
             onChange={v => setDeployment({ baseDomain: v })}
@@ -113,7 +117,7 @@ export function DeploymentStep({ draft, setWorkDir, setDeployment, onProbeResult
 
       {draft.deployment.mode === 'vps' && (
         <div className="wizard-field">
-          <label className="wizard-label">Let&apos;s Encrypt email</label>
+          <label className="wizard-label">{t('deployment.emailLabel')}</label>
           <GlassInput
             value={draft.deployment.letsEncryptEmail}
             onChange={v => setDeployment({ letsEncryptEmail: v })}
@@ -124,27 +128,29 @@ export function DeploymentStep({ draft, setWorkDir, setDeployment, onProbeResult
 
       {draft.deployment.mode === 'tunnel' && (
         <div className="wizard-field">
-          <label className="wizard-label">Cloudflare Tunnel token</label>
+          <label className="wizard-label">{t('deployment.tunnelTokenLabel')}</label>
           <GlassInput
             value={draft.deployment.tunnelToken}
             onChange={v => setDeployment({ tunnelToken: v })}
             placeholder="eyJh…"
           />
           <span className="wizard-hint">
-            Get it from Cloudflare Zero Trust → Networks → Tunnels.
+            {t('deployment.tunnelTokenHint')}
           </span>
         </div>
       )}
 
       <div className="wizard-field">
-        <label className="wizard-label">Image tag</label>
+        <label className="wizard-label">{t('deployment.imageTagLabel')}</label>
         <GlassInput
           value={draft.deployment.imageTag}
           onChange={v => setDeployment({ imageTag: v })}
           placeholder="latest"
         />
         <span className="wizard-hint">
-          Pin to a specific tag (e.g. <code>v2.1.0</code>) for production instead of <code>latest</code>.
+          <Trans i18nKey="deployment.imageTagHint" t={t}>
+            Pin to a specific tag (e.g. <code>v2.1.0</code>) for production instead of <code>latest</code>.
+          </Trans>
         </span>
       </div>
     </>
@@ -156,14 +162,15 @@ export function DeploymentStep({ draft, setWorkDir, setDeployment, onProbeResult
 interface BannerProps {
   probe:   WorkdirProbe | null;
   probing: boolean;
+  t:       any;
 }
 
-function WorkdirBanner({ probe, probing }: BannerProps) {
+function WorkdirBanner({ probe, probing, t }: BannerProps) {
   if (probing) {
     return (
       <div className={`${styles.banner} ${styles.bannerChecking}`}>
         <Loader size={14} className={styles.spin} />
-        <span>Checking filesystem compatibility…</span>
+        <span>{t('deployment.probe.checking')}</span>
       </div>
     );
   }
@@ -176,11 +183,13 @@ function WorkdirBanner({ probe, probing }: BannerProps) {
       <div className={`${styles.banner} ${styles.bannerError}`}>
         <XCircle size={14} />
         <span>
-          <strong>Incompatible filesystem{fsLabel}.</strong>{' '}
-          Sonarr, Radarr, and Prowlarr won&apos;t start here — this filesystem doesn&apos;t
-          support SQLite&apos;s WAL mode (typical on WSL2 9P bind-mounts, SMB, and NFS).{' '}
-          <strong>Use <code>C:\</code> for the stack folder</strong> and point your media
-          paths at your preferred drive in the next step.
+          <Trans i18nKey="deployment.probe.incompatible" t={t} values={{ fsLabel }}>
+            <strong>Incompatible filesystem{fsLabel}.</strong>{' '}
+            Sonarr, Radarr, and Prowlarr won&apos;t start here — this filesystem doesn&apos;t
+            support SQLite&apos;s WAL mode (typical on WSL2 9P bind-mounts, SMB, and NFS).{' '}
+            <strong>Use <code>C:\</code> for the stack folder</strong> and point your media
+            paths at your preferred drive in the next step.
+          </Trans>
         </span>
       </div>
     );
@@ -192,9 +201,11 @@ function WorkdirBanner({ probe, probing }: BannerProps) {
       <div className={`${styles.banner} ${styles.bannerWarn}`}>
         <AlertTriangle size={14} />
         <span>
-          <strong>Non-system drive detected{fsLabel}.</strong>{' '}
-          Docker Desktop + WSL2 can have file-locking issues on drives other than <code>C:\</code>.
-          If Sonarr/Radarr/Prowlarr crash on startup, move the stack to <code>C:\</code>.
+          <Trans i18nKey="deployment.probe.nonSystem" t={t} values={{ fsLabel }}>
+            <strong>Non-system drive detected{fsLabel}.</strong>{' '}
+            Docker Desktop + WSL2 can have file-locking issues on drives other than <code>C:\</code>.
+            If Sonarr/Radarr/Prowlarr crash on startup, move the stack to <code>C:\</code>.
+          </Trans>
         </span>
       </div>
     );
@@ -204,7 +215,7 @@ function WorkdirBanner({ probe, probing }: BannerProps) {
     <div className={`${styles.banner} ${styles.bannerOk}`}>
       <CheckCircle size={14} />
       <span>
-        Filesystem looks good{probe.fsType ? ` (${probe.fsType})` : ''}.
+        {t('deployment.probe.ok', { fsLabel: probe.fsType ? ` (${probe.fsType})` : '' })}
       </span>
     </div>
   );

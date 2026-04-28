@@ -37,10 +37,24 @@ export interface ConfigSummary {
   telegramUserCount: number;
 }
 
+export type RefreshProfile = 'realtime' | 'balanced' | 'battery';
+export type Locale         = 'en' | 'es';
+
+export interface AppPreferences {
+  /** Maps to query refresh intervals (see use-app-preferences). */
+  refreshProfile: RefreshProfile;
+  /** UI locale; backend honours it via Accept-Language. */
+  locale:         Locale;
+  /** Auto-refresh Jellyfin library every N minutes; `0` disables. */
+  libraryRefreshMinutes: number;
+}
+
 export interface AppState {
   wizardCompletedAt: string | null;
   stackDir:          string | null;
   configSummary:     ConfigSummary | null;
+  /** Optional — older state.json files predate PR 3.4c. */
+  appPreferences?:   AppPreferences | null;
 }
 
 function inTauri(): boolean {
@@ -219,4 +233,59 @@ export async function confirmDialog(message: string, title = 'Confirmar'): Promi
   if (!inTauri()) return window.confirm(`${title}\n\n${message}`);
   const { ask } = await import('@tauri-apps/plugin-dialog');
   return ask(message, { title, kind: 'warning' });
+}
+
+// ── Backup / restore (PR 3.4b) ────────────────────────────────────────────────
+
+export interface ConfigExportSummary {
+  files:          number;
+  includedState:  boolean;
+  includedEnv:    boolean;
+}
+
+export interface ConfigImportSummary {
+  restoredState: boolean;
+  restoredEnv:   boolean;
+  envPath:       string | null;
+}
+
+/**
+ * Open a native "Save File" dialog and bundle state.json + the deployed
+ * stack's `.env` into a zip at the chosen path. Returns null if the user
+ * cancels the picker.
+ */
+export async function exportConfigToZip(): Promise<ConfigExportSummary | null> {
+  if (!inTauri()) {
+    console.warn('[exportConfigToZip] no-op outside Tauri');
+    return null;
+  }
+  const { save } = await import('@tauri-apps/plugin-dialog');
+  const path = await save({
+    title: 'Save Mediabox config backup',
+    defaultPath: `mediabox-config-${new Date().toISOString().slice(0, 10)}.zip`,
+    filters: [{ name: 'Zip archive', extensions: ['zip'] }],
+  });
+  if (!path) return null;
+  return invoke<ConfigExportSummary>('export_config', { destPath: path });
+}
+
+/**
+ * Open a native "Open File" dialog, read the chosen zip, and restore
+ * state.json + .env back to where Mediabox expects them. Caller is
+ * responsible for restarting the sidecar afterwards.
+ */
+export async function importConfigFromZip(): Promise<ConfigImportSummary | null> {
+  if (!inTauri()) {
+    console.warn('[importConfigFromZip] no-op outside Tauri');
+    return null;
+  }
+  const { open } = await import('@tauri-apps/plugin-dialog');
+  const path = await open({
+    title: 'Restore Mediabox config backup',
+    multiple: false,
+    directory: false,
+    filters: [{ name: 'Zip archive', extensions: ['zip'] }],
+  });
+  if (!path || typeof path !== 'string') return null;
+  return invoke<ConfigImportSummary>('import_config', { sourcePath: path });
 }

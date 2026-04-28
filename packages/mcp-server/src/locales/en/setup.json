@@ -1,0 +1,40 @@
+{
+  "errors": {
+    "stackUnavailable": "STACK_DIR is not configured — wizard not completed.",
+    "envEmpty": "value for {{key}} must be a string",
+    "envRejected": "key is not in the editable allowlist",
+    "envFileMissing": "Stack .env not found",
+    "deployActive": "A deploy is already in progress",
+    "configRequired": "config is required",
+    "workDirRequired": "workDir is required",
+    "configInvalid": "Invalid config",
+    "servicesRequired": "services[] is required and must be non-empty"
+  },
+  "jellyfin": {
+    "currentPasswordRequired": "currentPassword and newPassword are required",
+    "passwordTooShort": "newPassword must be at least 8 characters",
+    "adminUserNotConfigured": "JELLYFIN_ADMIN_USER is not configured",
+    "currentPasswordWrong": "Current password is incorrect",
+    "responseStatus": "Jellyfin returned {{status}}",
+    "authMalformed": "Jellyfin auth response malformed (missing token or user ID)",
+    "passwordRejected": "Jellyfin rejected the password change ({{status}})",
+    "unreachable": "Couldn't reach Jellyfin: {{message}}",
+    "apiKeyMissing": "JELLYFIN_API_KEY isn't in .env yet — finish the wizard first."
+  },
+  "prowlarr": {
+    "apiKeyMissing": "PROWLARR_API_KEY isn't in .env yet — the deploy may not have finished.",
+    "responseStatus": "Prowlarr returned {{status}}",
+    "unreachable": "Couldn't reach Prowlarr: {{message}}"
+  },
+  "regen": {
+    "serviceInvalid": "service must be one of: {{services}}",
+    "stackUnavailable": "STACK_DIR is not configured — wizard not completed.",
+    "configNotFound": "config.xml not found at {{path}}: {{message}}",
+    "noApiKeyElement": "No <ApiKey> element in {{path}}",
+    "updateFailed": "Failed to update {{file}} or .env: {{message}}",
+    "composeFailed": "docker compose {{command}} failed: {{message}}"
+  },
+  "logs": {
+    "unknownService": "Unknown service \"{{service}}\". Allowed: {{allowed}}."
+  }
+}

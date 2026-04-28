@@ -13,12 +13,17 @@ import type {
 } from '@mediabox/contracts';
 
 import { getRuntimeConfig } from './runtime-config';
+import i18n from './i18n';
 
 const HEADERS = () => {
   const { internalApiKey } = getRuntimeConfig();
   return {
-    Authorization:  `Bearer ${internalApiKey}`,
-    'Content-Type': 'application/json',
+    Authorization:    `Bearer ${internalApiKey}`,
+    'Content-Type':   'application/json',
+    // i18next exposes the active language synchronously after init; the
+    // mcp-server's localeMiddleware reads this to pick its translation
+    // bundle (PR 3.4d).
+    'Accept-Language': i18n.language || 'en',
   };
 };
 
@@ -130,12 +135,22 @@ export const api = {
   setupRestartServices(services: string[]): Promise<RestartServicesResult> {
     return post<RestartServicesResult>('/api/setup/restart-services', { services }, 5 * 60_000);
   },
+  setupRecreateServices(services: string[]) {
+    return post<{ recreated: string[]; errors: Array<{ service: string; message: string }> }>(
+      '/api/setup/recreate-services',
+      { services },
+      10 * 60_000,
+    );
+  },
   setupStackRestart() { return post('/api/setup/stack/restart', undefined, 5 * 60_000); },
   setupStackStop()    { return post('/api/setup/stack/stop',    undefined, 60_000); },
   setupStackStart()   { return post('/api/setup/stack/start',   undefined, 2 * 60_000); },
   setupApplyUpdates() { return post<{ ok: boolean }>('/api/setup/apply-updates', undefined, 10 * 60_000); },
   setupJellyfinPassword(currentPassword: string, newPassword: string) {
     return post<{ ok: boolean }>('/api/setup/jellyfin/password', { currentPassword, newPassword }, 30_000);
+  },
+  setupRefreshJellyfinLibrary() {
+    return post<{ ok: boolean }>('/api/setup/jellyfin/refresh-library', undefined, 15_000);
   },
   setupRegenerateApiKey(service: 'sonarr' | 'radarr' | 'prowlarr') {
     return post<{ ok: boolean; restartRequired: string[] }>(

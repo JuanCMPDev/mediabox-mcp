@@ -44,6 +44,8 @@ import {
   stackUp,
   stopServices,
   startServices,
+  recreateServices as runRecreateServices,
+  recreateAll,
   streamDockerPull,
   StackUnavailableError,
 } from "../helpers/docker-compose.js";
@@ -75,17 +77,17 @@ setupRouter.post("/start", async (req: Request, res: Response): Promise<void> =>
   };
 
   if (!config) {
-    res.status(400).json({ error: "config is required" });
+    res.status(400).json({ error: req.t!("errors.configRequired") });
     return;
   }
   if (!workDir?.trim()) {
-    res.status(400).json({ error: "workDir is required" });
+    res.status(400).json({ error: req.t!("errors.workDirRequired") });
     return;
   }
 
   const validation = validateDeployConfig(config);
   if (validation.length > 0) {
-    res.status(400).json({ error: "Invalid config", issues: validation });
+    res.status(400).json({ error: req.t!("errors.configInvalid"), issues: validation });
     return;
   }
 
@@ -297,10 +299,10 @@ setupRouter.get("/info", async (_req: Request, res: Response): Promise<void> => 
 // because round-tripping through a mask would lose the plain values that
 // the user might want to copy out (e.g. for reuse on another machine).
 
-setupRouter.get("/env-raw", async (_req: Request, res: Response): Promise<void> => {
+setupRouter.get("/env-raw", async (req: Request, res: Response): Promise<void> => {
   const content = await readEnvFile();
   if (content === null) {
-    res.status(404).json({ error: "Stack .env not found" });
+    res.status(404).json({ error: req.t!("errors.envFileMissing") });
     return;
   }
   res.type("text/plain").send(content);
@@ -317,13 +319,13 @@ setupRouter.patch("/env", async (req: Request, res: Response): Promise<void> => 
   const updates: Record<string, string> = {};
   for (const [k, v] of Object.entries(body)) {
     if (typeof v !== "string") {
-      res.status(400).json({ error: `value for ${k} must be a string` });
+      res.status(400).json({ error: req.t!("errors.envEmpty", { key: k }) });
       return;
     }
     updates[k] = v;
   }
 
-  const { accepted, rejected, restarts } = filterEditable(updates);
+  const { accepted, rejected, restarts, recreates } = filterEditable(updates);
 
   const errors: EnvUpdateResult["errors"] = [];
   for (const k of rejected) {
@@ -331,7 +333,7 @@ setupRouter.patch("/env", async (req: Request, res: Response): Promise<void> => 
   }
 
   if (Object.keys(accepted).length === 0) {
-    res.status(400).json({ updated: [], restartRequired: [], errors });
+    res.status(400).json({ updated: [], restartRequired: [], recreateRequired: [], errors });
     return;
   }
 
@@ -359,14 +361,16 @@ setupRouter.patch("/env", async (req: Request, res: Response): Promise<void> => 
     res.status(500).json({
       updated: [],
       restartRequired: [],
+      recreateRequired: [],
       errors: [...errors, { key: "*", message: err instanceof Error ? err.message : String(err) }],
     });
     return;
   }
 
   const result: EnvUpdateResult = {
-    updated:         Object.keys(accepted),
-    restartRequired: [...restarts],
+    updated:          Object.keys(accepted),
+    restartRequired:  [...restarts],
+    recreateRequired: [...recreates],
     errors,
   };
   res.json(result);
@@ -377,7 +381,7 @@ setupRouter.patch("/env", async (req: Request, res: Response): Promise<void> => 
 setupRouter.post("/restart-services", async (req: Request, res: Response): Promise<void> => {
   const body = (req.body ?? {}) as Partial<RestartServicesRequest>;
   if (!Array.isArray(body.services) || body.services.length === 0) {
-    res.status(400).json({ error: "services[] is required and must be non-empty" });
+    res.status(400).json({ error: req.t!("errors.servicesRequired") });
     return;
   }
 
@@ -391,6 +395,47 @@ setupRouter.post("/restart-services", async (req: Request, res: Response): Promi
   try {
     const result = await runRestartServices(dockerSvcs);
     res.json(result satisfies RestartServicesResult);
+  } catch (err) {
+    if (err instanceof StackUnavailableError) {
+      res.status(503).json({ error: err.message });
+      return;
+    }
+    res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
+  }
+});
+
+// ── POST /recreate-services ───────────────────────────────────────────────────
+// Recreates one or more containers against the current `.env` and
+// `docker-compose.yml` — used after the UI patches an env var that Docker
+// bakes into the container at `up` time (TZ, PUID, PGID, bind-mount paths).
+// The body's services list may include the special string "all" to recreate
+// every container in the stack.
+
+setupRouter.post("/recreate-services", async (req: Request, res: Response): Promise<void> => {
+  const body = (req.body ?? {}) as Partial<RestartServicesRequest>;
+  if (!Array.isArray(body.services) || body.services.length === 0) {
+    res.status(400).json({ error: req.t!("errors.servicesRequired") });
+    return;
+  }
+
+  const wantsAll  = body.services.includes("all");
+  // The sidecar isn't a docker container; it's spawned by the Tauri shell
+  // and "recreated" via restart_sidecar from the UI side. Filter it out
+  // here so we don't pass a non-existent service to docker compose.
+  const dockerSvcs = body.services.filter(s => s !== "sidecar" && s !== "all");
+
+  try {
+    if (wantsAll) {
+      await recreateAll();
+      res.json({ recreated: ["all"], errors: [] });
+      return;
+    }
+    if (dockerSvcs.length === 0) {
+      res.json({ recreated: [], errors: [] });
+      return;
+    }
+    const result = await runRecreateServices(dockerSvcs);
+    res.json(result);
   } catch (err) {
     if (err instanceof StackUnavailableError) {
       res.status(503).json({ error: err.message });
@@ -436,7 +481,7 @@ setupRouter.post("/stack/start", async (_req: Request, res: Response): Promise<v
 // Prowlarr's /api/v1/indexer endpoint, returning the count + a host URL the
 // webview can pass to openExternal().
 
-setupRouter.get("/prowlarr/indexers", async (_req: Request, res: Response): Promise<void> => {
+setupRouter.get("/prowlarr/indexers", async (req: Request, res: Response): Promise<void> => {
   const env    = await readEnvMap();
   const apiKey = (env.PROWLARR_API_KEY || process.env.PROWLARR_API_KEY || "").trim();
   const url    = (process.env.PROWLARR_URL || env.PROWLARR_URL || "http://localhost:9696").replace(/\/$/, "");
@@ -455,7 +500,7 @@ setupRouter.get("/prowlarr/indexers", async (_req: Request, res: Response): Prom
       signal:  AbortSignal.timeout(5_000),
     });
     if (!r.ok) {
-      res.status(502).json({ error: `Prowlarr returned ${r.status}`, url });
+      res.status(502).json({ error: req.t!("prowlarr.responseStatus", { status: r.status }), url });
       return;
     }
     const indexers = await r.json();
@@ -467,6 +512,39 @@ setupRouter.get("/prowlarr/indexers", async (_req: Request, res: Response): Prom
     res.status(503).json({
       error: `Couldn't reach Prowlarr: ${err instanceof Error ? err.message : String(err)}`,
       url,
+    });
+  }
+});
+
+// ── POST /jellyfin/refresh-library ────────────────────────────────────────────
+// Kicks off a Jellyfin library scan via its /Library/Refresh endpoint.
+// Used by the dashboard's "refresh library" button and by the auto-refresh
+// timer the UI runs based on AppPreferences.libraryRefreshMinutes.
+
+setupRouter.post("/jellyfin/refresh-library", async (req: Request, res: Response): Promise<void> => {
+  const env    = await readEnvMap();
+  const apiKey = (env.JELLYFIN_API_KEY || process.env.JELLYFIN_API_KEY || "").trim();
+  const url    = (process.env.JELLYFIN_URL || env.JELLYFIN_URL || "http://localhost:8096").replace(/\/$/, "");
+
+  if (!apiKey) {
+    res.status(503).json({ error: req.t!("jellyfin.apiKeyMissing") });
+    return;
+  }
+
+  try {
+    const r = await fetch(`${url}/Library/Refresh`, {
+      method:  "POST",
+      headers: { "X-Emby-Token": apiKey },
+      signal:  AbortSignal.timeout(10_000),
+    });
+    if (!r.ok) {
+      res.status(502).json({ error: req.t!("jellyfin.responseStatus", { status: r.status }) });
+      return;
+    }
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(503).json({
+      error: req.t!("jellyfin.unreachable", { message: err instanceof Error ? err.message : String(err) }),
     });
   }
 });
@@ -483,11 +561,11 @@ setupRouter.post("/jellyfin/password", async (req: Request, res: Response): Prom
   };
 
   if (!currentPassword?.trim() || !newPassword?.trim()) {
-    res.status(400).json({ error: "currentPassword and newPassword are required" });
+    res.status(400).json({ error: req.t!("jellyfin.currentPasswordRequired") });
     return;
   }
   if (newPassword.length < 8) {
-    res.status(400).json({ error: "newPassword must be at least 8 characters" });
+    res.status(400).json({ error: req.t!("jellyfin.passwordTooShort") });
     return;
   }
 
@@ -496,7 +574,7 @@ setupRouter.post("/jellyfin/password", async (req: Request, res: Response): Prom
   const adminUser   = process.env.JELLYFIN_ADMIN_USER || env.JELLYFIN_ADMIN_USER || "";
 
   if (!adminUser) {
-    res.status(500).json({ error: "JELLYFIN_ADMIN_USER is not configured" });
+    res.status(500).json({ error: req.t!("jellyfin.adminUserNotConfigured") });
     return;
   }
 
@@ -524,7 +602,7 @@ setupRouter.post("/jellyfin/password", async (req: Request, res: Response): Prom
     const userId = authData.User?.Id;
 
     if (!token || !userId) {
-      res.status(502).json({ error: "Jellyfin auth response malformed (missing token or user ID)" });
+      res.status(502).json({ error: req.t!("jellyfin.authMalformed") });
       return;
     }
 
@@ -539,7 +617,7 @@ setupRouter.post("/jellyfin/password", async (req: Request, res: Response): Prom
     });
 
     if (!pwRes.ok) {
-      res.status(502).json({ error: `Jellyfin rejected the password change (${pwRes.status})` });
+      res.status(502).json({ error: req.t!("jellyfin.passwordRejected", { status: pwRes.status }) });
       return;
     }
 
@@ -587,12 +665,14 @@ setupRouter.post("/regenerate-api-key", async (req: Request, res: Response): Pro
   const { service } = (req.body ?? {}) as { service?: string };
 
   if (!service || !ARR_SERVICES.includes(service as ArrService)) {
-    res.status(400).json({ error: `service must be one of: ${ARR_SERVICES.join(", ")}` });
+    res.status(400).json({
+      error: req.t!("regen.serviceInvalid", { services: ARR_SERVICES.join(", ") }),
+    });
     return;
   }
 
   try {
-    await rotateArrApiKey(service as ArrService);
+    await rotateArrApiKey(service as ArrService, req.t!);
     res.json({ ok: true, restartRequired: ["sidecar"] });
   } catch (err) {
     if (err instanceof ArrKeyRotationError) {

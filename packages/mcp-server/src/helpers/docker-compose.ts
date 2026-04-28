@@ -85,14 +85,55 @@ export async function startServices(services: string[]): Promise<void> {
 }
 
 /**
+ * Recreate one or more containers against the current `.env` and
+ * `docker-compose.yml` — required when the change is something Docker bakes
+ * into the container at `up` time (env vars like `TZ`, `PUID`, `PGID`, or
+ * bind-mount sources resolved from `${MOVIES_PATH}` etc.). A simple
+ * `restart` is a no-op for those because the container already has the old
+ * value baked in.
+ *
+ * `--no-deps` keeps Compose from also recreating dependent containers that
+ * don't actually need it. Volumes survive recreate (this is named-volume
+ * docker-compose behaviour), so user data is preserved.
+ *
+ * Errors are collected per-service so a single failing container doesn't
+ * abort the whole batch — caller decides how to surface them.
+ */
+export async function recreateServices(services: string[]): Promise<{
+  recreated: string[];
+  errors:    Array<{ service: string; message: string }>;
+}> {
+  const recreated: string[] = [];
+  const errors:    Array<{ service: string; message: string }> = [];
+
+  for (const svc of services) {
+    try {
+      await compose(["up", "-d", "--no-deps", "--force-recreate", svc]);
+      recreated.push(svc);
+    } catch (err) {
+      errors.push({ service: svc, message: err instanceof Error ? err.message : String(err) });
+    }
+  }
+  return { recreated, errors };
+}
+
+/**
+ * Recreate every container in the stack. Used when the affected env var
+ * (TZ, PUID, PGID) is consumed by every service.
+ */
+export async function recreateAll(): Promise<void> {
+  await compose(["up", "-d", "--force-recreate"]);
+}
+
+/**
  * Stream `docker compose pull --progress plain` to `res` as NDJSON PullEvents.
  * The caller must set NDJSON headers and call `res.flushHeaders()` first.
  * Kills the child process when the client disconnects.
  */
-export function streamDockerPull(res: Response): void {
+export function streamDockerPull(res: Response, t?: (key: string, opts?: any) => string): void {
   const cwd = stackDir();
   if (!cwd) {
-    res.write(JSON.stringify({ type: "done", ok: false, message: "STACK_DIR is not configured — wizard not completed." } satisfies PullEvent) + "\n");
+    res.write(JSON.stringify({ type: "done", ok: false, message: t ? t("errors.stackUnavailable") : "STACK_DIR is not configured — wizard not completed." } satisfies PullEvent) + "\n");
     res.end();
     return;
   }

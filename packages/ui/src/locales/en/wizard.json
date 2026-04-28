@@ -1,0 +1,245 @@
+{
+  "stepTitles": {
+    "language": "Language",
+    "preflight": "Pre-flight",
+    "deployment": "Deployment",
+    "system": "System",
+    "paths": "Media paths",
+    "services": "Services",
+    "ai": "AI assistant",
+    "telegram": "Telegram bot",
+    "review": "Review",
+    "deploying": "Deploying",
+    "prowlarr": "Set up Prowlarr"
+  },
+  "stepSubtitles": {
+    "language": "Pick the language for the wizard and the app. You can change it later from Settings.",
+    "preflight": "Make sure Docker is ready before we start.",
+    "deployment": "How should the stack be exposed, and where do the orchestration files live?",
+    "system": "A few host parameters Docker needs to know.",
+    "paths": "Folders where Sonarr and Radarr will keep your organized media.",
+    "services": "Credentials for each service’s web UI.",
+    "ai": "Optional: enable the in-app AI chat and pick an LLM provider.",
+    "telegram": "Optional: connect a Telegram bot to use the AI from your phone.",
+    "review": "Last chance to review before kicking off the deploy.",
+    "deploying": "This can take a few minutes the first time.",
+    "prowlarr": "Add at least one indexer so the stack can search for content."
+  },
+  "buttons": {
+    "back": "Back",
+    "continue": "Continue",
+    "finish": "Finish",
+    "startDeploy": "Start deploy"
+  },
+  "language": {
+    "intro": "Pick the language Mediabox will use for the wizard and the rest of the app.",
+    "options": {
+      "en": "English",
+      "es": "Español"
+    },
+    "hint": {
+      "en": "All copy is translated into English (default).",
+      "es": "Translations are still landing — anything missing falls back to English for now."
+    },
+    "footnote": "You can change this anytime from Settings → Preferences."
+  },
+  "ai": {
+    "intro": "The AI assistant answers questions, shows status, and runs actions. Skip this step and configure it later from Settings if you want.",
+    "providerLabel": "LLM provider",
+    "providers": {
+      "none": "No AI",
+      "openrouter": "OpenRouter",
+      "google": "Google AI"
+    },
+    "hints": {
+      "none": "Skip the AI assistant for now. Local Ollama support is coming in phase 4.",
+      "openrouter": "One key, access to Claude, GPT-4, and more. Get one at openrouter.ai/keys.",
+      "google": "Gemini via Google AI Studio. Cheapest option for prototyping.",
+      "openrouterModel": "Recommended: <1>openai/gpt-4o</1> or <3>google/gemini-2.5-flash</3>.",
+      "googleModel": "Recommended: <1>gemini-2.5-flash</1>. Leave blank to use the SDK default."
+    },
+    "apiKeyLabel": "API key",
+    "modelLabel": "Model",
+    "googleModelLabel": "Model (optional)"
+  },
+  "paths": {
+    "intro": "Absolute paths recommended on Linux; relative paths resolve against the stack folder. Folders are created on first deploy if they don't exist.",
+    "movies": "Movies",
+    "tv": "TV",
+    "anime": "Anime",
+    "music": "Music"
+  },
+  "system": {
+    "timezoneLabel": "Timezone",
+    "timezoneHint": "IANA format (<1>Continent/City</1>). Auto-detected from your browser.",
+    "puidLabel": "PUID",
+    "puidHint": "User ID Docker writes files as.",
+    "pgidLabel": "PGID",
+    "pgidHint": "Group ID, usually the same as PUID.",
+    "idsHint": "On Linux, run <1>id -u</1> and <3>id -g</3> in a terminal to find your IDs. On Windows/macOS the defaults <5>1000:1000</5> almost always work."
+  },
+  "telegram": {
+    "intro": "The Telegram bot mirrors the in-app AI chat to your phone. You'll need a bot token from <1>@BotFather</1> and an AI provider configured.",
+    "enableLabel": "Enable Telegram bot",
+    "enableOptions": {
+      "off": "No, thanks",
+      "on": "Yes, enable"
+    },
+    "needsAi": "Go back and configure an AI provider first — the bot needs one to reply.",
+    "tokenLabel": "Bot token",
+    "tokenHint": "Talk to <1>@BotFather</1> on Telegram and create a new bot with <3>/newbot</3>.",
+    "usersLabel": "Allowed user IDs",
+    "usersHint": "Comma-separated. Leave blank to allow anyone. Find your ID via <1>@userinfobot</1>."
+  },
+  "preflight": {
+    "intro": "Mediabox needs Docker to run the stack. Quick check first.",
+    "dockerInstalled": "Docker installed",
+    "daemonRunning": "Docker daemon running",
+    "startDesktop": "Start Docker Desktop",
+    "composeAvailable": "docker compose plugin",
+    "cantContinue": "Can't continue yet.",
+    "checkFailed": "A check failed. Verify Docker Desktop is running, then retry.",
+    "installDocker": "Install Docker",
+    "retry": "Retry"
+  },
+  "prowlarr": {
+    "intro": "Sonarr and Radarr need at least one indexer in Prowlarr to search. Open Prowlarr, add any indexer that works for you, and you'll be able to continue.",
+    "openBtn": "Open Prowlarr",
+    "waiting": "Waiting for Prowlarr…",
+    "zeroIndexers": "<1>0 indexers</1> · Open Prowlarr and add at least one.",
+    "ready": "<1>{{count}} indexer</1> configured. Ready to continue.",
+    "readyPlural": "<1>{{count}} indexers</1> configured. Ready to continue.",
+    "tip": "Tip: if an indexer is blocked by Cloudflare, tag it <1>flaresolverr</1> — we already wired up the proxy, and that tag routes its traffic through FlareSolverr automatically.",
+    "skipBtn": "Skip — I'll do this later"
+  },
+  "review": {
+    "intro": "Review your settings before deploying. The deploy pulls Docker images, starts each service, waits for them to become healthy, and wires up the API keys between them. Takes 3–8 minutes depending on your connection.",
+    "sections": {
+      "deployment": "Deployment",
+      "system": "System",
+      "mediaPaths": "Media paths",
+      "services": "Services",
+      "ai": "AI",
+      "telegram": "Telegram"
+    },
+    "keys": {
+      "mode": "Mode",
+      "stackAt": "Stack at",
+      "imageTag": "Image tag",
+      "domain": "Domain",
+      "timezone": "Timezone",
+      "uidGid": "UID/GID",
+      "jellyfinAdmin": "Jellyfin admin",
+      "qbit": "qBittorrent",
+      "pyload": "PyLoad",
+      "bazarr": "Bazarr",
+      "provider": "Provider",
+      "apiKey": "API key",
+      "status": "Status",
+      "token": "Token",
+      "users": "Users"
+    },
+    "values": {
+      "qbitSet": "admin / ••• set",
+      "noPassword": "no password",
+      "pyloadDefault": "pyload / pyload (default)",
+      "enabled": "enabled",
+      "disabled": "disabled",
+      "none": "none",
+      "missing": "missing",
+      "anyone": "anyone",
+      "obscured": "••• {{last4}}"
+    }
+  },
+  "services": {
+    "intro": "Passwords are saved in the stack's <1>.env</1> file. Save them in a password manager if you want to log into each service's web UI later.",
+    "adminUsername": "Admin username",
+    "password": "Password",
+    "qbitHint": "Web UI username is always <1>admin</1>. The password you set here is applied automatically.",
+    "pyloadHint": "PyLoad starts with default credentials <1>pyload / pyload</1>. The official image doesn't let us change them at deploy time — rotate them later from PyLoad's web UI.",
+    "minChars": "Min. 8 characters",
+    "hidePassword": "Hide password",
+    "showPassword": "Show password",
+    "errorMinChars": "At least 8 characters."
+  },
+  "shell": {
+    "stepProgress": "Step {{current}} of {{total}}"
+  },
+  "deployProgress": {
+    "phases": {
+      "configValidate": "Validating configuration",
+      "generateDirectories": "Creating folders",
+      "generateEnv": "Writing .env",
+      "generateCompose": "Writing docker-compose.yml",
+      "generateQbittorrent": "Pre-configuring qBittorrent",
+      "generateCaddy": "Writing Caddyfile",
+      "deployPrepareImages": "Pulling Docker images",
+      "deployStart": "Starting containers",
+      "deployHealth": "Waiting for services to be ready",
+      "discoverApiKeys": "Discovering API keys",
+      "configureJellyfin": "Configuring Jellyfin",
+      "configureSonarr": "Configuring Sonarr",
+      "configureRadarr": "Configuring Radarr",
+      "configureProwlarr": "Configuring Prowlarr",
+      "configureQbittorrent": "Connecting qBittorrent",
+      "configureFlaresolverr": "Connecting FlareSolverr",
+      "configureArrAuth": "Wiring up service auth",
+      "configureJellyfinLibraries": "Creating Jellyfin libraries",
+      "writeEnvUpdate": "Updating .env with discovered keys",
+      "deployRestart": "Restarting containers"
+    },
+    "status": {
+      "starting": "Preparing deploy…",
+      "done": "Done! Stack deployed.",
+      "failed": "Deploy finished with errors",
+      "error": "Deploy failed"
+    },
+    "kinds": {
+      "start":    "start",
+      "progress": "progress",
+      "success":  "success",
+      "warn":     "warn",
+      "error":    "error",
+      "log":      "log"
+    },
+    "summary": {
+      "total": "Total: {{seconds}}s",
+      "warnings": "· {{count}} warning",
+      "warningsPlural": "· {{count}} warnings"
+    },
+    "waiting": "Waiting…",
+    "btn": {
+      "cancel": "Cancel",
+      "backToWizard": "Back to wizard",
+      "retry": "Retry"
+    }
+  },
+  "deployment": {
+    "modeLabel": "Deployment mode",
+    "modes": {
+      "local": "Local",
+      "vps": "Public VPS",
+      "tunnel": "Cloudflare Tunnel"
+    },
+    "hints": {
+      "local": "Reachable only from your LAN. Simplest for home use.",
+      "vps": "Public server with Caddy + Let's Encrypt.",
+      "tunnel": "Local stack exposed through a Cloudflare Tunnel — no open ports."
+    },
+    "folderLabel": "Stack folder",
+    "browse": "Browse",
+    "folderHint": "We'll write <1>docker-compose.yml</1>, <3>.env</3>, and <5>config/</5> here.",
+    "domainLabel": "Base domain",
+    "emailLabel": "Let's Encrypt email",
+    "tunnelTokenLabel": "Cloudflare Tunnel token",
+    "tunnelTokenHint": "Get it from Cloudflare Zero Trust → Networks → Tunnels.",
+    "imageTagLabel": "Image tag",
+    "imageTagHint": "Pin to a specific tag (e.g. <1>v2.1.0</1>) for production instead of <3>latest</3>.",
+    "probe": {
+      "checking": "Checking filesystem compatibility…",
+      "incompatible": "<1>Incompatible filesystem{{fsLabel}}.</1> Sonarr, Radarr, and Prowlarr won't start here — this filesystem doesn't support SQLite's WAL mode (typical on WSL2 9P bind-mounts, SMB, and NFS). <5>Use <1>C:\\</1> for the stack folder</5> and point your media paths at your preferred drive in the next step.",
+      "nonSystem": "<1>Non-system drive detected{{fsLabel}}.</1> Docker Desktop + WSL2 can have file-locking issues on drives other than <5>C:\\</5>. If Sonarr/Radarr/Prowlarr crash on startup, move the stack to <9>C:\\</9>.",
+      "ok": "Filesystem looks good{{fsLabel}}."
+    }
+  }
+}

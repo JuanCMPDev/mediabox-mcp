@@ -37,10 +37,10 @@ export class ArrKeyRotationError extends Error {
 
 const API_KEY_RE = /<ApiKey>[^<]*<\/ApiKey>/;
 
-export async function rotateArrApiKey(service: ArrService): Promise<{ apiKey: string }> {
+export async function rotateArrApiKey(service: ArrService, t: (key: string, opts?: any) => string): Promise<{ apiKey: string }> {
   const cwd = stackDir();
   if (!cwd) {
-    throw new ArrKeyRotationError("STACK_DIR is not configured — wizard not completed.", "preflight");
+    throw new ArrKeyRotationError(t("regen.stackUnavailable"), "preflight");
   }
 
   const xmlPath = path.join(cwd, "config", service, "config.xml");
@@ -52,18 +52,18 @@ export async function rotateArrApiKey(service: ArrService): Promise<{ apiKey: st
     xml = await readFile(xmlPath, "utf-8");
   } catch (err) {
     throw new ArrKeyRotationError(
-      `config.xml not found at ${xmlPath}: ${err instanceof Error ? err.message : String(err)}`,
+      t("regen.configNotFound", { path: xmlPath, message: err instanceof Error ? err.message : String(err) }),
       "preflight",
     );
   }
   if (!API_KEY_RE.test(xml)) {
-    throw new ArrKeyRotationError(`No <ApiKey> element in ${xmlPath}`, "preflight");
+    throw new ArrKeyRotationError(t("regen.noApiKeyElement", { path: xmlPath }), "preflight");
   }
 
   const newKey = randomBytes(16).toString("hex");
 
   // 2. Stop container.
-  await runCompose(cwd, ["stop", service], "stop");
+  await runCompose(cwd, ["stop", service], "stop", t);
 
   // 3-4. Edit config.xml + .env. On failure, attempt to start the container
   //      back up so it isn't left stopped — but propagate the original error.
@@ -72,20 +72,20 @@ export async function rotateArrApiKey(service: ArrService): Promise<{ apiKey: st
     await writeFile(xmlPath, updated, "utf-8");
     await patchEnvFile({ [envKey]: newKey });
   } catch (err) {
-    await runCompose(cwd, ["start", service], "start").catch(() => { /* best-effort recovery */ });
+    await runCompose(cwd, ["start", service], "start", t).catch(() => { /* best-effort recovery */ });
     throw new ArrKeyRotationError(
-      `Failed to update ${path.basename(xmlPath)} or .env: ${err instanceof Error ? err.message : String(err)}`,
+      t("regen.updateFailed", { file: path.basename(xmlPath), message: err instanceof Error ? err.message : String(err) }),
       "edit",
     );
   }
 
   // 5. Start container.
-  await runCompose(cwd, ["start", service], "start");
+  await runCompose(cwd, ["start", service], "start", t);
 
   return { apiKey: newKey };
 }
 
-async function runCompose(cwd: string, args: string[], stage: RotationStage): Promise<void> {
+async function runCompose(cwd: string, args: string[], stage: RotationStage, t: (key: string, opts?: any) => string): Promise<void> {
   const { exitCode, stderr, stdout } = await execa("docker", ["compose", ...args], {
     cwd,
     reject:  false,
@@ -93,6 +93,6 @@ async function runCompose(cwd: string, args: string[], stage: RotationStage): Pr
   });
   if (exitCode !== 0) {
     const tail = (stderr || stdout || "").trim().split("\n").pop()?.trim() || `exit ${exitCode}`;
-    throw new ArrKeyRotationError(`docker compose ${args.join(" ")} failed: ${tail}`, stage);
+    throw new ArrKeyRotationError(t("regen.composeFailed", { command: args.join(" "), message: tail }), stage);
   }
 }

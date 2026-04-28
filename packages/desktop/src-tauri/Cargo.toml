@@ -36,6 +36,9 @@ tokio = { version = "1", features = ["sync", "rt", "rt-multi-thread", "macros"] 
 # SQLite WAL probe for workdir compatibility check
 rusqlite = { version = "0.31", features = ["bundled"] }
 
+# Backup/restore zip bundling (PR 3.4b)
+zip = { version = "2", default-features = false, features = ["deflate"] }
+
 log = "0.4"
 
 # Future-proof for hot-reload across mobile entry point

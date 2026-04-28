@@ -1,3 +1,4 @@
+mod backup;
 mod commands;
 mod sidecar;
 mod state;
@@ -74,6 +75,8 @@ pub fn run() {
             wizard::default_stack_dir,
             wizard::pick_directory,
             wizard::probe_workdir,
+            backup::export_config,
+            backup::import_config,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application");

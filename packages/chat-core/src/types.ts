@@ -46,4 +46,6 @@ export interface StreamChatOptions {
   provider:       import('./providers/types.js').StreamProvider;
   mcpCall:        McpCallFn;
   historyStore:   HistoryStore;
+  /** BCP-47 locale for the response language (PR 3.4d). Defaults to "en". */
+  locale?:        string;
 }

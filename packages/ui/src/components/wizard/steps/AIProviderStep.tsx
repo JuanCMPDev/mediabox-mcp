@@ -1,3 +1,4 @@
+import { Trans, useTranslation } from 'react-i18next';
 import { GlassInput } from '@/components/atoms/GlassInput';
 import { SegmentedControl } from '@/components/atoms/SegmentedControl';
 import type { WizardDraft } from '@/lib/wizard-types';
@@ -8,35 +9,35 @@ interface Props {
 }
 
 export function AIProviderStep({ draft, setAI }: Props) {
+  const { t } = useTranslation('wizard');
   return (
     <>
       <p className="wizard-hint" style={{ margin: 0 }}>
-        The AI assistant answers questions, shows status, and runs actions. Skip this step
-        and configure it later from Settings if you want.
+        {t('ai.intro')}
       </p>
 
       <div className="wizard-field">
-        <label className="wizard-label">LLM provider</label>
+        <label className="wizard-label">{t('ai.providerLabel')}</label>
         <SegmentedControl
           value={draft.ai.provider}
           onChange={v => setAI({ provider: v as WizardDraft['ai']['provider'] })}
           options={[
-            { value: 'none',       label: 'No AI' },
-            { value: 'openrouter', label: 'OpenRouter' },
-            { value: 'google',     label: 'Google AI' },
+            { value: 'none',       label: t('ai.providers.none') },
+            { value: 'openrouter', label: t('ai.providers.openrouter') },
+            { value: 'google',     label: t('ai.providers.google') },
           ]}
         />
         <span className="wizard-hint">
-          {draft.ai.provider === 'none'       && 'Skip the AI assistant for now. Local Ollama support is coming in phase 4.'}
-          {draft.ai.provider === 'openrouter' && 'One key, access to Claude, GPT-4, and more. Get one at openrouter.ai/keys.'}
-          {draft.ai.provider === 'google'     && 'Gemini via Google AI Studio. Cheapest option for prototyping.'}
+          {draft.ai.provider === 'none'       && t('ai.hints.none')}
+          {draft.ai.provider === 'openrouter' && t('ai.hints.openrouter')}
+          {draft.ai.provider === 'google'     && t('ai.hints.google')}
         </span>
       </div>
 
       {draft.ai.provider !== 'none' && (
         <>
           <div className="wizard-field">
-            <label className="wizard-label">API key</label>
+            <label className="wizard-label">{t('ai.apiKeyLabel')}</label>
             <GlassInput
               value={draft.ai.apiKey}
               onChange={v => setAI({ apiKey: v })}
@@ -46,28 +47,32 @@ export function AIProviderStep({ draft, setAI }: Props) {
 
           {draft.ai.provider === 'openrouter' && (
             <div className="wizard-field">
-              <label className="wizard-label">Model</label>
+              <label className="wizard-label">{t('ai.modelLabel')}</label>
               <GlassInput
                 value={draft.ai.model}
                 onChange={v => setAI({ model: v })}
-                placeholder="anthropic/claude-3.5-sonnet"
+                placeholder="openai/gpt-4o"
               />
               <span className="wizard-hint">
-                Other options: <code>openai/gpt-4o</code>, <code>google/gemini-2.0-flash-exp</code>.
+                <Trans i18nKey="ai.hints.openrouterModel" t={t}>
+                  Recommended: <code>openai/gpt-4o</code> or <code>google/gemini-2.5-flash</code>.
+                </Trans>
               </span>
             </div>
           )}
 
           {draft.ai.provider === 'google' && (
             <div className="wizard-field">
-              <label className="wizard-label">Model (optional)</label>
+              <label className="wizard-label">{t('ai.googleModelLabel')}</label>
               <GlassInput
                 value={draft.ai.model}
                 onChange={v => setAI({ model: v })}
-                placeholder="gemini-2.0-flash-exp"
+                placeholder="gemini-2.5-flash"
               />
               <span className="wizard-hint">
-                Leave blank to use the SDK default.
+                <Trans i18nKey="ai.hints.googleModel" t={t}>
+                  Recommended: <code>gemini-2.5-flash</code>. Leave blank to use the SDK default.
+                </Trans>
               </span>
             </div>
           )}

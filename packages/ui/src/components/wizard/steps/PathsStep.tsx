@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next';
 import { Folder } from 'lucide-react';
 import { GlassInput } from '@/components/atoms/GlassInput';
 import { GlassButton } from '@/components/atoms/GlassButton';
@@ -10,6 +11,8 @@ interface Props {
 }
 
 export function PathsStep({ draft, setPaths }: Props) {
+  const { t } = useTranslation('wizard');
+
   const browseField = async (key: keyof WizardDraft['paths']) => {
     const picked = await pickDirectory(draft.paths[key] || draft.workDir);
     if (picked) setPaths({ [key]: picked });
@@ -18,14 +21,13 @@ export function PathsStep({ draft, setPaths }: Props) {
   return (
     <>
       <p className="wizard-hint" style={{ margin: 0 }}>
-        Absolute paths recommended on Linux; relative paths resolve against the stack folder.
-        Folders are created on first deploy if they don&apos;t exist.
+        {t('paths.intro')}
       </p>
 
-      <PathRow label="Movies" value={draft.paths.movies} onChange={v => setPaths({ movies: v })} onBrowse={() => browseField('movies')} />
-      <PathRow label="TV"     value={draft.paths.tv}     onChange={v => setPaths({ tv: v })}     onBrowse={() => browseField('tv')} />
-      <PathRow label="Anime"  value={draft.paths.anime}  onChange={v => setPaths({ anime: v })}  onBrowse={() => browseField('anime')} />
-      <PathRow label="Music"  value={draft.paths.music}  onChange={v => setPaths({ music: v })}  onBrowse={() => browseField('music')} />
+      <PathRow label={t('paths.movies')} value={draft.paths.movies} onChange={v => setPaths({ movies: v })} onBrowse={() => browseField('movies')} />
+      <PathRow label={t('paths.tv')}     value={draft.paths.tv}     onChange={v => setPaths({ tv: v })}     onBrowse={() => browseField('tv')} />
+      <PathRow label={t('paths.anime')}  value={draft.paths.anime}  onChange={v => setPaths({ anime: v })}  onBrowse={() => browseField('anime')} />
+      <PathRow label={t('paths.music')}  value={draft.paths.music}  onChange={v => setPaths({ music: v })}  onBrowse={() => browseField('music')} />
     </>
   );
 }

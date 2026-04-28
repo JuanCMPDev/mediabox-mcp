@@ -100,11 +100,14 @@ describe("generateDockerCompose", () => {
     expect(parsed.services["mcp-server"].build).toBeUndefined();
   });
 
-  it("renders media paths with ./ prefix and forward slashes", () => {
+  it("renders media paths as ${MOVIES_PATH} env-var refs with the configured value as default", () => {
     const cfg = baseConfig();
     cfg.paths.movies = "media\\movies";
     const parsed = parse(generateDockerCompose(cfg)) as any;
-    expect(parsed.services.jellyfin.volumes).toContain("./media/movies:/data/movies");
+    // PR 3.4a: paths are emitted as `${MOVIES_PATH:-./media/movies}` so
+    // PATCH /api/setup/env can rewrite the path in `.env` and a recreate
+    // picks it up. The default keeps backslashes normalized to POSIX.
+    expect(parsed.services.jellyfin.volumes).toContain("${MOVIES_PATH:-./media/movies}:/data/movies");
   });
 
   it("never emits MCP_AUTH_SECRET (confirmed dead config)", () => {

@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { X, Download, CheckCircle, AlertCircle, Loader, RefreshCw, Rocket } from 'lucide-react';
 import { api } from '@/lib/api';
 import { useToast } from '@/lib/toast';
@@ -11,6 +12,7 @@ interface Props {
 }
 
 export function UpdateDrawer({ onClose, onApplied }: Props) {
+  const { t } = useTranslation();
   const { lines, status, error, start, cancel } = useUpdateStream();
   const [applying, setApplying] = useState(false);
   const [applied,  setApplied]  = useState(false);
@@ -33,10 +35,10 @@ export function UpdateDrawer({ onClose, onApplied }: Props) {
     try {
       await api.setupApplyUpdates();
       setApplied(true);
-      toast('Containers updated', 'success');
+      toast(t('updateDrawer.successToast'), 'success');
       onApplied?.();
     } catch (err) {
-      toast(`Error: ${err instanceof Error ? err.message : String(err)}`, 'error');
+      toast(t('updateDrawer.errorToast', { error: err instanceof Error ? err.message : String(err) }), 'error');
     } finally {
       setApplying(false);
     }
@@ -49,13 +51,13 @@ export function UpdateDrawer({ onClose, onApplied }: Props) {
     <>
       <div className={styles.backdrop} onClick={onClose} />
 
-      <aside className={styles.drawer} role="dialog" aria-label="Update Docker images">
+      <aside className={styles.drawer} role="dialog" aria-label={t('updateDrawer.ariaLabel')}>
         <div className={styles.header}>
           <div className={styles.headerTitle}>
             <StatusIcon status={displayStatus} />
-            <span className={styles.title}>Update images</span>
+            <span className={styles.title}>{t('updateDrawer.title')}</span>
           </div>
-          <button className={styles.iconBtn} onClick={onClose} title="Close">
+          <button className={styles.iconBtn} onClick={onClose} title={t('actions.close')}>
             <X size={16} />
           </button>
         </div>
@@ -64,7 +66,7 @@ export function UpdateDrawer({ onClose, onApplied }: Props) {
           {status === 'pulling' && lines.length === 0 && (
             <div className={styles.centeredMsg}>
               <Loader size={16} className={styles.spin} />
-              Pulling latest images…
+              {t('updateDrawer.pulling')}
             </div>
           )}
 
@@ -75,21 +77,21 @@ export function UpdateDrawer({ onClose, onApplied }: Props) {
           {status === 'error' && (
             <div className={styles.errorMsg}>
               <AlertCircle size={13} />
-              {error ?? 'Unknown error'}
+              {error ?? t('updateDrawer.unknownError')}
             </div>
           )}
 
           {status === 'done' && !applied && (
             <div className={styles.doneMsg}>
               <CheckCircle size={13} />
-              Pull complete. Click &quot;Apply&quot; to restart containers with the new images.
+              {t('updateDrawer.pullComplete')}
             </div>
           )}
 
           {applied && (
             <div className={styles.doneMsg}>
               <CheckCircle size={13} />
-              Containers restarted with new images.
+              {t('updateDrawer.containersRestarted')}
             </div>
           )}
         </div>
@@ -98,7 +100,7 @@ export function UpdateDrawer({ onClose, onApplied }: Props) {
           {status === 'error' && (
             <button className={styles.retryBtn} onClick={() => void start()}>
               <RefreshCw size={12} />
-              Retry
+              {t('actions.retry')}
             </button>
           )}
           {status === 'done' && !applied && (
@@ -111,11 +113,11 @@ export function UpdateDrawer({ onClose, onApplied }: Props) {
                 ? <Loader size={12} className={styles.spin} />
                 : <Rocket size={12} />
               }
-              {applying ? 'Applying…' : 'Apply updates'}
+              {applying ? t('updateDrawer.applying') : t('updateDrawer.applyUpdates')}
             </button>
           )}
           <span className={styles.lineCount}>
-            {lines.length.toLocaleString('en')} lines
+            {t('updateDrawer.nLines', { n: lines.length.toLocaleString() })}
           </span>
         </div>
       </aside>

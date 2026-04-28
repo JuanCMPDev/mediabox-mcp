@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react';
+import { useTranslation } from 'react-i18next';
 import { GlassCard }   from '@/components/atoms/GlassCard';
 import { GlassButton } from '@/components/atoms/GlassButton';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
@@ -35,9 +36,10 @@ export function StepShell({
   onBack,
   onForward,
   forwardLabel,
-  backLabel = 'Back',
+  backLabel,
   hideNav = false,
 }: StepShellProps) {
+  const { t } = useTranslation('wizard');
   const progressPct = ((stepIndex + 1) / totalSteps) * 100;
   const isLast      = stepIndex === totalSteps - 1;
 
@@ -50,7 +52,7 @@ export function StepShell({
               <div className={styles.progressFill} style={{ width: `${progressPct}%` }} />
             </div>
             <span className={styles.progressLabel}>
-              Step {stepIndex + 1} of {totalSteps}
+              {t('shell.stepProgress', { current: stepIndex + 1, total: totalSteps })}
             </span>
           </div>
           <h1 className={styles.title}>{title}</h1>
@@ -67,14 +69,14 @@ export function StepShell({
               disabled={!canGoBack}
             >
               <ChevronLeft size={16} />
-              {backLabel}
+              {backLabel ?? t('buttons.back')}
             </GlassButton>
             <GlassButton
               variant="primary"
               onClick={onForward}
               disabled={!canGoForward}
             >
-              {forwardLabel ?? (isLast ? 'Finish' : 'Continue')}
+              {forwardLabel ?? (isLast ? t('buttons.finish') : t('buttons.continue'))}
               {!isLast && <ChevronRight size={16} />}
             </GlassButton>
           </footer>

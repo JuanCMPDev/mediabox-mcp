@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { Trans, useTranslation } from 'react-i18next';
 import { ExternalLink, CheckCircle, AlertCircle, Loader, Search } from 'lucide-react';
 import { GlassButton } from '@/components/atoms/GlassButton';
 import { api } from '@/lib/api';
@@ -14,6 +15,7 @@ const DEFAULT_URL  = 'http://localhost:9696';
 const POLL_INTERVAL_MS = 3_000;
 
 export function ProwlarrSetupStep({ onContinue, onSkip }: Props) {
+  const { t } = useTranslation('wizard');
   const [count, setCount] = useState<number | null>(null);
   const [url,   setUrl]   = useState<string>(DEFAULT_URL);
   const [error, setError] = useState<string | null>(null);
@@ -44,14 +46,13 @@ export function ProwlarrSetupStep({ onContinue, onSkip }: Props) {
   return (
     <div className={styles.container}>
       <p className={styles.intro}>
-        Sonarr and Radarr need at least one indexer in Prowlarr to search. Open Prowlarr,
-        add any indexer that works for you, and you&apos;ll be able to continue.
+        {t('prowlarr.intro')}
       </p>
 
       <div className={styles.openBtnRow}>
         <GlassButton variant="primary" onClick={() => void openExternal(url)}>
           <ExternalLink size={14} />
-          Open Prowlarr
+          {t('prowlarr.openBtn')}
         </GlassButton>
         <code className={styles.url}>{url.replace(/^https?:\/\//, '')}</code>
       </div>
@@ -66,7 +67,7 @@ export function ProwlarrSetupStep({ onContinue, onSkip }: Props) {
         {count === null && !error && (
           <>
             <Loader size={16} className={styles.spin} />
-            <span>Waiting for Prowlarr…</span>
+            <span>{t('prowlarr.waiting')}</span>
           </>
         )}
         {error && (
@@ -78,30 +79,41 @@ export function ProwlarrSetupStep({ onContinue, onSkip }: Props) {
         {!error && count === 0 && (
           <>
             <Search size={16} className={styles.statusWarn} />
-            <span><strong>0 indexers</strong> · Open Prowlarr and add at least one.</span>
+            <span>
+              <Trans i18nKey="prowlarr.zeroIndexers" t={t}>
+                <strong>0 indexers</strong> · Open Prowlarr and add at least one.
+              </Trans>
+            </span>
           </>
         )}
         {!error && count !== null && count > 0 && (
           <>
             <CheckCircle size={16} className={styles.statusOk} />
             <span>
-              <strong>{count} indexer{count > 1 ? 's' : ''}</strong> configured. Ready to continue.
+              <Trans
+                i18nKey={count === 1 ? 'prowlarr.ready' : 'prowlarr.readyPlural'}
+                values={{ count }}
+                t={t}
+                components={{ 1: <strong /> }}
+              />
             </span>
           </>
         )}
       </div>
 
       <p className={styles.tip}>
-        Tip: if an indexer is blocked by Cloudflare, tag it <code>flaresolverr</code> — we already
-        wired up the proxy, and that tag routes its traffic through FlareSolverr automatically.
+        <Trans i18nKey="prowlarr.tip" t={t}>
+          Tip: if an indexer is blocked by Cloudflare, tag it <code>flaresolverr</code> — we already
+          wired up the proxy, and that tag routes its traffic through FlareSolverr automatically.
+        </Trans>
       </p>
 
       <div className={styles.actions}>
         <button type="button" className={styles.skipLink} onClick={onSkip}>
-          Skip — I&apos;ll do this later
+          {t('prowlarr.skipBtn')}
         </button>
         <GlassButton variant="primary" onClick={onContinue} disabled={!ready}>
-          Continue
+          {t('buttons.continue')}
         </GlassButton>
       </div>
     </div>

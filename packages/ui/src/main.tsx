@@ -11,6 +11,10 @@ import './styles/reset.css';
 import './styles/theme.css';
 import './styles/globals.css';
 
+// Initialise i18next before any component renders so useTranslation() never
+// races with the bundle load (PR 3.4d).
+import '@/lib/i18n';
+
 import App from './App';
 import { BootGate } from '@/components/layout/BootGate';
 
