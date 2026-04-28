@@ -109,16 +109,26 @@ jobs:
       - name: Build sidecar (host triple)
         run: npm run sidecar:build
 
-      # For Universal macOS builds Tauri looks for sidecars under BOTH
-      # `mediabox-mcp-aarch64-apple-darwin` and `mediabox-mcp-x86_64-apple-darwin`,
-      # then `lipo`s the wrapping binary. Bun cross-compiles freely between
-      # macOS arches from a single host, so this just calls the same script
-      # with TAURI_TARGET pointing at the other triple.
+      # For Universal macOS builds we compile the sidecar for BOTH arches and
+      # lipo them into a single fat Mach-O. Tauri 2 expects exactly one
+      # sidecar named `mediabox-mcp-universal-apple-darwin` for universal
+      # bundles — it does NOT lipo per-arch sidecars on its own.
       - name: Build sidecar (extra triple, for universal)
         if: matrix.extraTarget != ''
         env:
           TAURI_TARGET: ${{ matrix.extraTarget }}
         run: npm run sidecar:build
+
+      - name: Lipo sidecars into universal Mach-O
+        if: matrix.platform == 'macos-latest'
+        working-directory: packages/desktop/src-tauri/binaries
+        run: |
+          lipo -create \
+            -output mediabox-mcp-universal-apple-darwin \
+            mediabox-mcp-aarch64-apple-darwin \
+            mediabox-mcp-x86_64-apple-darwin
+          chmod +x mediabox-mcp-universal-apple-darwin
+          file mediabox-mcp-universal-apple-darwin
 
       - name: Build & publish Tauri release
         uses: tauri-apps/tauri-action@v0
