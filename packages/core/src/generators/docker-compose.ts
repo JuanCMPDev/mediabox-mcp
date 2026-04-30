@@ -128,7 +128,11 @@ export function generateDockerCompose(config: DeployConfig): string {
   };
 
   if (deployment.localBuild) {
-    mcpServer.build = "./packages/mcp-server";
+    // Build context is the monorepo root so the multi-stage Dockerfile can
+    // install and compile the workspace deps (@mediabox/contracts, /core,
+    // /chat-core). Pre-2.2 used `./packages/mcp-server` as context which
+    // broke against the workspace layout.
+    mcpServer.build = { context: ".", dockerfile: "packages/mcp-server/Dockerfile" };
   } else {
     mcpServer.image = ghcrMcpImage;
   }
@@ -156,7 +160,10 @@ export function generateDockerCompose(config: DeployConfig): string {
     };
 
     if (deployment.localBuild) {
-      telegramBot.build = "./packages/mcp-telegram-client";
+      telegramBot.build = {
+        context: ".",
+        dockerfile: "packages/mcp-telegram-client/Dockerfile",
+      };
     } else {
       telegramBot.image = ghcrTelegramImage;
     }
