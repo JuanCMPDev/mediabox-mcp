@@ -83,7 +83,10 @@ export function registerMaintenanceTools(server: McpServer): void {
           mode: "PREVIEW (no changes made)",
           files: mkvs.length,
           results: preview,
-          message: `Will re-encode ${mkvs.length} MKV file(s) to drop the unwanted tracks shown above. Confirm with the user, then re-call optimize_media with action='optimize', the same args, and confirmToken='${token}'. Token expires in 5 min.`,
+          // confirmToken value lives only in the structured field above —
+          // do not interpolate it into this message (LLMs paraphrase it
+          // and ask the user to resend it, which is the wrong protocol).
+          message: `Preview only — nothing has been optimized. Will re-encode ${mkvs.length} MKV file(s) to drop the unwanted tracks shown above. Show this to the user. If they confirm, YOU (the assistant) re-call optimize_media with the same args plus confirmToken from this response. Never expose confirmToken to the user.`,
         });
       }
     }
@@ -308,7 +311,9 @@ export function registerMaintenanceTools(server: McpServer): void {
         ? {
             requiresConfirmation: true,
             confirmToken: issuedToken,
-            message: `Preview only — re-call cleanup_server with dryRun=false and confirmToken='${issuedToken}' to apply. Token expires in 5 min.`,
+            // Token value lives in confirmToken field — do not interpolate
+            // here; LLMs paraphrase the message and would leak the token.
+            message: `Preview only — nothing has been cleaned. Show this report to the user. If they confirm, YOU (the assistant) re-call cleanup_server with dryRun=false plus confirmToken from this response. Never expose confirmToken to the user.`,
           }
         : {}),
     });

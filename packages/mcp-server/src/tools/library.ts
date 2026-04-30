@@ -131,7 +131,12 @@ export function registerLibraryTools(server: McpServer): void {
             requiresConfirmation: true,
             confirmToken: token,
             preview: { kind: "jellyfin", id: item.Id, name: item.Name, type: item.Type, path: item.Path },
-            message: `Will delete "${item.Name}" (${item.Type}) from Jellyfin + Sonarr/Radarr + disk. Confirm with the user, then re-call manage_files with action="delete", jellyfinItemId="${jellyfinItemId}", and confirmToken="${token}". Token expires in 5 min.`,
+            // Note: the literal token is NOT in this message string — it
+            // travels in the confirmToken field above. Including it here
+            // would leak it into the LLM's user-facing reply (observed Apr
+            // 30: GPT-4o paraphrased the token verbatim and asked the user
+            // to "resend the request with this token").
+            message: `Preview only — nothing has been deleted. Will delete "${item.Name}" (${item.Type}) from Jellyfin + Sonarr/Radarr + disk. Show this preview to the user. If they confirm, YOU (the assistant) re-call manage_files with the same args plus confirmToken from this response. Never expose confirmToken to the user.`,
           });
         }
         // path branch
@@ -147,7 +152,7 @@ export function registerLibraryTools(server: McpServer): void {
             isDirectory: stat.isDirectory(),
             sizeBytes: stat.size,
           },
-          message: `Will delete ${stat.isDirectory() ? "directory" : "file"} ${filePath}. Confirm with the user, then re-call manage_files with action="delete", path="${filePath}", and confirmToken="${token}". Token expires in 5 min.`,
+          message: `Preview only — nothing has been deleted. Will delete ${stat.isDirectory() ? "directory" : "file"} ${filePath} (${(stat.size / 1048576).toFixed(1)}MB). Show this to the user. If they confirm, YOU (the assistant) re-call manage_files with the same args plus confirmToken from this response. Never expose confirmToken to the user.`,
         });
       }
 
