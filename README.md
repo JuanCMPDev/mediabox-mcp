@@ -28,8 +28,8 @@
 
 | Surface | Use case | Entry point |
 |---------|----------|-------------|
-| **Desktop App (Tauri)** | Local-first install with a built-in setup wizard, dashboard, AI chat, log viewer, and one-click updates. The MCP server runs as a bundled sidecar — no external Node install needed. | `npm run dev:desktop` / packaged release |
-| **CLI wizard** | Headless deploy on a server. Same orchestration engine the Desktop wizard uses, exposed as a one-shot interactive prompt. | `npx create-mediabox` |
+| **Desktop App (Tauri)** | Recommended for Windows/macOS and local-first installs with a built-in setup wizard, dashboard, AI chat, log viewer, and one-click updates. The MCP server runs as a bundled sidecar — no external Node install needed. | `npm run dev:desktop` / packaged release |
+| **CLI wizard** | Recommended for Linux servers, VPS, and headless deploys. Same orchestration engine the Desktop wizard uses, exposed as a one-shot interactive prompt. | `npx create-mediabox` |
 | **Headless MCP server** | Plug the running stack into Claude Desktop, ChatGPT, Gemini, an OpenAI-compatible client, or the optional Telegram bot — over OAuth-protected `Streamable HTTP`. | `https://your-domain.com/mcp` |
 
 All three share the same Docker stack, the same `@mediabox/core` orchestration pipeline, and the same set of MCP tools.
@@ -40,11 +40,11 @@ All three share the same Docker stack, the same `@mediabox/core` orchestration p
 npx create-mediabox
 ```
 
-One command. Answer a few questions. The CLI sets up the full stack automatically — Docker containers, API keys, service connections, media libraries, everything.
+One command. Answer a few questions. The CLI sets up the full stack automatically on a Linux server or VPS — Docker containers, API keys, service connections, media libraries, everything.
 
 Supports **Local** (home network), **VPS** (with [Caddy](https://caddyserver.com/) and automatic HTTPS), and **Cloudflare Tunnel** (public access from home without opening ports) deployments.
 
-> Requires Docker, Docker Compose, and Node.js >= 22. Use `--local-build` to build images from source. Use `--generate-only` to write config files without starting Docker.
+> Requires Docker, Docker Compose, and Node.js >= 20. The unqualified `npx create-mediabox` command installs the current npm `latest` release. Use `--generate-only` to write config files without starting Docker. `--local-build` is for contributors running from a cloned repository root; normal `npx` installs use published GHCR images.
 
 ### Quick Start (Desktop App)
 
@@ -121,7 +121,7 @@ The Desktop chat groups these into a smaller set of high-level *virtual tools* (
 
 The Desktop wizard and the `create-mediabox` CLI share the same orchestration pipeline (`@mediabox/core`). Both replace ~15 manual setup steps with a single flow:
 
-1. **Ask** for your preferences — deployment mode (Local/VPS/Tunnel), media paths, credentials, timezone, optional AI provider (OpenRouter or Google AI), optional Telegram bot
+1. **Ask** for your preferences — deployment mode (Local/VPS/Tunnel), media paths, credentials, timezone, optional integrations. The Desktop wizard can configure the built-in AI chat; the CLI only asks for an AI provider when Telegram is enabled.
 2. **Generate** `.env`, `docker-compose.yml`, `Caddyfile` (VPS), and pre-configures qBittorrent
 3. **Start** all Docker containers and wait for each service to be ready
 4. **Auto-configure** the entire stack via service APIs:

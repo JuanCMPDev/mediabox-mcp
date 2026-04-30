@@ -23,15 +23,15 @@
 npx create-mediabox
 ```
 
-One command. Answer a few questions. The CLI sets up the full stack automatically — Docker containers, API keys, service connections, media libraries, everything.
+One command. Answer a few questions. The CLI sets up the full stack automatically on a Linux server or VPS — Docker containers, API keys, service connections, media libraries, everything.
 
 Supports **Local** (home network), **VPS** (with [Caddy](https://caddyserver.com/) and automatic HTTPS), and **Cloudflare Tunnel** (public access from home without opening ports) deployments.
 
-> Requires Docker, Docker Compose, and Node.js >= 22.
+> Recommended for Linux servers, VPS, and headless deployments. Requires Docker, Docker Compose, and Node.js >= 20. The unqualified `npx create-mediabox` command installs the current npm `latest` release.
 
 #### Flags
 
-- `--local-build` — build the MCP server and Telegram bot images from source instead of pulling from `ghcr.io`
+- `--local-build` — build the MCP server and Telegram bot images from source instead of pulling from `ghcr.io`. This only works from a cloned `mediabox-mcp` repository root; normal `npx` installs use published images.
 - `--generate-only` — write `.env`, `docker-compose.yml`, and `Caddyfile` without starting Docker (useful for inspection)
 
 ### Architecture
@@ -92,7 +92,7 @@ Supports **Local** (home network), **VPS** (with [Caddy](https://caddyserver.com
 
 `create-mediabox` replaces ~15 manual setup steps with a single interactive wizard:
 
-1. **Asks** for your preferences — deployment mode (Local/VPS/Tunnel), media paths, passwords, timezone, optional AI provider (OpenRouter or Google AI), optional Telegram bot
+1. **Asks** for your preferences — deployment mode (Local/VPS/Tunnel), media paths, passwords, timezone, optional Telegram bot. The CLI only asks for an AI provider when Telegram is enabled because it does not include an interactive chat client.
 2. **Generates** `.env`, `docker-compose.yml`, `Caddyfile` (VPS), and pre-configures qBittorrent
 3. **Starts** all Docker containers and waits for each service to be ready
 4. **Auto-configures** the entire stack via service APIs:
@@ -107,7 +107,7 @@ After setup, the only manual step is adding your torrent indexers in Prowlarr.
 
 ### Prefer a GUI?
 
-The Mediabox MCP repo also ships a [Tauri Desktop App](https://github.com/JuanCMPDev/mediabox-mcp) that drives the same orchestration engine through a 9-step wizard, then gives you a dashboard, AI chat, log viewer, and one-click image updates. Both surfaces produce the same Docker stack and `.env`.
+The Mediabox MCP repo also ships a [Tauri Desktop App](https://github.com/JuanCMPDev/mediabox-mcp) that drives the same orchestration engine through a 9-step wizard, then gives you a dashboard, AI chat, log viewer, and one-click image updates. Use the Desktop App for Windows/macOS and for the built-in chat experience; use the CLI for Linux/VPS/headless installs.
 
 ---
 

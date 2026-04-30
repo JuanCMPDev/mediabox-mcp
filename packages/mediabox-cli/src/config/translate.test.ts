@@ -28,7 +28,7 @@ describe("translateWizardAnswers", () => {
   it("produces a valid local DeployConfig from happy-path answers", () => {
     const cfg = translateWizardAnswers(baseAnswers());
     expect(cfg.deployment.mode).toBe("local");
-    expect(cfg.deployment.imageTag).toBeTruthy();
+    expect(cfg.deployment.imageTag).toBe("latest");
     expect(cfg.paths.movies).toBe("./media/movies");
     expect(cfg.services.qbittorrent.password).toBe("qbitpass1");
     expect(cfg.services.pyload).toEqual({ username: "pyload", password: "pyload" });

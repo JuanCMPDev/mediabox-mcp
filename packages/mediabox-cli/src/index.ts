@@ -1,4 +1,6 @@
 import chalk from "chalk";
+import { existsSync } from "node:fs";
+import path from "node:path";
 import { deployStack, validateDeployConfig, DockerCliDeployer } from "@mediabox/core";
 import { runWizard } from "./wizard.js";
 import { translateWizardAnswers } from "./config/translate.js";
@@ -32,6 +34,7 @@ async function main(): Promise<void> {
     // Phase 1: Interactive wizard → normalize into DeployConfig
     const answers = await runWizard(localBuild);
     const config = translateWizardAnswers(answers);
+    validateLocalBuildContext(outputDir, localBuild, Boolean(config.telegram));
 
     const preValidation = validateDeployConfig(config);
     if (preValidation.length > 0) {
@@ -76,6 +79,27 @@ async function main(): Promise<void> {
     console.log(chalk.dim("Check docker compose logs for details"));
     process.exit(1);
   }
+}
+
+function validateLocalBuildContext(
+  outputDir: string,
+  localBuild: boolean,
+  includesTelegram: boolean,
+): void {
+  if (!localBuild) return;
+
+  const required = ["packages/mcp-server/Dockerfile"];
+  if (includesTelegram) required.push("packages/mcp-telegram-client/Dockerfile");
+
+  const missing = required.filter((rel) => !existsSync(path.join(outputDir, rel)));
+  if (missing.length === 0) return;
+
+  throw new Error(
+    [
+      "--local-build only works from a cloned mediabox-mcp repository root.",
+      `Missing: ${missing.join(", ")}`,
+    ].join(" "),
+  );
 }
 
 function printHelp(): void {

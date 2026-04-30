@@ -6,6 +6,12 @@ import type { Deployer, DeployerContext, HealthCheck } from "./types.js";
 import { pollUntilReady, sleep } from "../utils/http.js";
 import { tryParseApiKey } from "../utils/xml.js";
 
+export function resolveDeployPath(workDir: string, targetPath: string): string {
+  const isPosixAbsolute = targetPath.startsWith("/");
+  if (path.isAbsolute(targetPath) || isPosixAbsolute) return targetPath;
+  return path.join(workDir, targetPath);
+}
+
 /**
  * Local DockerCliDeployer: shells out to `docker compose` via execa and
  * interacts with the filesystem directly. Consumed by `create-mediabox`
@@ -76,7 +82,7 @@ export class DockerCliDeployer implements Deployer {
     }
 
     // file check: poll for a file with optional xmlTag (defaults to ApiKey semantics)
-    const absPath = path.join(ctx.workDir, check.target);
+    const absPath = resolveDeployPath(ctx.workDir, check.target);
     const start = Date.now();
     let delay = 2000;
     while (Date.now() - start < check.timeoutMs) {
@@ -93,7 +99,7 @@ export class DockerCliDeployer implements Deployer {
   }
 
   async readFile(ctx: DeployerContext, relPath: string): Promise<string> {
-    return readFile(path.join(ctx.workDir, relPath), "utf-8");
+    return readFile(resolveDeployPath(ctx.workDir, relPath), "utf-8");
   }
 
   async writeFile(
@@ -101,12 +107,12 @@ export class DockerCliDeployer implements Deployer {
     relPath: string,
     content: string,
   ): Promise<void> {
-    const abs = path.join(ctx.workDir, relPath);
+    const abs = resolveDeployPath(ctx.workDir, relPath);
     await mkdir(path.dirname(abs), { recursive: true });
     await writeFile(abs, content, "utf-8");
   }
 
   async ensureDir(ctx: DeployerContext, relPath: string): Promise<void> {
-    await mkdir(path.join(ctx.workDir, relPath), { recursive: true });
+    await mkdir(resolveDeployPath(ctx.workDir, relPath), { recursive: true });
   }
 }

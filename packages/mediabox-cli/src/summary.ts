@@ -10,21 +10,11 @@ export function printSummary(config: DeployConfig, result: DeployResult): void {
   const healthy = (name: string): string =>
     result.healthy[name] ? "Ready" : "Failed";
 
-  const rows: [string, string, string][] = [
-    ["Service", "URL", "Status"],
-    ["Jellyfin", "http://localhost:8096", healthy("jellyfin")],
-    ["MCP Server", "http://localhost:3000", "Ready"],
-    ["qBittorrent", "http://localhost:8085", healthy("qbittorrent")],
-    ["Sonarr", "http://localhost:8989", healthy("sonarr")],
-    ["Radarr", "http://localhost:7878", healthy("radarr")],
-    ["Prowlarr", "http://localhost:9696", healthy("prowlarr")],
-    ["PyLoad", "http://localhost:8001", healthy("pyload")],
-  ];
-  log.table(rows);
+  log.table(serviceRows(config, healthy));
 
   console.log();
   log.info(`Jellyfin:     ${config.services.jellyfin.adminUsername} / ********`);
-  log.info(`qBittorrent:  admin / ********`);
+  log.info("qBittorrent:  admin / ********");
   log.info(`PyLoad:       ${config.services.pyload.username} / ********`);
   log.info(`MCP Public:   ${config.mcp.publicUrl}`);
 
@@ -36,56 +26,9 @@ export function printSummary(config: DeployConfig, result: DeployResult): void {
 
   console.log();
   log.header("Next Steps");
+  printModeNotes(config);
 
-  const domain = config.deployment.baseDomain;
-  if (config.deployment.mode === "vps" && domain) {
-    log.info("Caddy reverse proxy is running with automatic HTTPS:");
-    console.log();
-    const urlRows: [string, string, string][] = [
-      ["Service", "URL", "Status"],
-      ["MCP Server", `https://${domain}`, "Ready"],
-      ["Jellyfin", `https://jellyfin.${domain}`, healthy("jellyfin")],
-      ["Sonarr", `https://sonarr.${domain}`, healthy("sonarr")],
-      ["Radarr", `https://radarr.${domain}`, healthy("radarr")],
-      ["Prowlarr", `https://prowlarr.${domain}`, healthy("prowlarr")],
-      ["qBittorrent", `https://qbit.${domain}`, healthy("qbittorrent")],
-      ["PyLoad", `https://pyload.${domain}`, healthy("pyload")],
-    ];
-    if (config.services.bazarr.enabled) {
-      urlRows.push(["Bazarr", `https://bazarr.${domain}`, "Ready"]);
-    }
-    log.table(urlRows);
-    console.log();
-    log.info("HTTPS certificates are managed automatically by Let's Encrypt");
-    console.log();
-  }
-
-  if (config.deployment.mode === "tunnel" && domain) {
-    log.info(
-      "Cloudflare Tunnel is configured. Set up these hostnames in Zero Trust dashboard:",
-    );
-    console.log();
-    const tunnelRows: [string, string, string][] = [
-      ["Service", "Public hostname", "Service URL"],
-      ["MCP Server", domain, "http://mcp-server:3000"],
-      ["Jellyfin", `jellyfin.${domain}`, "http://jellyfin:8096"],
-      ["Sonarr", `sonarr.${domain}`, "http://sonarr:8989"],
-      ["Radarr", `radarr.${domain}`, "http://radarr:7878"],
-      ["Prowlarr", `prowlarr.${domain}`, "http://prowlarr:9696"],
-      ["qBittorrent", `qbit.${domain}`, "http://qbittorrent:8085"],
-      ["PyLoad", `pyload.${domain}`, "http://pyload:8000"],
-    ];
-    if (config.services.bazarr.enabled) {
-      tunnelRows.push(["Bazarr", `bazarr.${domain}`, "http://bazarr:6767"]);
-    }
-    log.table(tunnelRows);
-    console.log();
-    log.info("No ports need to be opened on your router");
-    log.info("HTTPS is managed automatically by Cloudflare");
-    console.log();
-  }
-
-  log.info("1. Add indexers (torrent trackers) in Prowlarr → http://localhost:9696");
+  log.info(`1. Add indexers (torrent trackers) in Prowlarr -> ${prowlarrUrl(config)}`);
   if (config.telegram) {
     log.info("2. Test Telegram bot by sending /start to your bot");
   }
@@ -94,4 +37,76 @@ export function printSummary(config: DeployConfig, result: DeployResult): void {
     `Web UI credentials (Sonarr/Radarr/Prowlarr): ${config.services.jellyfin.adminUsername} / ********`,
   );
   console.log();
+}
+
+function serviceRows(
+  config: DeployConfig,
+  healthy: (name: string) => string,
+): [string, string, string][] {
+  const domain = config.deployment.baseDomain;
+  const rows: [string, string, string][] = [["Service", "URL", "Status"]];
+
+  if (config.deployment.mode === "vps" && domain) {
+    rows.push(
+      ["MCP Server", `https://${domain}`, "Ready"],
+      ["Jellyfin", `https://jellyfin.${domain}`, healthy("jellyfin")],
+      ["qBittorrent", `https://qbit.${domain}`, healthy("qbittorrent")],
+      ["Sonarr", `https://sonarr.${domain}`, healthy("sonarr")],
+      ["Radarr", `https://radarr.${domain}`, healthy("radarr")],
+      ["Prowlarr", `https://prowlarr.${domain}`, healthy("prowlarr")],
+      ["PyLoad", `https://pyload.${domain}`, healthy("pyload")],
+    );
+  } else if (config.deployment.mode === "tunnel" && domain) {
+    rows.push(
+      ["MCP Server", `https://${domain}`, "Ready"],
+      ["Jellyfin", `https://jellyfin.${domain}`, healthy("jellyfin")],
+      ["qBittorrent", `https://qbit.${domain}`, healthy("qbittorrent")],
+      ["Sonarr", `https://sonarr.${domain}`, healthy("sonarr")],
+      ["Radarr", `https://radarr.${domain}`, healthy("radarr")],
+      ["Prowlarr", `https://prowlarr.${domain}`, healthy("prowlarr")],
+      ["PyLoad", `https://pyload.${domain}`, healthy("pyload")],
+    );
+  } else {
+    rows.push(
+      ["MCP Server", "http://localhost:3000", "Ready"],
+      ["Jellyfin", "http://localhost:8096", healthy("jellyfin")],
+      ["qBittorrent", "http://localhost:8085", healthy("qbittorrent")],
+      ["Sonarr", "http://localhost:8989", healthy("sonarr")],
+      ["Radarr", "http://localhost:7878", healthy("radarr")],
+      ["Prowlarr", "http://localhost:9696", healthy("prowlarr")],
+      ["PyLoad", "http://localhost:8001", healthy("pyload")],
+    );
+  }
+
+  if (config.services.bazarr.enabled) {
+    const bazarrUrl =
+      domain && config.deployment.mode !== "local"
+        ? `https://bazarr.${domain}`
+        : "http://localhost:6767";
+    rows.push(["Bazarr", bazarrUrl, "Ready"]);
+  }
+
+  return rows;
+}
+
+function printModeNotes(config: DeployConfig): void {
+  const domain = config.deployment.baseDomain;
+
+  if (config.deployment.mode === "vps" && domain) {
+    log.info("Caddy reverse proxy is running with automatic HTTPS.");
+    log.info("HTTPS certificates are managed automatically by Let's Encrypt.");
+    return;
+  }
+
+  if (config.deployment.mode === "tunnel" && domain) {
+    log.info("Cloudflare Tunnel is configured.");
+    log.info("Create the listed public hostnames in the Zero Trust dashboard.");
+    log.info("No ports need to be opened on your router.");
+  }
+}
+
+function prowlarrUrl(config: DeployConfig): string {
+  const domain = config.deployment.baseDomain;
+  if (domain && config.deployment.mode !== "local") return `https://prowlarr.${domain}`;
+  return "http://localhost:9696";
 }

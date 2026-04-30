@@ -1,6 +1,5 @@
 import type { DeployConfig, LLMProviderConfig } from "@mediabox/core";
 import type { WizardAnswers } from "../types.js";
-import { VERSION } from "../utils/version.js";
 
 /**
  * Translate Inquirer-derived WizardAnswers into the normalized domain
@@ -18,7 +17,7 @@ export function translateWizardAnswers(answers: WizardAnswers): DeployConfig {
       letsEncryptEmail: answers.letsEncryptEmail,
       tunnelToken: answers.tunnelToken,
       localBuild: answers.localBuild,
-      imageTag: VERSION,
+      imageTag: "latest",
     },
     system: {
       timezone: answers.timezone,
