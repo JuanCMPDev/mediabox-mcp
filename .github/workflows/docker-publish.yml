@@ -1,0 +1,100 @@
+name: Docker Publish
+
+# Builds and pushes the two server-side images to GHCR on every release tag.
+# Runs in parallel with release.yml (Tauri) so a Docker failure does not block
+# the desktop release and vice versa. workflow_dispatch lets us republish a
+# previously-tagged version manually if a build needs to be redone.
+#
+# IMAGE_TAG conventions emitted by @mediabox/core/generators/env.ts must
+# resolve to a tag pushed by this workflow:
+#   ghcr.io/juancmpdev/mediabox-mcp:<semver>     — exact pin (used by .env)
+#   ghcr.io/juancmpdev/mediabox-mcp:<major.minor> — minor pin
+#   ghcr.io/juancmpdev/mediabox-mcp:latest        — convenience
+#   ghcr.io/juancmpdev/mediabox-mcp:sha-<sha>     — debug
+#
+# The published packages are made public via GitHub Settings → Packages
+# (one-time setup); the generated docker-compose.yml therefore does not
+# require docker login on end-user machines.
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Existing version tag to (re)publish, e.g. v2.2.0-beta.0. Leave blank when triggering from a tag.'
+        required: false
+        type: string
+
+permissions:
+  contents: read
+  packages: write
+
+concurrency:
+  group: docker-publish-${{ github.ref }}-${{ inputs.tag }}
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    name: Build & Push (${{ matrix.image.name }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        image:
+          - name: mediabox-mcp
+            dockerfile: packages/mcp-server/Dockerfile
+          - name: mediabox-telegram
+            dockerfile: packages/mcp-telegram-client/Dockerfile
+    steps:
+      - name: Resolve ref to checkout
+        id: target
+        run: |
+          if [ -n "${{ inputs.tag }}" ]; then
+            echo "ref=${{ inputs.tag }}" >> "$GITHUB_OUTPUT"
+            echo "tag=${{ inputs.tag }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "ref=${GITHUB_REF}" >> "$GITHUB_OUTPUT"
+            echo "tag=${GITHUB_REF##*/}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ steps.target.outputs.ref }}
+
+      - name: Derive version tags
+        id: ver
+        run: |
+          TAG="${{ steps.target.outputs.tag }}"
+          SEMVER="${TAG#v}"
+          MAJOR_MINOR="${SEMVER%.*}"
+          echo "semver=$SEMVER"            >> "$GITHUB_OUTPUT"
+          echo "major_minor=$MAJOR_MINOR"  >> "$GITHUB_OUTPUT"
+          echo "Resolved: semver=$SEMVER major_minor=$MAJOR_MINOR"
+
+      - uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Login to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build & push
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ${{ matrix.image.dockerfile }}
+          platforms: linux/amd64,linux/arm64
+          push: true
+          provenance: false
+          tags: |
+            ghcr.io/juancmpdev/${{ matrix.image.name }}:latest
+            ghcr.io/juancmpdev/${{ matrix.image.name }}:${{ steps.ver.outputs.semver }}
+            ghcr.io/juancmpdev/${{ matrix.image.name }}:${{ steps.ver.outputs.major_minor }}
+            ghcr.io/juancmpdev/${{ matrix.image.name }}:sha-${{ github.sha }}
+          cache-from: type=gha,scope=${{ matrix.image.name }}
+          cache-to: type=gha,scope=${{ matrix.image.name }},mode=max
