@@ -1,6 +1,6 @@
 {
   "name": "@mediabox/chat-core",
-  "version": "2.1.0-beta.0",
+  "version": "2.2.0-beta.0",
   "description": "Shared LLM + MCP tool-calling engine for Mediabox chat. Consumed by mcp-server (REST) and will replace mcp-telegram-client logic in Phase 2.3e.",
   "private": true,
   "license": "MIT",
@@ -15,7 +15,9 @@
   },
   "files": ["dist"],
   "scripts": {
-    "build": "tsc"
+    "build": "tsc",
+    "test": "vitest run --passWithNoTests",
+    "test:watch": "vitest"
   },
   "dependencies": {
     "@google/genai": "^1.47.0",
@@ -25,6 +27,7 @@
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
-    "typescript": "^5.8.0"
+    "typescript": "^5.8.0",
+    "vitest": "^3.0.0"
   }
 }

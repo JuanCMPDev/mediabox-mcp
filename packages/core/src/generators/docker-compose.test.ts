@@ -84,18 +84,37 @@ describe("generateDockerCompose", () => {
     expect(parsed.services).toHaveProperty("bazarr");
   });
 
-  it("uses a build context for mcp-server when localBuild is true", () => {
+  it("uses a monorepo-root build context for mcp-server when localBuild is true (P0.3)", () => {
     const cfg = baseConfig();
     cfg.deployment.localBuild = true;
     const parsed = parse(generateDockerCompose(cfg)) as any;
-    expect(parsed.services["mcp-server"].build).toBe("./packages/mcp-server");
+    expect(parsed.services["mcp-server"].build).toEqual({
+      context: ".",
+      dockerfile: "packages/mcp-server/Dockerfile",
+    });
     expect(parsed.services["mcp-server"].image).toBeUndefined();
+  });
+
+  it("uses a monorepo-root build context for telegram when localBuild is true (P0.3)", () => {
+    const cfg = baseConfig();
+    cfg.deployment.localBuild = true;
+    cfg.telegram = {
+      botToken: "bot",
+      llm: { kind: "openrouter", apiKey: "k", model: "m" },
+      allowedUserIds: [],
+    };
+    const parsed = parse(generateDockerCompose(cfg)) as any;
+    expect(parsed.services["telegram-bot"].build).toEqual({
+      context: ".",
+      dockerfile: "packages/mcp-telegram-client/Dockerfile",
+    });
+    expect(parsed.services["telegram-bot"].image).toBeUndefined();
   });
 
   it("uses a GHCR image (with IMAGE_TAG default) when localBuild is false", () => {
     const parsed = parse(generateDockerCompose(baseConfig())) as any;
     expect(parsed.services["mcp-server"].image).toBe(
-      "ghcr.io/juancmpdev/mediabox-mcp:${IMAGE_TAG:-2.1.0-beta.0}",
+      "ghcr.io/juancmpdev/mediabox-mcp:${IMAGE_TAG:-2.2.0-beta.0}",
     );
     expect(parsed.services["mcp-server"].build).toBeUndefined();
   });
@@ -113,5 +132,12 @@ describe("generateDockerCompose", () => {
   it("never emits MCP_AUTH_SECRET (confirmed dead config)", () => {
     const yaml = generateDockerCompose(baseConfig());
     expect(yaml).not.toContain("MCP_AUTH_SECRET");
+  });
+
+  it("emits ALLOWED_ORIGINS defaulting to MCP_PUBLIC_URL (P0.2)", () => {
+    const parsed = parse(generateDockerCompose(baseConfig())) as any;
+    expect(parsed.services["mcp-server"].environment).toContain(
+      "ALLOWED_ORIGINS=${ALLOWED_ORIGINS:-${MCP_PUBLIC_URL}}",
+    );
   });
 });

@@ -234,7 +234,7 @@
     "tunnelTokenLabel": "Cloudflare Tunnel token",
     "tunnelTokenHint": "Get it from Cloudflare Zero Trust → Networks → Tunnels.",
     "imageTagLabel": "Image tag",
-    "imageTagHint": "Pin to a specific tag (e.g. <1>v2.1.0</1>) for production instead of <3>latest</3>.",
+    "imageTagHint": "Pin to a specific tag (e.g. <1>v2.2.0</1>) for production instead of <3>latest</3>.",
     "probe": {
       "checking": "Checking filesystem compatibility…",
       "incompatible": "<1>Incompatible filesystem{{fsLabel}}.</1> Sonarr, Radarr, and Prowlarr won't start here — this filesystem doesn't support SQLite's WAL mode (typical on WSL2 9P bind-mounts, SMB, and NFS). <5>Use <1>C:\\</1> for the stack folder</5> and point your media paths at your preferred drive in the next step.",

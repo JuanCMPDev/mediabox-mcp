@@ -1,6 +1,6 @@
 {
   "name": "@mediabox/core",
-  "version": "2.1.0-beta.0",
+  "version": "2.2.0-beta.0",
   "description": "Headless orchestration engine for Mediabox — file generation, service API clients, and the Deployer interface.",
   "license": "MIT",
   "private": true,

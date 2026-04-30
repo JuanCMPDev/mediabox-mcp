@@ -234,7 +234,7 @@
     "tunnelTokenLabel": "Token del Túnel de Cloudflare",
     "tunnelTokenHint": "Consíguelo en Cloudflare Zero Trust → Networks → Tunnels.",
     "imageTagLabel": "Tag de imagen",
-    "imageTagHint": "Fija un tag específico (ej. <1>v2.1.0</1>) para producción en lugar de <3>latest</3>.",
+    "imageTagHint": "Fija un tag específico (ej. <1>v2.2.0</1>) para producción en lugar de <3>latest</3>.",
     "probe": {
       "checking": "Comprobando compatibilidad del sistema de archivos…",
       "incompatible": "<1>Sistema de archivos incompatible{{fsLabel}}.</1> Sonarr, Radarr y Prowlarr no iniciarán aquí — este sistema de archivos no soporta el modo WAL de SQLite (típico en montajes 9P de WSL2, SMB y NFS). <5>Usa <1>C:\\</1> para la carpeta del stack</5> y apunta tus rutas de medios a tu disco preferido en el siguiente paso.",

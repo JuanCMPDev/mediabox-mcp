@@ -20,3 +20,17 @@ export const PYLOAD_USER     = process.env.PYLOAD_USER     || "pyload";
 export const PYLOAD_PASS     = process.env.PYLOAD_PASSWORD || "pyload";
 export const PORT            = parseInt(process.env.PORT   || "3000");
 export const PUBLIC_URL      = process.env.PUBLIC_URL      || `http://localhost:${PORT}`;
+
+// Where to bind the listener. Defaults to 0.0.0.0 so the canonical Docker
+// container deployment keeps working unchanged. The Tauri sidecar overrides
+// this to 127.0.0.1 since only the embedded webview talks to it.
+export const BIND_HOST       = process.env.BIND_HOST       || "0.0.0.0";
+
+// Comma-separated extra origins to allow (in addition to localhost regex and
+// Tauri webview origins, which are always allowed). The Docker compose
+// generator emits this with MCP_PUBLIC_URL as the default; users can extend
+// in .env (e.g. for LAN access via IP).
+export const ALLOWED_ORIGINS = (process.env.ALLOWED_ORIGINS || "")
+  .split(",")
+  .map((s) => s.trim())
+  .filter(Boolean);

@@ -5,20 +5,22 @@ import path from "path";
 import { jfApi, sonarrApi, radarrApi, textResult } from "../helpers/api.js";
 import { execFileAsync, resolvePath } from "../helpers/files.js";
 import { jobs, startJob, estimateTime } from "../helpers/jobs.js";
+import { issueConfirmToken, consumeConfirmToken } from "../helpers/confirm-tokens.js";
 import { MEDIA_PATH, DOWNLOADS_PATH } from "../config.js";
 
 export function registerMaintenanceTools(server: McpServer): void {
   // 21. OPTIMIZE MEDIA
   server.registerTool("optimize_media", {
-    description: "Analyze or strip unwanted audio/subtitle tracks from MKV files to save space. Works on single file or entire folder (batch).",
+    description: "Analyze or strip unwanted audio/subtitle tracks from MKV files to save space. Works on single file or entire folder (batch). action='optimize' is a two-step flow: the first call returns a preview + confirmToken; show it to the user, then re-call with the same args and confirmToken to actually re-encode.",
     inputSchema: {
       mediaPath: z.string().describe("Path to media file or folder (e.g. 'anime/Invincible (2021)' or full path '/data/anime/Invincible (2021)')"),
       action: z.enum(["analyze", "optimize"]).default("analyze").describe("analyze = show tracks, optimize = strip unwanted tracks"),
       keepAudioLangs: z.array(z.string()).optional().describe("Audio languages to KEEP (e.g. ['spa', 'eng', 'jpn']). Others are removed. Omit to keep all."),
       keepSubLangs: z.array(z.string()).optional().describe("Subtitle languages to KEEP (e.g. ['spa', 'eng']). Omit to keep all."),
       removeAllSubs: z.boolean().default(false).describe("Remove ALL subtitle tracks"),
+      confirmToken: z.string().optional().describe("Token returned from a prior preview call. Required to actually execute action='optimize'. Bound to the original args."),
     },
-  }, async ({ mediaPath, action, keepAudioLangs, keepSubLangs, removeAllSubs }) => {
+  }, async ({ mediaPath, action, keepAudioLangs, keepSubLangs, removeAllSubs, confirmToken }) => {
     const fullPath = resolvePath(mediaPath);
     const stat = await fs.stat(fullPath);
     const mkvs: string[] = [];
@@ -28,6 +30,70 @@ export function registerMaintenanceTools(server: McpServer): void {
       await find(fullPath);
     }
     if (!mkvs.length) return textResult({ message: "No MKV files found" });
+
+    // Read-only ffprobe pass over each mkv. Reused by the action='analyze'
+    // path AND the action='optimize' preview path that runs when no
+    // confirmToken is supplied.
+    async function runAnalyze(): Promise<any[]> {
+      const out: any[] = [];
+      for (const mkv of mkvs.sort()) {
+        try {
+          const { stdout } = await execFileAsync("ffprobe", ["-v", "quiet", "-print_format", "json", "-show_streams", "-show_format", mkv], { timeout: 30_000 });
+          const probe = JSON.parse(stdout);
+          const streams = probe.streams || [];
+          const fileSize = parseInt(probe.format?.size || "0");
+          const tracks = streams.map((s: any, i: number) => ({
+            index: i,
+            type: s.codec_type,
+            codec: s.codec_name,
+            language: s.tags?.language || "und",
+            title: s.tags?.title || "",
+            channels: s.channels,
+            default: s.disposition?.default === 1,
+          }));
+          out.push({
+            file: path.basename(mkv),
+            size: `${(fileSize / 1048576).toFixed(0)}MB`,
+            tracks: tracks.map((t: any) => `[${t.index}] ${t.type} ${t.codec} lang=${t.language} ${t.title ? `"${t.title}"` : ""} ${t.channels ? `${t.channels}ch` : ""} ${t.default ? "(default)" : ""}`),
+          });
+        } catch (e: any) {
+          out.push({ file: path.basename(mkv), status: `error: ${e.message.slice(0, 80)}` });
+        }
+      }
+      return out;
+    }
+
+    // Token gate for action="optimize". Missing token returns the analyze
+    // preview + a fresh token bound to these exact args; the LLM shows the
+    // user what tracks would be dropped and re-calls with the token to
+    // commit. Invalid/expired token aborts.
+    const optimizeArgs = { mediaPath, keepAudioLangs, keepSubLangs, removeAllSubs };
+    if (action === "optimize") {
+      if (confirmToken) {
+        if (!consumeConfirmToken("optimize_media.optimize", confirmToken, optimizeArgs)) {
+          throw new Error("Invalid or expired confirmToken — re-call action='analyze' (or action='optimize' without confirmToken) to get a fresh preview.");
+        }
+        // valid token: fall through to execute
+      } else {
+        const preview = await runAnalyze();
+        const token = issueConfirmToken("optimize_media.optimize", optimizeArgs);
+        return textResult({
+          requiresConfirmation: true,
+          confirmToken: token,
+          mode: "PREVIEW (no changes made)",
+          files: mkvs.length,
+          results: preview,
+          // confirmToken value lives only in the structured field above —
+          // do not interpolate it into this message (LLMs paraphrase it
+          // and ask the user to resend it, which is the wrong protocol).
+          message: `Preview only — nothing has been optimized. Will re-encode ${mkvs.length} MKV file(s) to drop the unwanted tracks shown above. Show this to the user. If they confirm, YOU (the assistant) re-call optimize_media with the same args plus confirmToken from this response. Never expose confirmToken to the user.`,
+        });
+      }
+    }
+
+    if (action === "analyze") {
+      return textResult({ mode: "analyze", files: mkvs.length, results: await runAnalyze() });
+    }
 
     if (mkvs.length > 3 && action === "optimize") {
       const est = estimateTime(mkvs.length * 1500 * 1048576, "ffmpeg");
@@ -63,6 +129,9 @@ export function registerMaintenanceTools(server: McpServer): void {
       return textResult({ message: `Optimization started in background (${mkvs.length} files, ${est})`, jobId: job.id, tip: "Use check_jobs to monitor" });
     }
 
+    // Inline optimize path (≤3 files). Larger batches were dispatched to a
+    // background job above. We only get here with action="optimize" AND a
+    // valid confirmToken consumed.
     const results: any[] = [];
 
     for (const mkv of mkvs.sort()) {
@@ -81,15 +150,6 @@ export function registerMaintenanceTools(server: McpServer): void {
           channels: s.channels,
           default: s.disposition?.default === 1,
         }));
-
-        if (action === "analyze") {
-          results.push({
-            file: path.basename(mkv),
-            size: `${(fileSize / 1048576).toFixed(0)}MB`,
-            tracks: tracks.map((t: any) => `[${t.index}] ${t.type} ${t.codec} lang=${t.language} ${t.title ? `"${t.title}"` : ""} ${t.channels ? `${t.channels}ch` : ""} ${t.default ? "(default)" : ""}`),
-          });
-          continue;
-        }
 
         const mapArgs: string[] = [];
         for (const t of tracks) {
@@ -136,20 +196,39 @@ export function registerMaintenanceTools(server: McpServer): void {
 
     const totalSaved = results.reduce((sum, r) => sum + (parseInt(r.saved) || 0), 0);
     return textResult({
-      mode: action,
+      mode: "optimize",
       files: mkvs.length,
       results,
-      ...(action === "optimize" ? { totalSaved: `${totalSaved}MB` } : {}),
+      totalSaved: `${totalSaved}MB`,
     });
   });
 
   // 22. CLEANUP SERVER
   server.registerTool("cleanup_server", {
-    description: "Clean up the server: remove Jellyfin cache, temp files, orphan downloads, ghost entries in Sonarr/Radarr, and qBittorrent completed torrents.",
+    description: "Clean up the server: remove Jellyfin cache, temp files, orphan downloads, ghost entries in Sonarr/Radarr, and qBittorrent completed torrents. Two-step flow: dryRun=false without confirmToken returns a preview + a fresh token; show the report to the user, then re-call dryRun=false with that token to apply.",
     inputSchema: {
       dryRun: z.boolean().default(true).describe("Preview what would be cleaned without deleting"),
+      confirmToken: z.string().optional().describe("Token returned from a prior preview call. Required to actually execute (dryRun=false)."),
     },
-  }, async ({ dryRun }) => {
+  }, async ({ dryRun, confirmToken }) => {
+    // Token gate. dryRun=true is unchanged (read-only preview). dryRun=false
+    // requires a valid token; without one we force dryRun=true for this run
+    // and attach a fresh token so the LLM can show the user and re-call.
+    let effectiveDryRun = dryRun;
+    let issuedToken: string | undefined;
+    if (!dryRun) {
+      if (confirmToken) {
+        if (!consumeConfirmToken("cleanup_server.apply", confirmToken, {})) {
+          throw new Error("Invalid or expired confirmToken — call cleanup_server with dryRun=false (and no confirmToken) to get a fresh preview.");
+        }
+        // valid token: stay with dryRun=false
+      } else {
+        effectiveDryRun = true;
+        issuedToken = issueConfirmToken("cleanup_server.apply", {});
+      }
+    }
+    dryRun = effectiveDryRun;
+
     const report: { action: string; size?: string; status: string }[] = [];
 
     // 1. Jellyfin cache
@@ -228,6 +307,15 @@ export function registerMaintenanceTools(server: McpServer): void {
       report,
       potentialSaved: `${wouldFree}MB`,
       disk,
+      ...(issuedToken
+        ? {
+            requiresConfirmation: true,
+            confirmToken: issuedToken,
+            // Token value lives in confirmToken field — do not interpolate
+            // here; LLMs paraphrase the message and would leak the token.
+            message: `Preview only — nothing has been cleaned. Show this report to the user. If they confirm, YOU (the assistant) re-call cleanup_server with dryRun=false plus confirmToken from this response. Never expose confirmToken to the user.`,
+          }
+        : {}),
     });
   });
 
