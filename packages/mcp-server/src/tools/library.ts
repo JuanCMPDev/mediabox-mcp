@@ -6,6 +6,7 @@ import { jfApi, sonarrApi, radarrApi, textResult } from "../helpers/api.js";
 import { pyloadApi, pyloadApiJson } from "../helpers/pyload.js";
 import { execFileAsync, moveFile, isVideoFile, extractEpisodeNumber, resolvePath } from "../helpers/files.js";
 import { startJob, estimateTime } from "../helpers/jobs.js";
+import { issueConfirmToken, consumeConfirmToken } from "../helpers/confirm-tokens.js";
 import { MEDIA_PATH } from "../config.js";
 
 export function registerLibraryTools(server: McpServer): void {
@@ -36,15 +37,16 @@ export function registerLibraryTools(server: McpServer): void {
 
   // 6. MANAGE FILES
   server.registerTool("manage_files", {
-    description: "List, move, or delete files and folders. Paths starting with 'downloads/' access the downloads folder. All other paths are relative to media volume.",
+    description: "List, move, or delete files and folders. Paths starting with 'downloads/' access the downloads folder. All other paths are relative to media volume. DELETE is a two-step flow: the first call returns a preview + confirmToken; show the preview to the user, then re-call with the same target and confirmToken to actually delete.",
     inputSchema: {
       action: z.enum(["list", "move", "delete"]).describe("Action to perform"),
       path: z.string().optional().describe("Path (e.g. 'anime/Show', 'downloads/', 'movies/')"),
       sourcePaths: z.array(z.string()).optional().describe("Source paths for move (e.g. ['downloads/file.mkv', 'tv/Show1'])"),
       destFolder: z.string().optional().describe("Destination folder for move (e.g. 'movies/Movie Name')"),
       jellyfinItemId: z.string().optional().describe("Jellyfin item ID to delete (also removes files)"),
+      confirmToken: z.string().optional().describe("Token returned from a prior preview call. Required to actually execute a delete. Bound to the original target — re-issue if you change jellyfinItemId or path."),
     },
-  }, async ({ action, path: filePath, sourcePaths, destFolder, jellyfinItemId }) => {
+  }, async ({ action, path: filePath, sourcePaths, destFolder, jellyfinItemId, confirmToken }) => {
     if (action === "list") {
       const full = filePath ? resolvePath(filePath) : MEDIA_PATH;
       const entries = await fs.readdir(full, { withFileTypes: true });
@@ -103,6 +105,53 @@ export function registerLibraryTools(server: McpServer): void {
       return textResult({ message: "Moved", results });
     }
     if (action === "delete") {
+      // 1. Input validation — fail fast on missing/unsafe args before any
+      //    lookup or token issuance.
+      if (!jellyfinItemId && !filePath) throw new Error("Provide jellyfinItemId or path");
+      const fullPath = filePath ? resolvePath(filePath) : null;  // throws PathSandboxError on traversal
+      const target = jellyfinItemId
+        ? { kind: "jellyfin" as const, id: jellyfinItemId }
+        : { kind: "path" as const, path: filePath };
+
+      // 2. Token gate. With a token, we consume + execute. Without, we
+      //    build a preview and return a fresh token so the LLM can show
+      //    the user what's about to be deleted and confirm verbally.
+      if (confirmToken) {
+        if (!consumeConfirmToken("manage_files.delete", confirmToken, target)) {
+          throw new Error("Invalid or expired confirmToken — re-issue by calling delete again without confirmToken to get a new preview.");
+        }
+        // fall through to execute
+      } else {
+        if (jellyfinItemId) {
+          const lookup = await jfApi(`/Items?ids=${jellyfinItemId}&Fields=Path`);
+          const item = lookup.Items?.[0];
+          if (!item) throw new Error("Item not found");
+          const token = issueConfirmToken("manage_files.delete", target);
+          return textResult({
+            requiresConfirmation: true,
+            confirmToken: token,
+            preview: { kind: "jellyfin", id: item.Id, name: item.Name, type: item.Type, path: item.Path },
+            message: `Will delete "${item.Name}" (${item.Type}) from Jellyfin + Sonarr/Radarr + disk. Confirm with the user, then re-call manage_files with action="delete", jellyfinItemId="${jellyfinItemId}", and confirmToken="${token}". Token expires in 5 min.`,
+          });
+        }
+        // path branch
+        const stat = await fs.stat(fullPath!).catch(() => null);
+        if (!stat) throw new Error(`Path not found: ${filePath}`);
+        const token = issueConfirmToken("manage_files.delete", target);
+        return textResult({
+          requiresConfirmation: true,
+          confirmToken: token,
+          preview: {
+            kind: "path",
+            path: filePath,
+            isDirectory: stat.isDirectory(),
+            sizeBytes: stat.size,
+          },
+          message: `Will delete ${stat.isDirectory() ? "directory" : "file"} ${filePath}. Confirm with the user, then re-call manage_files with action="delete", path="${filePath}", and confirmToken="${token}". Token expires in 5 min.`,
+        });
+      }
+
+      // 3. Execute (token was valid).
       if (jellyfinItemId) {
         const lookup = await jfApi(`/Items?ids=${jellyfinItemId}&Fields=Path`);
         const item = lookup.Items?.[0];
@@ -146,13 +195,10 @@ export function registerLibraryTools(server: McpServer): void {
         await jfApi("/Library/Refresh", "POST");
         return textResult({ message: `Deleted "${item.Name}" (${item.Type}) from Jellyfin, Sonarr/Radarr, and disk` });
       }
-      if (filePath) {
-        const full = resolvePath(filePath);
-        await fs.rm(full, { recursive: true, force: true });
-        await jfApi("/Library/Refresh", "POST");
-        return textResult({ message: `Deleted ${filePath}` });
-      }
-      throw new Error("Provide jellyfinItemId or path");
+      // path branch — fullPath was resolved + sandbox-checked at step 1
+      await fs.rm(fullPath!, { recursive: true, force: true });
+      await jfApi("/Library/Refresh", "POST");
+      return textResult({ message: `Deleted ${filePath}` });
     }
     throw new Error("Invalid action");
   });

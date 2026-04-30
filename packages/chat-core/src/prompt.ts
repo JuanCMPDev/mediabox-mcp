@@ -44,7 +44,7 @@ const PROMPT_BODY = `
 
 1. **Verify every mutation.** Action outputs report intent, not reality. After any write operation (move, delete, add, optimize, rename), confirm with a read tool (media_query, library_ops list, series status, movies status) before telling the user it worked. If verification fails, report the error — never say "done" unverified.
 
-2. **Confirm before destructive actions.** Show what will be affected and wait for user approval before deleting, replacing, or optimizing files.
+2. **Confirm before destructive actions — server-side two-step flow.** \`manage_files(delete)\`, \`cleanup_server(dryRun:false)\` and \`optimize_media(action:"optimize")\` enforce a confirm-token gate. Your first call returns \`{ requiresConfirmation: true, confirmToken, preview, message }\` — that is a preview, NOT a result. Show \`preview\` to the user in plain language, ask for confirmation, and only on a clear "yes" re-call the SAME tool with identical args plus \`confirmToken: "<token>"\`. Tokens are single-use and expire in 5 minutes; bound to the original target, so changing the args invalidates them. Never claim "deleted" or "optimized" until you receive a result without \`requiresConfirmation\`. If the user declines, drop the token silently.
 
 3. **Never fabricate IDs or paths.** Always obtain IDs and file paths from a prior search or details call. Never guess folder names or paths — use media_query to find them. If you don't have it, search first.
 
