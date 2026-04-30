@@ -4,7 +4,7 @@ import { isInitializeRequest } from "@modelcontextprotocol/sdk/types.js";
 import express, { Request, Response } from "express";
 import cors from "cors";
 import crypto from "crypto";
-import { PORT, PUBLIC_URL } from "./config.js";
+import { PORT, PUBLIC_URL, BIND_HOST, ALLOWED_ORIGINS } from "./config.js";
 import { oauthProvider, authMiddleware } from "./auth.js";
 import { createMcpServer } from "./tools/register.js";
 import { dashboardRouter } from "./api/dashboard.js";
@@ -12,6 +12,7 @@ import { chatRouter }      from "./api/chat.js";
 import { setupRouter }     from "./api/setup.js";
 import { chatProviderInfo } from "./chat/provider.js";
 import { initI18n, localeMiddleware } from "./helpers/i18n.js";
+import { buildCorsOriginCallback, buildOriginMiddleware, type OriginPolicy } from "./helpers/origin.js";
 import { VERSION } from "./version.js";
 
 // Initialise i18next so request handlers can call `req.t()` from the very
@@ -20,7 +21,20 @@ await initI18n();
 
 const app = express();
 app.set("trust proxy", 2);
-app.use(cors({ origin: true, credentials: true }));
+
+// Origin allowlist — load-bearing against DNS rebinding from a malicious
+// page. Browsers always send Origin reflecting the URL the user typed
+// (NOT the rebound IP), so a tightly-scoped list is safe and effective.
+// Non-browser callers (Telegram bot, external MCP clients) don't send
+// Origin and pass through unimpeded.
+const originPolicy: OriginPolicy = {
+  allowed: ALLOWED_ORIGINS,
+  allowLocalhost: true,
+  allowTauri: true,
+};
+const requireSafeOrigin = buildOriginMiddleware(originPolicy);
+
+app.use(cors({ origin: buildCorsOriginCallback(originPolicy), credentials: true }));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(localeMiddleware);
@@ -29,7 +43,7 @@ app.use(mcpAuthRouter({ provider: oauthProvider, issuerUrl: new URL(PUBLIC_URL),
 
 const transports = new Map<string, StreamableHTTPServerTransport>();
 
-app.all("/mcp", authMiddleware, async (req: Request, res: Response) => {
+app.all("/mcp", requireSafeOrigin, authMiddleware, async (req: Request, res: Response) => {
   const sid = req.headers["mcp-session-id"] as string | undefined;
   let transport: StreamableHTTPServerTransport;
   if (sid && transports.has(sid)) {
@@ -45,23 +59,26 @@ app.all("/mcp", authMiddleware, async (req: Request, res: Response) => {
 app.get("/health", (_req, res) => { res.json({ status: "ok", name: "mediabox-mcp", version: VERSION }); });
 
 // Dashboard REST API — consumed by @mediabox/ui
-app.use("/api/dashboard", authMiddleware, dashboardRouter);
+app.use("/api/dashboard", requireSafeOrigin, authMiddleware, dashboardRouter);
 
 // Chat API — LLM + MCP tool-calling via NDJSON stream
-app.use("/api/chat", authMiddleware, chatRouter);
+app.use("/api/chat", requireSafeOrigin, authMiddleware, chatRouter);
 
 // Setup API — desktop wizard deploy, NDJSON event stream
-app.use("/api/setup", authMiddleware, setupRouter);
+app.use("/api/setup", requireSafeOrigin, authMiddleware, setupRouter);
 
 if (!process.env.INTERNAL_API_KEY) {
   console.warn("WARNING: INTERNAL_API_KEY is not set — generating ephemeral key. The Telegram bot will lose auth on every restart. Set INTERNAL_API_KEY in your .env file.");
 }
 
-app.listen(PORT, "0.0.0.0", () => {
-  console.log(`Mediabox MCP v${VERSION} running on port ${PORT}`);
+app.listen(PORT, BIND_HOST, () => {
+  console.log(`Mediabox MCP v${VERSION} running on ${BIND_HOST}:${PORT}`);
   console.log(`Public URL: ${PUBLIC_URL}`);
   console.log(`Transport: POST ${PUBLIC_URL}/mcp`);
   console.log(`OAuth: ${PUBLIC_URL}/.well-known/oauth-authorization-server`);
+  if (ALLOWED_ORIGINS.length > 0) {
+    console.log(`Origin allowlist: ${ALLOWED_ORIGINS.join(", ")} (+ localhost, tauri webview)`);
+  }
 
   const llm = chatProviderInfo();
   if (llm) {

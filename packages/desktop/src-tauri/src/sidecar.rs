@@ -45,7 +45,16 @@ pub async fn spawn(app: AppHandle) -> Result<(), Box<dyn std::error::Error + Sen
         .sidecar("mediabox-mcp")?
         .env("PORT", port.to_string())
         .env("INTERNAL_API_KEY", &token)
-        .env("PUBLIC_URL", &api_url);
+        .env("PUBLIC_URL", &api_url)
+        // Sidecar only ever talks to the embedded webview — bind loopback so
+        // a misconfigured firewall can't expose the dashboard / MCP endpoint
+        // to the LAN, and lock Origin to the Tauri webview origins so a
+        // page in the user's regular browser can't reach the random port.
+        .env("BIND_HOST", "127.0.0.1")
+        .env(
+            "ALLOWED_ORIGINS",
+            "tauri://localhost,http://tauri.localhost,https://tauri.localhost",
+        );
 
     // Pass the stackDir so the sidecar can edit `<stackDir>/.env` and run
     // `docker compose` against the right project. Without this, the admin

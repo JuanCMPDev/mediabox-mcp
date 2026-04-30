@@ -100,6 +100,10 @@ export function generateDockerCompose(config: DeployConfig): string {
       "MEDIA_PATH=/data",
       "PORT=3000",
       "PUBLIC_URL=${MCP_PUBLIC_URL}",
+      // Defense-in-depth against DNS rebinding for browser callers. Defaults
+      // to MCP_PUBLIC_URL so the wizard "just works"; users can override in
+      // .env (comma-separated) to add LAN IPs or extra reverse-proxy hosts.
+      "ALLOWED_ORIGINS=${ALLOWED_ORIGINS:-${MCP_PUBLIC_URL}}",
       "PYLOAD_URL=http://pyload:8000",
       "PYLOAD_USER=${PYLOAD_USER}",
       "PYLOAD_PASSWORD=${PYLOAD_PASSWORD}",

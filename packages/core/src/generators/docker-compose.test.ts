@@ -114,4 +114,11 @@ describe("generateDockerCompose", () => {
     const yaml = generateDockerCompose(baseConfig());
     expect(yaml).not.toContain("MCP_AUTH_SECRET");
   });
+
+  it("emits ALLOWED_ORIGINS defaulting to MCP_PUBLIC_URL (P0.2)", () => {
+    const parsed = parse(generateDockerCompose(baseConfig())) as any;
+    expect(parsed.services["mcp-server"].environment).toContain(
+      "ALLOWED_ORIGINS=${ALLOWED_ORIGINS:-${MCP_PUBLIC_URL}}",
+    );
+  });
 });
