@@ -39,7 +39,7 @@ export const VIRTUAL_TOOLS: Record<string, VirtualToolDef> = {
 
   library_ops: {
     name: 'library_ops',
-    description: 'Manage files and libraries. scan=refresh Jellyfin. create=new library. move=move files/folders. delete=cross-layer delete (Jellyfin+Sonarr/Radarr+disk). list=browse files. rename=standardize episode names. refresh=refresh metadata.',
+    description: 'Manage files and libraries. scan=refresh Jellyfin. create=new library. move=move files/folders. delete=cross-layer delete (Jellyfin+Sonarr/Radarr+disk). list=browse files. rename=standardize episode names. refresh=refresh metadata. action=delete is two-step: first call returns preview + confirmToken; pass that token back in your next call to apply.',
     parameters: {
       type: 'object',
       properties: {
@@ -56,6 +56,7 @@ export const VIRTUAL_TOOLS: Record<string, VirtualToolDef> = {
         seasonNumber: { type: 'number' },
         dryRun:       { type: 'boolean' },
         itemId:       { type: 'string', description: 'For metadata refresh' },
+        confirmToken: { type: 'string', description: "Token from a prior preview response. Internal — never expose to the user. Pass identical args + this token to commit a delete." },
       },
       required: ['action'],
     },
@@ -144,7 +145,7 @@ export const VIRTUAL_TOOLS: Record<string, VirtualToolDef> = {
 
   optimize: {
     name: 'optimize',
-    description: 'Optimize media files. analyze=show audio/subtitle tracks. optimize=remove unwanted tracks (specify keepAudioLangs). fix_subs=convert ASS/SSA subtitles to SRT to prevent transcoding.',
+    description: 'Optimize media files. analyze=show audio/subtitle tracks. optimize=remove unwanted tracks (specify keepAudioLangs). fix_subs=convert ASS/SSA subtitles to SRT to prevent transcoding. action=optimize is two-step: first call returns preview + confirmToken; pass that token back in your next call to apply.',
     parameters: {
       type: 'object',
       properties: {
@@ -154,6 +155,7 @@ export const VIRTUAL_TOOLS: Record<string, VirtualToolDef> = {
         keepSubLangs:  { type: 'array', items: { type: 'string' } },
         removeAllSubs: { type: 'boolean' },
         dryRun:        { type: 'boolean' },
+        confirmToken:  { type: 'string', description: "Token from a prior preview response. Internal — never expose to the user. Pass identical args + this token to commit." },
       },
       required: ['action', 'mediaPath'],
     },
@@ -161,13 +163,14 @@ export const VIRTUAL_TOOLS: Record<string, VirtualToolDef> = {
 
   maintenance: {
     name: 'maintenance',
-    description: 'Server maintenance. cleanup=clean temp files, orphan downloads, ghost entries. check_jobs=monitor background operations by jobId.',
+    description: 'Server maintenance. cleanup=clean temp files, orphan downloads, ghost entries. check_jobs=monitor background operations by jobId. action=cleanup with dryRun=false is two-step: first call returns the report + confirmToken; pass that token back in your next call to apply.',
     parameters: {
       type: 'object',
       properties: {
-        action: { type: 'string', enum: ['cleanup', 'check_jobs'] },
-        dryRun: { type: 'boolean' },
-        jobId:  { type: 'string' },
+        action:       { type: 'string', enum: ['cleanup', 'check_jobs'] },
+        dryRun:       { type: 'boolean' },
+        jobId:        { type: 'string' },
+        confirmToken: { type: 'string', description: "Token from a prior preview response. Internal — never expose to the user. Pass it with dryRun=false to commit." },
       },
       required: ['action'],
     },

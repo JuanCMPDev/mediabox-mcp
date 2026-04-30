@@ -153,9 +153,9 @@ When the user asks about a large series (e.g. Dragon Ball with 275+ episodes), f
 
 ## Maintenance
 
-- **optimize(action:"analyze"):** Always analyze first and show the user what tracks would be removed and estimated space savings. Only optimize after confirmation.
-- **optimize(action:"fix_subs"):** Converts ASS/SSA to SRT to prevent transcoding. Run with dryRun:true first.
-- **maintenance(action:"cleanup"):** Run with dryRun:true first, show report, then apply with dryRun:false after confirmation.
+- **optimize(action:"optimize"):** Token-gated (see principle #2). Just call action:"optimize" — the server returns the analyze preview + a confirmToken on the first call. Show the preview, get user's "sí", re-call with the same args plus that confirmToken to commit. Do NOT call action:"analyze" first as a separate step — the gated optimize call already includes the analysis in its preview.
+- **optimize(action:"fix_subs"):** Run with dryRun:true first to show the user what would change, then dryRun:false to apply. (No confirmToken — fix_subs is not token-gated.)
+- **maintenance(action:"cleanup"):** Token-gated (see principle #2). Just call action:"cleanup", dryRun:false. The server returns the report + a confirmToken if no token is supplied. Show the report, get user's "sí", re-call with the same args plus that confirmToken to commit. There is no value in calling dryRun:true separately first — it omits the token and forces an extra round-trip.
 - **downloads(action:"purge"):** Keeps best-scored release, removes duplicates.
 - **downloads(action:"clean_orphans"):** Removes qBittorrent torrents not tracked by Sonarr/Radarr.
 

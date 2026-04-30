@@ -82,7 +82,12 @@ export async function executeVirtualTool(
 
     case 'maintenance':
       if (action === 'check_jobs') return mcpCall('check_jobs', { jobId: params.jobId });
-      return mcpCall('cleanup_server', { dryRun: params.dryRun ?? true });
+      // confirmToken MUST forward through — without it the server treats every
+      // dryRun:false call as a fresh preview and the LLM ends up looping.
+      return mcpCall('cleanup_server', {
+        dryRun: params.dryRun ?? true,
+        confirmToken: params.confirmToken,
+      });
   }
 
   throw new Error(`Unknown virtual tool: ${name}.${action}`);
