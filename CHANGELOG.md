@@ -3,7 +3,7 @@
 All notable changes to Mediabox MCP are documented here. Versions follow
 semver — major bumps signal breaking config or API surface changes.
 
-## 2.2.0 — Security hardening
+## 2.2.0-beta.0 — Security hardening (2026-04-30)
 
 Closes the audit's P0 and P1 findings: path traversal, DNS-rebinding
 exposure, SSRF in download flows, broken Docker distribution, and the

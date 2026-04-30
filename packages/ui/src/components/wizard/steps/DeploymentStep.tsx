@@ -149,7 +149,7 @@ export function DeploymentStep({ draft, setWorkDir, setDeployment, onProbeResult
         />
         <span className="wizard-hint">
           <Trans i18nKey="deployment.imageTagHint" t={t}>
-            Pin to a specific tag (e.g. <code>v2.1.0</code>) for production instead of <code>latest</code>.
+            Pin to a specific tag (e.g. <code>v2.2.0</code>) for production instead of <code>latest</code>.
           </Trans>
         </span>
       </div>

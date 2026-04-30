@@ -114,7 +114,7 @@ describe("generateDockerCompose", () => {
   it("uses a GHCR image (with IMAGE_TAG default) when localBuild is false", () => {
     const parsed = parse(generateDockerCompose(baseConfig())) as any;
     expect(parsed.services["mcp-server"].image).toBe(
-      "ghcr.io/juancmpdev/mediabox-mcp:${IMAGE_TAG:-2.1.0-beta.0}",
+      "ghcr.io/juancmpdev/mediabox-mcp:${IMAGE_TAG:-2.2.0-beta.0}",
     );
     expect(parsed.services["mcp-server"].build).toBeUndefined();
   });
