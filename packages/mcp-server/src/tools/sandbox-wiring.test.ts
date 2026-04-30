@@ -122,3 +122,64 @@ describe("segment guards are wired into download tools", () => {
     ).rejects.toThrow(/Unsafe path segment/);
   });
 });
+
+describe("URL allowlist is wired into download tools (P1.1)", () => {
+  it("download_add rejects file:// scheme", async () => {
+    const tools = loadDownloadTools();
+    const handler = tools.get("download_add")!.handler;
+    await expect(
+      handler({ urls: ["file:///etc/passwd"], packageName: "ok" }),
+    ).rejects.toThrow(/URL rejected/);
+  });
+
+  it("download_add rejects private IPv4 literals", async () => {
+    const tools = loadDownloadTools();
+    const handler = tools.get("download_add")!.handler;
+    await expect(
+      handler({ urls: ["http://10.0.0.5/x.zip"], packageName: "ok" }),
+    ).rejects.toThrow(/private IPv4/);
+  });
+
+  it("download_add rejects the cloud metadata endpoint", async () => {
+    const tools = loadDownloadTools();
+    const handler = tools.get("download_add")!.handler;
+    await expect(
+      handler({ urls: ["http://169.254.169.254/latest/meta-data"], packageName: "ok" }),
+    ).rejects.toThrow(/private IPv4/);
+  });
+
+  it("download_add rejects when ANY url in the batch is bad", async () => {
+    const tools = loadDownloadTools();
+    const handler = tools.get("download_add")!.handler;
+    await expect(
+      handler({
+        urls: ["https://example.com/good.zip", "http://127.0.0.1/bad"],
+        packageName: "ok",
+      }),
+    ).rejects.toThrow(/URL rejected/);
+  });
+
+  it("download_direct rejects file:// scheme", async () => {
+    const tools = loadDownloadTools();
+    const handler = tools.get("download_direct")!.handler;
+    await expect(
+      handler({ url: "file:///etc/passwd", showName: "Show", libraryFolder: "movies" }),
+    ).rejects.toThrow(/URL rejected/);
+  });
+
+  it("download_direct rejects private IPv4 literal", async () => {
+    const tools = loadDownloadTools();
+    const handler = tools.get("download_direct")!.handler;
+    await expect(
+      handler({ url: "http://192.168.1.1/x", showName: "Show", libraryFolder: "movies" }),
+    ).rejects.toThrow(/private IPv4/);
+  });
+
+  it("download_direct rejects loopback IPv6", async () => {
+    const tools = loadDownloadTools();
+    const handler = tools.get("download_direct")!.handler;
+    await expect(
+      handler({ url: "http://[::1]/x", showName: "Show", libraryFolder: "movies" }),
+    ).rejects.toThrow(/private IPv6/);
+  });
+});

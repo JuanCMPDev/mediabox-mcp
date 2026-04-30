@@ -9,6 +9,7 @@ import { qbitApi } from "../helpers/qbittorrent.js";
 import { execFileAsync, moveFile, isVideoFile, isArchiveFile, extractArchive, detectAndFixExtension } from "../helpers/files.js";
 import { startJob, jobs } from "../helpers/jobs.js";
 import { assertSafeSegment } from "../helpers/sandbox.js";
+import { validateUrl, resolveAndCheck } from "../helpers/url-allowlist.js";
 import { MEDIA_PATH, DOWNLOADS_PATH } from "../config.js";
 
 export const SUBTITLE_EXT = new Set([".srt", ".ass", ".ssa", ".vtt", ".sub", ".idx"]);
@@ -25,6 +26,20 @@ export function registerDownloadTools(server: McpServer): void {
     },
   }, async ({ urls, packageName }) => {
     const normalized = urls.map(u => u.replace("depositfiles.org", "depositfiles.com"));
+
+    // SSRF guard. PyLoad runs in the same Docker network we do, so an LLM-
+    // supplied URL pointing at a private IP (cloud metadata, internal
+    // service, loopback) would otherwise have it fetch from there and write
+    // the response into a downloads folder. validateUrl rejects IP literals
+    // synchronously; resolveAndCheck rejects hostnames that resolve to
+    // private addresses (DNS rebinding-style payloads).
+    await Promise.all(
+      normalized.map(async (raw) => {
+        const u = validateUrl(raw);
+        await resolveAndCheck(u);
+      }),
+    );
+
     const result = await pyloadApi("add_package", "POST", { name: JSON.stringify(packageName), links: JSON.stringify(normalized) });
     return textResult({
       message: `Added ${urls.length} URL(s) as "${packageName}"`,
@@ -265,6 +280,11 @@ export function registerDownloadTools(server: McpServer): void {
   }, async ({ url, showName, libraryFolder, seasonNumber, episodeNumber }) => {
     // Sandbox: showName is interpolated into the destination path.
     assertSafeSegment(showName);
+
+    // SSRF guard for the head URL. yt-dlp / aria2c follow redirects we
+    // can't observe, so we don't run a DNS check here — anything the
+    // downstream tool follows internally is the residual risk we accept.
+    validateUrl(url);
 
     const isYtDlp = /youtu|vimeo|dailymotion|twitch|twitter|reddit/i.test(url);
     const tmpDir = path.join("/tmp", `dl-${crypto.randomUUID().slice(0, 8)}`);
