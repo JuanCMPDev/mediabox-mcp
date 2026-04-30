@@ -72,7 +72,11 @@ if (!process.env.INTERNAL_API_KEY) {
 }
 
 app.listen(PORT, BIND_HOST, () => {
-  console.log(`Mediabox MCP v${VERSION} running on ${BIND_HOST}:${PORT}`);
+  // The substring "running on port" is the readiness signal the Tauri
+  // sidecar (sidecar.rs) and the UI poll (ui/src/lib/runtime-config.ts)
+  // watch for to flip RuntimeConfig.ready = true. Don't change it without
+  // updating both consumers.
+  console.log(`Mediabox MCP v${VERSION} running on port ${PORT} (bind ${BIND_HOST})`);
   console.log(`Public URL: ${PUBLIC_URL}`);
   console.log(`Transport: POST ${PUBLIC_URL}/mcp`);
   console.log(`OAuth: ${PUBLIC_URL}/.well-known/oauth-authorization-server`);
