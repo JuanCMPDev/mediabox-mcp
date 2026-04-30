@@ -3,6 +3,7 @@ import { promisify } from "util";
 import fs from "fs/promises";
 import path from "path";
 import { MEDIA_PATH, DOWNLOADS_PATH } from "../config.js";
+import { resolveSafePath } from "./sandbox.js";
 
 export const execFileAsync = promisify(execFile);
 
@@ -68,11 +69,12 @@ export async function detectAndFixExtension(filePath: string): Promise<string> {
   return filePath;
 }
 
+/**
+ * Resolves a user-supplied path under MEDIA_PATH or DOWNLOADS_PATH and
+ * GUARANTEES the result remains inside one of those roots — throws
+ * PathSandboxError otherwise. Thin wrapper over resolveSafePath() that
+ * keeps the legacy `resolvePath(string): string` shape callers depend on.
+ */
 export function resolvePath(p: string): string {
-  if (p.startsWith("downloads")) return path.join(DOWNLOADS_PATH, p.replace(/^downloads\/?/, ""));
-  // Normalize absolute paths: strip MEDIA_PATH or DOWNLOADS_PATH prefix
-  if (p.startsWith(MEDIA_PATH + "/")) p = p.slice(MEDIA_PATH.length + 1);
-  else if (p === MEDIA_PATH) p = "";
-  else if (p.startsWith(DOWNLOADS_PATH + "/")) return path.join(DOWNLOADS_PATH, p.slice(DOWNLOADS_PATH.length + 1));
-  return path.join(MEDIA_PATH, p);
+  return resolveSafePath(p, { media: MEDIA_PATH, downloads: DOWNLOADS_PATH }).full;
 }

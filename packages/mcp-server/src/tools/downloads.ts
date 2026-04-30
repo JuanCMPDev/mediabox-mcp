@@ -8,6 +8,7 @@ import { pyloadApi, pyloadApiJson } from "../helpers/pyload.js";
 import { qbitApi } from "../helpers/qbittorrent.js";
 import { execFileAsync, moveFile, isVideoFile, isArchiveFile, extractArchive, detectAndFixExtension } from "../helpers/files.js";
 import { startJob, jobs } from "../helpers/jobs.js";
+import { assertSafeSegment } from "../helpers/sandbox.js";
 import { MEDIA_PATH, DOWNLOADS_PATH } from "../config.js";
 
 export const SUBTITLE_EXT = new Set([".srt", ".ass", ".ssa", ".vtt", ".sub", ".idx"]);
@@ -127,6 +128,11 @@ export function registerDownloadTools(server: McpServer): void {
     // === ORGANIZE ===
     if (!packageFolder) return textResult({ error: "packageFolder required. Use action=status to see downloadFolders." });
     if (!showName) return textResult({ error: "showName required (e.g. 'Pet Sematary (1989)')" });
+
+    // Sandbox: packageFolder and showName are interpolated into filesystem
+    // paths below — reject anything containing path separators or "..".
+    assertSafeSegment(packageFolder);
+    assertSafeSegment(showName);
 
     const searchDir = path.join(DOWNLOADS_PATH, packageFolder);
     try { await fs.stat(searchDir); } catch {
@@ -257,6 +263,9 @@ export function registerDownloadTools(server: McpServer): void {
       episodeNumber: z.number().optional().describe("Starting episode number (only for tv/anime)"),
     },
   }, async ({ url, showName, libraryFolder, seasonNumber, episodeNumber }) => {
+    // Sandbox: showName is interpolated into the destination path.
+    assertSafeSegment(showName);
+
     const isYtDlp = /youtu|vimeo|dailymotion|twitch|twitter|reddit/i.test(url);
     const tmpDir = path.join("/tmp", `dl-${crypto.randomUUID().slice(0, 8)}`);
 
