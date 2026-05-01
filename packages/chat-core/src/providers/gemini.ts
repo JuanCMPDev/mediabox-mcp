@@ -33,7 +33,12 @@ export class GeminiProvider implements StreamProvider {
 
     // In Gemini, function calls typically arrive as complete objects after text streaming.
     // Accumulate them so they're all yielded after the text tokens.
+    // Why dedup: Gemini Flash can re-emit the same functionCall across consecutive
+    // chunks, or hallucinate parallel calls to the same tool with identical args.
+    // Without dedup the engine fires N MCP calls and renders N chips for a single
+    // logical action (cache absorbs the cost, but the UI still looks confusing).
     const functionCalls: Array<{ name: string; args: Record<string, unknown> }> = [];
+    const seen = new Set<string>();
 
     for await (const chunk of rawStream) {
       const parts = (chunk as any).candidates?.[0]?.content?.parts ?? [];
@@ -42,10 +47,15 @@ export class GeminiProvider implements StreamProvider {
           yield { type: 'text', text: part.text };
         }
         if (part.functionCall) {
-          functionCalls.push({
+          const fc = {
             name: part.functionCall.name  as string,
             args: (part.functionCall.args ?? {}) as Record<string, unknown>,
-          });
+          };
+          const key = `${fc.name}:${JSON.stringify(fc.args)}`;
+          if (!seen.has(key)) {
+            seen.add(key);
+            functionCalls.push(fc);
+          }
         }
       }
     }

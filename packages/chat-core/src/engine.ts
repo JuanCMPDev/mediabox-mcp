@@ -48,7 +48,7 @@ export async function* streamChat(opts: StreamChatOptions): AsyncGenerator<ChatE
   history.push({ role: 'user', content: message });
   historyStore.set(conversationId, history);
 
-  const selectedTools = selectTools(message);
+  const selectedTools = selectTools(message, history);
 
   for (let iter = 0; iter < MAX_ITERATIONS; iter++) {
     let accText = '';

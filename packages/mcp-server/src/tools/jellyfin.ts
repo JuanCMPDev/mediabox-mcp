@@ -1,8 +1,9 @@
+import { statfs } from "node:fs/promises";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
-import { jfApi, textResult } from "../helpers/api.js";
-import { execFileAsync } from "../helpers/files.js";
+import { jfApi, jfCountByParent, textResult } from "../helpers/api.js";
 import { MEDIA_PATH } from "../config.js";
+import { formatBytes } from "../fetchers/utils.js";
 
 export function registerJellyfinTools(server: McpServer): void {
   // 1. SERVER STATUS
@@ -13,19 +14,37 @@ export function registerJellyfinTools(server: McpServer): void {
       jfApi("/System/Info"), jfApi("/Sessions"), jfApi("/Library/VirtualFolders"), jfApi("/Users"),
     ]);
 
-    // Optimize: fetch aggregate counts instead of full recursive item lists
+    // Per-library counts: only query item types relevant to each library's
+    // CollectionType so the LLM sees songs in Music, movies in Movies, etc.
     const libraryStats = await Promise.all(folders.map(async (f: any) => {
-      try {
-        const counts = await jfApi(`/Items/Counts?ParentId=${f.ItemId}`);
-        return { name: f.Name, type: f.CollectionType, paths: f.Locations, series: counts.SeriesCount || 0, movies: counts.MovieCount || 0, episodes: counts.EpisodeCount || 0 };
-      } catch {
-        // Fallback for older JF versions or errors
-        return { name: f.Name, type: f.CollectionType, paths: f.Locations };
-      }
+      const t   = String(f.CollectionType || "").toLowerCase();
+      const out: Record<string, unknown> = { name: f.Name, type: f.CollectionType, paths: f.Locations };
+      const tasks: Promise<void>[] = [];
+      const wantMovies = t === "movies"  || t === "homevideos" || t === "mixed" || t === "";
+      const wantShows  = t === "tvshows" || t === "mixed"      || t === "";
+      const wantMusic  = t === "music"   || t === "mixed"      || t === "";
+      if (wantMovies) tasks.push(jfCountByParent(f.ItemId, "Movie") .then(n => { out.movies   = n; }));
+      if (wantShows)  tasks.push(jfCountByParent(f.ItemId, "Series").then(n => { out.series   = n; }));
+      if (wantShows)  tasks.push(jfCountByParent(f.ItemId, "Episode").then(n => { out.episodes = n; }));
+      if (wantMusic)  tasks.push(jfCountByParent(f.ItemId, "Audio") .then(n => { out.songs    = n; }));
+      await Promise.all(tasks);
+      return out;
     }));
 
-    let disk = "";
-    try { disk = (await execFileAsync("df", ["-h", MEDIA_PATH])).stdout; } catch { disk = "N/A"; }
+    let disk: unknown = "N/A";
+    try {
+      const s     = await statfs(MEDIA_PATH);
+      const total = Number(s.blocks) * Number(s.bsize);
+      const free  = Number(s.bfree)  * Number(s.bsize);
+      const used  = total - free;
+      disk = {
+        path:        MEDIA_PATH,
+        total:       formatBytes(total),
+        used:        formatBytes(used),
+        free:        formatBytes(free),
+        usedPercent: total > 0 ? Math.round((used / total) * 100) : 0,
+      };
+    } catch { /* MEDIA_PATH unavailable */ }
     return textResult({
       server: { name: sysInfo.ServerName, version: sysInfo.Version, os: sysInfo.OperatingSystem },
       disk,

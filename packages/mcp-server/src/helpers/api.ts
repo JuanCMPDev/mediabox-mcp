@@ -54,3 +54,16 @@ export async function prowlarrApi(ep: string, method: "GET" | "POST" = "GET", bo
 export function textResult(data: unknown) {
   return { content: [{ type: "text" as const, text: JSON.stringify(data, null, 2) }] };
 }
+
+// Why: Jellyfin's /Items/Counts endpoint ignores ParentId in some versions
+// (observed on 10.11.8) and returns global totals, making per-library counts
+// identical across all libraries. Filtering via /Items + EnableTotalRecordCount
+// is verbose but reliably honours the parent scope.
+export async function jfCountByParent(parentId: string, type: string): Promise<number> {
+  try {
+    const data = await jfApi(
+      `/Items?ParentId=${encodeURIComponent(parentId)}&Recursive=true&IncludeItemTypes=${type}&Limit=1&EnableTotalRecordCount=true`
+    );
+    return Number(data?.TotalRecordCount) || 0;
+  } catch { return 0; }
+}

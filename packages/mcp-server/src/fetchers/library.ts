@@ -1,7 +1,8 @@
+import { statfs } from "node:fs/promises";
 import type { LibraryStats } from "@mediabox/contracts";
-import { jfApi } from "../helpers/api.js";
-import { execFileAsync } from "../helpers/files.js";
+import { jfApi, jfCountByParent } from "../helpers/api.js";
 import { MEDIA_PATH } from "../config.js";
+import { formatBytes } from "./utils.js";
 
 export async function getLibrary(): Promise<LibraryStats> {
   const folders = await jfApi("/Library/VirtualFolders").catch(() => [] as any[]);
@@ -11,28 +12,39 @@ export async function getLibrary(): Promise<LibraryStats> {
   }
 
   const countResults = await Promise.allSettled(
-    folders.map(async (f: any) => ({
-      type:   f.CollectionType as string,
-      counts: await jfApi(`/Items/Counts?ParentId=${f.ItemId as string}`),
-    }))
+    folders.map(async (f: any) => {
+      const t = String(f.CollectionType || "").toLowerCase();
+      const id = f.ItemId as string;
+      if (t === "movies")  return { movies: await jfCountByParent(id, "Movie") };
+      if (t === "tvshows") {
+        const [shows, episodes] = await Promise.all([
+          jfCountByParent(id, "Series"),
+          jfCountByParent(id, "Episode"),
+        ]);
+        return { shows, episodes };
+      }
+      if (t === "music")   return { music: await jfCountByParent(id, "Audio") };
+      return {};
+    })
   );
 
   let movies = 0, shows = 0, episodes = 0, music = 0;
   for (const r of countResults) {
     if (r.status !== "fulfilled") continue;
-    const { type, counts } = r.value;
-    if (type === "movies")  { movies   += (counts.MovieCount    as number) || 0; }
-    if (type === "tvshows") { shows    += (counts.SeriesCount   as number) || 0;
-                              episodes += (counts.EpisodeCount  as number) || 0; }
-    if (type === "music")   { music    += (counts.SongCount     as number) || 0; }
+    const v = r.value as { movies?: number; shows?: number; episodes?: number; music?: number };
+    movies   += v.movies   ?? 0;
+    shows    += v.shows    ?? 0;
+    episodes += v.episodes ?? 0;
+    music    += v.music    ?? 0;
   }
 
   let totalSize = "—";
   try {
-    const { stdout } = await execFileAsync("df", ["-h", "--output=used", MEDIA_PATH]);
-    const [, used] = stdout.trim().split("\n");
-    if (used) totalSize = used.trim();
-  } catch { /* df unavailable */ }
+    const s     = await statfs(MEDIA_PATH);
+    const total = Number(s.blocks) * Number(s.bsize);
+    const free  = Number(s.bfree)  * Number(s.bsize);
+    if (total > 0) totalSize = formatBytes(total - free);
+  } catch { /* MEDIA_PATH unavailable */ }
 
   return { movies, shows, episodes, music, totalSize };
 }

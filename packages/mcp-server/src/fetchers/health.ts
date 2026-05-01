@@ -1,7 +1,7 @@
 import os from "node:os";
+import { statfs } from "node:fs/promises";
 import type { ServerHealth, HealthMetric, HealthStatus } from "@mediabox/contracts";
 import { jfApi } from "../helpers/api.js";
-import { execFileAsync } from "../helpers/files.js";
 import { MEDIA_PATH } from "../config.js";
 import { formatUptime } from "./utils.js";
 
@@ -15,20 +15,35 @@ function metric(label: string, value: number, unit: string): HealthMetric {
   return { label, value, unit, status: statusFor(value) };
 }
 
-/** 1-minute load average expressed as percentage of available CPU cores.
- *  Reflects host system (Docker shares the host kernel's scheduler). */
+function cpuSnapshot(): { idle: number; total: number } {
+  let idle = 0, total = 0;
+  for (const c of os.cpus()) {
+    for (const t of Object.values(c.times)) total += t;
+    idle += c.times.idle;
+  }
+  return { idle, total };
+}
+
+// Why: os.loadavg() returns [0,0,0] on Windows, so the previous load-based
+// reading made CPU show 0% under the Tauri sidecar. Sampling os.cpus() times
+// and computing a delta works on every platform Node supports.
+let prevCpu = cpuSnapshot();
+
 function cpuPercent(): number {
-  const load  = os.loadavg()[0];
-  const cores = os.cpus().length;
-  return Math.min(100, Math.round((load / cores) * 100));
+  const cur    = cpuSnapshot();
+  const idleD  = cur.idle  - prevCpu.idle;
+  const totalD = cur.total - prevCpu.total;
+  prevCpu = cur;
+  if (totalD <= 0) return 0;
+  return Math.min(100, Math.max(0, Math.round((1 - idleD / totalD) * 100)));
 }
 
 async function diskMetric(): Promise<HealthMetric> {
   try {
-    const { stdout } = await execFileAsync("df", ["--output=used,size", "-k", MEDIA_PATH]);
-    const [, nums] = stdout.trim().split("\n");
-    const [used, total] = (nums ?? "0 1").trim().split(/\s+/).map(Number);
-    const pct = total > 0 ? Math.round((used / total) * 100) : 0;
+    const s     = await statfs(MEDIA_PATH);
+    const total = Number(s.blocks) * Number(s.bsize);
+    const free  = Number(s.bfree)  * Number(s.bsize);
+    const pct   = total > 0 ? Math.round(((total - free) / total) * 100) : 0;
     return metric("Disk", pct, "%");
   } catch {
     return { label: "Disk", value: 0, unit: "%", status: "ok" };
