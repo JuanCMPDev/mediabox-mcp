@@ -49,7 +49,7 @@ export const MOCK_HEALTH: ServerHealth = {
   disk: { label: 'Disk', value: 58, unit: '%', status: 'ok' },
   uptime: '14d 6h 42m',
   serverName: 'Mediabox',
-  version: '2.2.0-beta.0',
+  version: '2.2.0-beta.1',
   online: true,
 };
 

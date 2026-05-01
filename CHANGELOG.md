@@ -3,6 +3,25 @@
 All notable changes to Mediabox MCP are documented here. Versions follow
 semver — major bumps signal breaking config or API surface changes.
 
+## 2.2.0-beta.1 — Server-status hotfix (2026-04-30)
+
+Same-day hotfix for the chat tool surface and dashboard widgets when the
+mcp-server runs as the Tauri sidecar on a non-Linux host.
+
+- Cross-platform CPU and disk metrics (`fs.statfs` + `os.cpus()` tick
+  deltas) so the server-status widget shows real values on Windows hosts
+  instead of always reporting 0% (`os.loadavg` returns `[0,0,0]` and `df`
+  is missing on Windows).
+- Per-library Jellyfin counts via `/Items?…&EnableTotalRecordCount` per
+  type — the previous `/Items/Counts?ParentId=…` call was returning global
+  totals on Jellyfin 10.11.8, so every library showed identical numbers.
+- Gemini provider deduplicates repeated `functionCall` parts by
+  `(name, args)` so a single logical action stops rendering N tool chips
+  when the model re-emits or hallucinates parallel calls.
+- Intent-aware chat tool selection (with bare-confirmation history
+  handling) trims the per-turn tool surface, replacing the previous
+  always-all-tools approach. Covered by new tests in `tool-selector.test.ts`.
+
 ## 2.2.0-beta.0 — Security hardening (2026-04-30)
 
 Closes the audit's P0 and P1 findings: path traversal, DNS-rebinding

@@ -1,6 +1,6 @@
 {
   "name": "mcp-telegram-client",
-  "version": "2.2.0-beta.0",
+  "version": "2.2.0-beta.1",
   "description": "Telegram bot client for the Mediabox MCP media management server",
   "private": true,
   "license": "MIT",

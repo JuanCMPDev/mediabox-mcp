@@ -23,7 +23,7 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: 'Existing version tag to (re)publish, e.g. v2.2.0-beta.0. Leave blank when triggering from a tag.'
+        description: 'Existing version tag to (re)publish, e.g. v2.2.0-beta.1. Leave blank when triggering from a tag.'
         required: false
         type: string
 

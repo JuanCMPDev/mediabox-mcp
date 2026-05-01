@@ -1,6 +1,6 @@
 name: Release
 
-# Push a tag like `v2.2.0-beta.0` to trigger a multi-platform Desktop App
+# Push a tag like `v2.2.0-beta.1` to trigger a multi-platform Desktop App
 # release. Each runner builds its own native sidecar (`bun build --compile`)
 # and Tauri bundle, then `tauri-action` attaches the artifacts to the GitHub
 # Release for the tag (creating it on the first runner that finishes).
