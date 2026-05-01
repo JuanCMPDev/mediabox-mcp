@@ -1,13 +1,13 @@
 /* ─── Cached MCP caller factory ──────────────────────────────────────────────
  * Wraps a connected @modelcontextprotocol/sdk Client with:
- *  - 60 s timeout per tool call
+ *  - 150 s timeout per tool call
  *  - TTL-based read cache (same TTL map as the Telegram bot)
  *  - Write-invalidation: any write tool clears the entire cache
  * ──────────────────────────────────────────────────────────────────────── */
 import type { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import type { McpCallFn } from './types.js';
 
-const TOOL_TIMEOUT_MS = 60_000;
+const TOOL_TIMEOUT_MS = 150_000;
 const MAX_RESULT_CHARS = 30_000;
 
 const CACHE_TTL: Record<string, number> = {

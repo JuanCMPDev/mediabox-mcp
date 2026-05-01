@@ -19,7 +19,7 @@ import { buildSystemPrompt } from './prompt.js';
 import { PRESENT_CHOICES_TOOL } from './virtual-tools.js';
 
 const MAX_ITERATIONS = 20;
-const TOOL_TIMEOUT_MS = 60_000;
+const TOOL_TIMEOUT_MS = 150_000;
 
 /** Localised fallback strings for responses produced by the engine itself
  *  (not by the LLM). Kept tiny so we don't grow another full i18n bundle. */

@@ -2,6 +2,8 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { radarrApi, textResult } from "../helpers/api.js";
 
+const RELEASE_SEARCH_TIMEOUT_MS = 120_000;
+
 /** Accept either a Radarr internal id or a TMDB id. The chat assistant has
  *  burned us twice now by forwarding a tmdbId straight from `movie_search` into
  *  `movie_releases` (which expects the Radarr internal id) — so we mirror the
@@ -106,7 +108,7 @@ export function registerRadarrTools(server: McpServer): void {
     },
   }, async ({ movieId }) => {
     const resolved = await resolveMovieId(movieId);
-    const rels = await radarrApi(`release?movieId=${resolved}`);
+    const rels = await radarrApi(`release?movieId=${resolved}`, "GET", undefined, RELEASE_SEARCH_TIMEOUT_MS);
     // Drop dead torrents at the source — they can never download, so the LLM
     // shouldn't waste context (or user attention) on them. If every release
     // has 0 seeders, the empty result tells the LLM to report "no viable

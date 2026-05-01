@@ -2,6 +2,8 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { sonarrApi, textResult } from "../helpers/api.js";
 
+const RELEASE_SEARCH_TIMEOUT_MS = 120_000;
+
 async function resolveSeriesId(seriesId: number): Promise<number> {
   // If seriesId looks like a tvdbId (high number), resolve to actual Sonarr ID
   const allSeries = await sonarrApi("series");
@@ -176,7 +178,7 @@ export function registerSonarrTools(server: McpServer): void {
     else if (seriesId && seasonNumber !== undefined) ep += `seriesId=${seriesId}&seasonNumber=${seasonNumber}`;
     else if (seriesId) ep += `seriesId=${seriesId}`;
     else throw new Error("Provide episodeId, or seriesId + seasonNumber + episodeNumber");
-    const rels = await sonarrApi(ep);
+    const rels = await sonarrApi(ep, "GET", undefined, RELEASE_SEARCH_TIMEOUT_MS);
     // Drop dead torrents at the source — they can never download, so the LLM
     // shouldn't waste context (or user attention) on them.
     const live = rels.filter((r: any) => (r.seeders ?? 0) > 0);
