@@ -14,12 +14,28 @@ const DEFAULT_MODELS: Record<string, string> = {
   gemini:     'gemini-2.0-flash',
 };
 
+// Canonicalize provider names. The wizard/generators write LLM_PROVIDER=google
+// (matching config.ai.kind === 'google'), but the runtime provider is 'gemini'.
+// Without this alias, LLM_PROVIDER=google fell through to the OpenRouter branch
+// and threw — crash-looping the Telegram bot and disabling in-app chat.
+const PROVIDER_ALIASES: Record<string, string> = {
+  google:     'gemini',
+  gemini:     'gemini',
+  openrouter: 'openrouter',
+};
+
+function normalizeProviderName(raw: string | undefined): string | undefined {
+  if (!raw) return undefined;
+  const key = raw.toLowerCase().trim();
+  return PROVIDER_ALIASES[key] ?? key;
+}
+
 export function resolveProvider(env: ProviderEnv): StreamProvider {
   const openrouterKey = env.OPENROUTER_API_KEY ?? '';
   const googleKey     = env.GOOGLE_AI_API_KEY  ?? '';
 
-  // Explicit override → auto-detect fallback
-  const providerName = env.LLM_PROVIDER
+  // Explicit override (aliased) → auto-detect fallback
+  const providerName = normalizeProviderName(env.LLM_PROVIDER)
     ?? (googleKey ? 'gemini' : 'openrouter');
 
   const model = env.LLM_MODEL ?? DEFAULT_MODELS[providerName] ?? DEFAULT_MODELS.openrouter;
