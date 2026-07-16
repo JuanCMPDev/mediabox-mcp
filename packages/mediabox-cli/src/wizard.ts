@@ -3,6 +3,7 @@ import os from "node:os";
 import chalk from "chalk";
 import type { WizardAnswers } from "./types.js";
 import { randomHex } from "./utils/crypto.js";
+import { validateAllowedTelegramUsers } from "./validators.js";
 
 /** All IANA timezones available in the runtime */
 const TIMEZONES: string[] = (() => {
@@ -227,9 +228,12 @@ export async function runWizard(localBuild: boolean): Promise<WizardAnswers> {
       });
     }
 
+    // Required when the bot is enabled: an empty allowlist means the bot
+    // accepts commands from anyone who finds it, and some of its tools delete
+    // media. Get your numeric ID from @userinfobot.
     allowedTelegramUsers = await input({
-      message: "Allowed Telegram user IDs (comma-separated, empty = all)",
-      default: "",
+      message: "Allowed Telegram user IDs (comma-separated)",
+      validate: validateAllowedTelegramUsers,
     });
   }
 
