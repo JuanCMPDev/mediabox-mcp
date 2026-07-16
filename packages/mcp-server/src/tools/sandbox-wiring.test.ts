@@ -88,6 +88,22 @@ describe("path sandbox is wired into library tools", () => {
     const handler = tools.get("fix_subtitles")!.handler;
     await expect(handler({ mediaPath: "/etc", dryRun: true })).rejects.toThrow(/escapes/);
   });
+
+  it("manage_library create rejects a traversal folder", async () => {
+    const tools = loadLibraryTools();
+    const handler = tools.get("manage_library")!.handler;
+    await expect(
+      handler({ action: "create", name: "Evil", type: "movies", folder: "../etc" }),
+    ).rejects.toThrow(/escapes (media|downloads) sandbox/);
+  });
+
+  it("manage_library create rejects an out-of-root absolute folder", async () => {
+    const tools = loadLibraryTools();
+    const handler = tools.get("manage_library")!.handler;
+    await expect(
+      handler({ action: "create", name: "Evil", type: "movies", folder: "/etc/cron.d" }),
+    ).rejects.toThrow(/escapes (media|downloads) sandbox/);
+  });
 });
 
 describe("path sandbox is wired into maintenance tools", () => {
