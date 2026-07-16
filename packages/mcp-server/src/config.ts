@@ -21,10 +21,13 @@ export const PYLOAD_PASS     = process.env.PYLOAD_PASSWORD || "pyload";
 export const PORT            = parseInt(process.env.PORT   || "3000");
 export const PUBLIC_URL      = process.env.PUBLIC_URL      || `http://localhost:${PORT}`;
 
-// Where to bind the listener. Defaults to 0.0.0.0 so the canonical Docker
-// container deployment keeps working unchanged. The Tauri sidecar overrides
-// this to 127.0.0.1 since only the embedded webview talks to it.
-export const BIND_HOST       = process.env.BIND_HOST       || "0.0.0.0";
+// Where to bind the listener. Defaults to 127.0.0.1 so a bare host run
+// (node/tsx/dev) is not exposed to the LAN. Container runs opt into 0.0.0.0
+// explicitly — via the mcp-server Dockerfile `ENV BIND_HOST=0.0.0.0` and the
+// generated/root docker-compose — because Docker's published-port mapping
+// cannot reach a loopback-only listener inside the container. The Tauri
+// sidecar also forces 127.0.0.1 since only the embedded webview talks to it.
+export const BIND_HOST       = process.env.BIND_HOST       || "127.0.0.1";
 
 // Comma-separated extra origins to allow (in addition to localhost regex and
 // Tauri webview origins, which are always allowed). The Docker compose

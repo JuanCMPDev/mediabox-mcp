@@ -99,6 +99,10 @@ export function generateDockerCompose(config: DeployConfig): string {
       "JELLYFIN_API_KEY=${JELLYFIN_API_KEY}",
       "MEDIA_PATH=/data",
       "PORT=3000",
+      // Containers bind all interfaces so Docker's published-port mapping can
+      // reach the listener. The server code defaults to 127.0.0.1 for bare host
+      // runs; inside a container we must opt into 0.0.0.0.
+      "BIND_HOST=0.0.0.0",
       "PUBLIC_URL=${MCP_PUBLIC_URL}",
       // Defense-in-depth against DNS rebinding for browser callers. Defaults
       // to MCP_PUBLIC_URL so the wizard "just works"; users can override in

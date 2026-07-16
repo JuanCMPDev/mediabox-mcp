@@ -140,4 +140,11 @@ describe("generateDockerCompose", () => {
       "ALLOWED_ORIGINS=${ALLOWED_ORIGINS:-${MCP_PUBLIC_URL}}",
     );
   });
+
+  it("binds the mcp-server to 0.0.0.0 inside the container", () => {
+    // The server code defaults to 127.0.0.1 for bare host runs; the container
+    // must opt into 0.0.0.0 so the published-port mapping can reach it.
+    const parsed = parse(generateDockerCompose(baseConfig())) as any;
+    expect(parsed.services["mcp-server"].environment).toContain("BIND_HOST=0.0.0.0");
+  });
 });

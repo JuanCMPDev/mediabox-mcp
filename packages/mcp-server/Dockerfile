@@ -93,4 +93,10 @@ WORKDIR /repo/packages/mcp-server
 COPY --from=builder /repo /repo
 
 EXPOSE 3000
+
+# Containers must bind all interfaces so Docker's published-port mapping can
+# reach the listener. The server code itself defaults to 127.0.0.1 (safe for
+# bare host runs); this ENV opts every container run into 0.0.0.0.
+ENV BIND_HOST=0.0.0.0
+
 CMD ["node", "dist/index.js"]
