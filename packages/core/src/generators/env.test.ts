@@ -11,7 +11,7 @@ describe("generateEnv", () => {
     expect(env).toContain("QBIT_PASSWORD=qbitpass1");
     expect(env).toContain("MCP_PUBLIC_URL=http://localhost:3000");
     expect(env).toContain("INTERNAL_API_KEY=deadbeef");
-    expect(env).toContain("IMAGE_TAG=2.2.0-beta.1");
+    expect(env).toContain("IMAGE_TAG=2.2.0-beta.2");
     // Telegram is absent → no LLM_PROVIDER line
     expect(env).not.toContain("LLM_PROVIDER=");
     expect(env).not.toContain("BASE_DOMAIN=");

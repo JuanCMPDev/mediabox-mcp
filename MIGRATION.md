@@ -5,6 +5,32 @@ DNS rebinding, SSRF, prompt-only confirmation of destructive tools, broken
 Docker distribution). Most deployments do not need to change anything.
 Read the section that matches your install.
 
+## 2.2.0-beta.2 — `BIND_HOST` default change
+
+The mcp-server now binds `127.0.0.1` by default instead of `0.0.0.0`, so a
+bare host run is not exposed to the LAN. **Container deployments need no
+action** — the mcp-server Dockerfile and both compose files set
+`BIND_HOST=0.0.0.0`, and the Tauri sidecar sets `127.0.0.1` as before.
+
+You only need to act if you run the server **outside a container** and want
+it reachable from another host, or if you use a **hand-rolled compose or
+`docker run`** that does not set `BIND_HOST`:
+
+```bash
+# bare host run, reachable on the LAN
+BIND_HOST=0.0.0.0 node dist/index.js
+```
+
+```yaml
+# or in a custom compose service
+environment:
+  - BIND_HOST=0.0.0.0
+```
+
+The rest of beta.2 (the `LLM_PROVIDER=google` chat fix, the sandboxed
+`manage_library` create, the constant-time internal-key check, and the
+wizard's Telegram-ID requirement) needs no migration steps.
+
 ## Desktop App
 
 **No action needed.** The bundled sidecar sets `BIND_HOST=127.0.0.1` and

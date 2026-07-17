@@ -3,6 +3,49 @@
 All notable changes to Mediabox MCP are documented here. Versions follow
 semver — major bumps signal breaking config or API surface changes.
 
+## 2.2.0-beta.2 — Audit blockers + dependency remediation (2026-07-16)
+
+Closes the four blocking findings from the follow-up audit and clears the
+accumulated npm audit advisories. Most deployments need no change; see
+[MIGRATION.md](MIGRATION.md) if you run a hand-rolled Docker compose.
+
+### Breaking changes
+
+- **`BIND_HOST` now defaults to `127.0.0.1`** (was `0.0.0.0`), so a bare
+  host run (`node`/`tsx`/dev, the compiled Tauri sidecar) is not exposed to
+  the LAN. Container runs are unaffected: the mcp-server Dockerfile sets
+  `ENV BIND_HOST=0.0.0.0` and both the generated and root
+  `docker-compose.yml` emit it. Only a custom compose or bare `docker run`
+  that does not set `BIND_HOST` is affected — it now binds loopback-only and
+  is unreachable via port mapping. Fix: add `BIND_HOST=0.0.0.0` to that
+  container's environment.
+
+### Fixed
+
+- **Chat no longer breaks with `LLM_PROVIDER=google`.** The generators write
+  `google` (matching the config), but the runtime only recognized `gemini`,
+  so Gemini deployments crash-looped the Telegram bot and disabled the
+  in-app chat. `google` is now accepted as an alias for `gemini`.
+- **`manage_library(action:"create")` is sandboxed.** The library folder was
+  passed to `fs.mkdir` and Jellyfin with no traversal check — the only file
+  tool that skipped it. Out-of-root paths now throw `PathSandboxError`.
+- **`INTERNAL_API_KEY` is compared in constant time**
+  (`crypto.timingSafeEqual`), removing a timing side channel on the shared
+  secret.
+
+### Changed
+
+- The `create-mediabox` wizard now requires at least one numeric Telegram
+  user ID when the bot is enabled (the prompt previously defaulted to
+  "empty = all", and the bot can delete media). The server runtime is
+  unchanged.
+- **Dependencies:** `npm audit fix` cleared all production advisories, and
+  `@mediabox/ui` moved to Vite 8 / `@vitejs/plugin-react` 6 to clear the
+  dev-server esbuild findings. `npm audit --omit=dev --audit-level=high` now
+  reports 0 vulnerabilities.
+- CI: the Security Audit job is scoped to production dependencies
+  (`--omit=dev`) and blocks on production high/critical advisories.
+
 ## 2.2.0-beta.1 — Server-status hotfix (2026-04-30)
 
 Same-day hotfix for the chat tool surface and dashboard widgets when the
