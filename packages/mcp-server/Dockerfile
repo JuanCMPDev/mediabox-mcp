@@ -52,8 +52,12 @@ FROM node:22-slim AS runtime
 
 # yt-dlp/aria2c/p7zip + curl/unzip used by download_direct, organize and
 # fix_subtitles. ca-certificates so HTTPS works after the slim base shrinks.
+# ffmpeg+ffprobe (for optimize_media / fix_subtitles) come from Debian here
+# rather than a johnvansickle.com static tarball — that host began returning
+# HTTP 415 to CI/datacenter clients, breaking the multi-arch image publish.
+# apt is multi-arch-native and needs no external download.
 RUN apt-get update && apt-get install -y --no-install-recommends \
-        python3 python3-pip aria2 curl unzip p7zip ca-certificates xz-utils \
+        python3 python3-pip aria2 curl unzip p7zip ca-certificates xz-utils ffmpeg \
     && pip3 install --break-system-packages yt-dlp gdown \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
 
@@ -71,19 +75,6 @@ RUN ARCH=$(dpkg --print-architecture) \
          apt-get update && apt-get install -y --no-install-recommends unrar-free \
            && apt-get clean && rm -rf /var/lib/apt/lists/*; \
        fi
-
-# ffmpeg/ffprobe — pick the matching static build for the target arch.
-RUN ARCH=$(dpkg --print-architecture) \
-    && case "$ARCH" in \
-         amd64) FFMPEG_ARCH=amd64 ;; \
-         arm64) FFMPEG_ARCH=arm64 ;; \
-         *) echo "Unsupported arch: $ARCH" >&2; exit 1 ;; \
-       esac \
-    && curl -fL "https://johnvansickle.com/ffmpeg/releases/ffmpeg-release-${FFMPEG_ARCH}-static.tar.xz" -o /tmp/ffmpeg.tar.xz \
-    && tar -xf /tmp/ffmpeg.tar.xz -C /tmp \
-    && cp /tmp/ffmpeg-*-${FFMPEG_ARCH}-static/ffmpeg /usr/local/bin/ \
-    && cp /tmp/ffmpeg-*-${FFMPEG_ARCH}-static/ffprobe /usr/local/bin/ \
-    && rm -rf /tmp/ffmpeg*
 
 # Run from inside the monorepo layout so the workspace symlinks in
 # node_modules/@mediabox resolve correctly. The "wasted" source files from
