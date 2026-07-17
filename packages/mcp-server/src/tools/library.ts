@@ -24,9 +24,15 @@ export function registerLibraryTools(server: McpServer): void {
     if (action === "scan") { await jfApi("/Library/Refresh", "POST"); return textResult({ message: "Library scan started" }); }
     if (action === "create") {
       if (!name || !type || !folder) throw new Error("name, type, and folder required");
-      await fs.mkdir(folder, { recursive: true });
-      await jfApi(`/Library/VirtualFolders?collectionType=${type}&refreshLibrary=true&name=${encodeURIComponent(name)}&paths=${encodeURIComponent(folder)}`, "POST", { LibraryOptions: {} });
-      return textResult({ message: `Library "${name}" created at ${folder}` });
+      // Sandbox the folder before creating it or registering it with Jellyfin.
+      // Without this, an LLM/chat user could mkdir anywhere the process can
+      // write and point a Jellyfin library outside the media roots. resolvePath
+      // throws PathSandboxError on traversal / out-of-root absolutes and returns
+      // an absolute path under MEDIA_PATH — exactly what Jellyfin expects.
+      const safeFolder = resolvePath(folder);
+      await fs.mkdir(safeFolder, { recursive: true });
+      await jfApi(`/Library/VirtualFolders?collectionType=${type}&refreshLibrary=true&name=${encodeURIComponent(name)}&paths=${encodeURIComponent(safeFolder)}`, "POST", { LibraryOptions: {} });
+      return textResult({ message: `Library "${name}" created at ${safeFolder}` });
     }
     if (action === "refresh_metadata" && itemId) {
       await jfApi(`/Items/${itemId}/Refresh?MetadataRefreshMode=FullRefresh&ImageRefreshMode=FullRefresh&ReplaceAllMetadata=true&ReplaceAllImages=true`, "POST");

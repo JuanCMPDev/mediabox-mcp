@@ -52,8 +52,12 @@ jobs:
         with:
           node-version: 22
 
-      - name: Audit (workspaces)
-        run: npm audit --workspaces --audit-level=high
+      # Production dependency gate. Scoped to --omit=dev because dev/build-chain
+      # advisories (vitest, esbuild, vite dev server) never ship in the runtime
+      # image and drift over time as new CVEs publish. A production high/critical
+      # advisory fails the build; remediate it in a dependency PR.
+      - name: Audit (production deps)
+        run: npm audit --workspaces --omit=dev --audit-level=high
 
   docker-build:
     # Smoke test that prevents the regression that prompted P0.3: a Dockerfile

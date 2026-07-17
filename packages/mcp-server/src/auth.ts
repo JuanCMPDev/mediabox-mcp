@@ -61,10 +61,22 @@ export const oauthProvider = new JellyfinOAuthProvider();
 
 export const INTERNAL_API_KEY = process.env.INTERNAL_API_KEY || crypto.randomUUID();
 
+/**
+ * Constant-time string comparison. Hashes both sides to fixed-length SHA-256
+ * digests first, so the comparison is independent of input length (no length
+ * side channel) and `crypto.timingSafeEqual` never throws on unequal-length
+ * buffers.
+ */
+export function timingSafeEqualStr(a: string, b: string): boolean {
+  const ah = crypto.createHash("sha256").update(a).digest();
+  const bh = crypto.createHash("sha256").update(b).digest();
+  return crypto.timingSafeEqual(ah, bh);
+}
+
 export async function authMiddleware(req: Request, res: Response, next: NextFunction) {
   const h = req.headers.authorization;
   if (h?.startsWith("Bearer ")) {
-    if (h.slice(7) === INTERNAL_API_KEY) return next();
+    if (timingSafeEqualStr(h.slice(7), INTERNAL_API_KEY)) return next();
     try { await oauthProvider.verifyAccessToken(h.slice(7)); return next(); } catch {}
   }
   res.status(401).json({ error: "Unauthorized" });

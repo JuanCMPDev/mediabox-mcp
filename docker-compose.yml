@@ -55,6 +55,9 @@ services:
       - JELLYFIN_API_KEY=${JELLYFIN_API_KEY}
       - MEDIA_PATH=/data
       - PORT=3000
+      # Containers bind all interfaces so the published-port mapping works; the
+      # server code defaults to 127.0.0.1 for bare host runs.
+      - BIND_HOST=0.0.0.0
       - PUBLIC_URL=${MCP_PUBLIC_URL}
       - PYLOAD_URL=http://pyload:8000
       - PYLOAD_USER=${PYLOAD_USER:-pyload}
