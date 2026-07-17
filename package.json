@@ -1,6 +1,6 @@
 {
   "name": "mediabox-monorepo",
-  "version": "2.2.0-beta.2",
+  "version": "2.2.0-beta.3",
   "private": true,
   "description": "Mediabox MCP monorepo — AI-powered self-hosted media stack",
   "license": "MIT",

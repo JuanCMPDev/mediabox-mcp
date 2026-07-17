@@ -3,6 +3,25 @@
 All notable changes to Mediabox MCP are documented here. Versions follow
 semver — major bumps signal breaking config or API surface changes.
 
+## 2.2.0-beta.3 — Docker image build hotfix (2026-07-17)
+
+Same-content follow-up to beta.2: the multi-arch image publish failed
+because the ffmpeg static build was fetched from `johnvansickle.com`, which
+began returning HTTP 415 to CI/datacenter clients. The beta.2 Desktop app
+released fine; only the GHCR images were affected.
+
+### Changed
+
+- `packages/mcp-server/Dockerfile` now installs `ffmpeg` (and `ffprobe`)
+  from Debian via `apt` instead of downloading a static tarball. This
+  removes the fragile external dependency entirely — the download that
+  broke the publish no longer exists. The runtime image is somewhat larger
+  and ships Debian's ffmpeg 5.1, which covers the tool's needs
+  (`optimize_media`, `fix_subtitles`, `ffprobe`).
+
+No application code changed from beta.2; if you already run the beta.2
+Desktop app, no action is needed.
+
 ## 2.2.0-beta.2 — Audit blockers + dependency remediation (2026-07-16)
 
 Closes the four blocking findings from the follow-up audit and clears the

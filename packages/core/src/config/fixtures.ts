@@ -9,7 +9,7 @@ export function baseConfig(): DeployConfig {
     deployment: {
       mode: "local",
       localBuild: false,
-      imageTag: "2.2.0-beta.2",
+      imageTag: "2.2.0-beta.3",
     },
     system: {
       timezone: "UTC",

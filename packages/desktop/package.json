@@ -1,6 +1,6 @@
 {
   "name": "@mediabox/desktop",
-  "version": "2.2.0-beta.2",
+  "version": "2.2.0-beta.3",
   "description": "Mediabox OS — Tauri desktop shell that bundles @mediabox/ui and @mediabox/mcp-server as a sidecar.",
   "license": "MIT",
   "private": true,

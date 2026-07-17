@@ -1,6 +1,6 @@
 {
   "name": "@mediabox/contracts",
-  "version": "2.2.0-beta.2",
+  "version": "2.2.0-beta.3",
   "description": "Shared API contract types for @mediabox/mcp-server and @mediabox/ui. No runtime code.",
   "private": true,
   "license": "MIT",
