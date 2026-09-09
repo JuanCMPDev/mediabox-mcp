@@ -63,6 +63,9 @@ jobs:
       - name: Install workspaces
         run: npm ci
 
+      - name: Build workspaces
+        run: npm run ci:build
+
       - name: Verify Security & Containment Contracts (SEC-01..SEC-06)
         run: npm run test:security-contracts
 
