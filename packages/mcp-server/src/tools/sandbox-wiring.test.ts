@@ -21,6 +21,13 @@ vi.mock("../helpers/pyload.js", () => ({
 vi.mock("../helpers/qbittorrent.js", () => ({
   qbitApi: vi.fn().mockResolvedValue({}),
 }));
+vi.mock("node:fs/promises", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("node:fs/promises")>();
+  return {
+    ...actual,
+    rm: vi.fn().mockResolvedValue(undefined),
+  };
+});
 
 import { jfApi, sonarrApi, radarrApi } from "../helpers/api.js";
 import { registerLibraryTools } from "./library.js";
