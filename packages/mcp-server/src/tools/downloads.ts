@@ -10,6 +10,7 @@ import { execFileAsync, moveFile, isVideoFile, isArchiveFile, extractArchive, de
 import { startJob, jobs } from "../helpers/jobs.js";
 import { assertSafeSegment } from "../helpers/sandbox.js";
 import { validateUrl, resolveAndCheck } from "../helpers/url-allowlist.js";
+import { assertMutationAllowed } from "../helpers/containment.js";
 import { MEDIA_PATH, DOWNLOADS_PATH } from "../config.js";
 
 export const SUBTITLE_EXT = new Set([".srt", ".ass", ".ssa", ".vtt", ".sub", ".idx"]);
@@ -39,6 +40,8 @@ export function registerDownloadTools(server: McpServer): void {
         await resolveAndCheck(u);
       }),
     );
+
+    assertMutationAllowed("download_add");
 
     const result = await pyloadApi("add_package", "POST", { name: JSON.stringify(packageName), links: JSON.stringify(normalized) });
     return textResult({
@@ -135,6 +138,7 @@ export function registerDownloadTools(server: McpServer): void {
 
     // === DELETE ===
     if (action === "delete") {
+      assertMutationAllowed("download_status.delete");
       if (!packageIds?.length) return textResult({ error: "Provide packageIds to delete. Use action=status to see available IDs." });
       await pyloadApiJson("deletePackages", { package_ids: packageIds });
       return textResult({ message: `Deleted ${packageIds.length} package(s) from PyLoad` });
@@ -148,6 +152,7 @@ export function registerDownloadTools(server: McpServer): void {
     // paths below — reject anything containing path separators or "..".
     assertSafeSegment(packageFolder);
     assertSafeSegment(showName);
+    assertMutationAllowed("download_status.organize");
 
     const searchDir = path.join(DOWNLOADS_PATH, packageFolder);
     try { await fs.stat(searchDir); } catch {
@@ -286,6 +291,8 @@ export function registerDownloadTools(server: McpServer): void {
     // downstream tool follows internally is the residual risk we accept.
     validateUrl(url);
 
+    assertMutationAllowed("download_direct");
+
     const isYtDlp = /youtu|vimeo|dailymotion|twitch|twitter|reddit/i.test(url);
     const tmpDir = path.join("/tmp", `dl-${crypto.randomUUID().slice(0, 8)}`);
 
@@ -402,6 +409,9 @@ export function registerDownloadTools(server: McpServer): void {
       movieId: z.number().optional().describe("Cancel all for this movie"),
     },
   }, async ({ source, action, queueIds, torrentHashes, seriesId, movieId }) => {
+    if (action !== "list") {
+      assertMutationAllowed(`cancel_downloads.${action}`);
+    }
 
     if (source === "qbittorrent") {
       if (action === "cancel" && torrentHashes?.length) {

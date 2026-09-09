@@ -14,7 +14,7 @@ import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/
 import { createMcpCaller } from "@mediabox/chat-core";
 import type { McpCallFn } from "@mediabox/chat-core";
 import { PORT } from "../config.js";
-import { INTERNAL_API_KEY } from "../auth.js";
+import { AGENT_API_KEY } from "../auth.js";
 import { VERSION } from "../version.js";
 
 let _caller: McpCallFn | null = null;
@@ -53,7 +53,7 @@ async function connect(): Promise<McpCallFn> {
   const client = new Client({ name: "chat-loopback", version: VERSION });
   const transport = new StreamableHTTPClientTransport(
     new URL(`http://localhost:${PORT}/mcp`),
-    { requestInit: { headers: { Authorization: `Bearer ${INTERNAL_API_KEY}` } } },
+    { requestInit: { headers: { Authorization: `Bearer ${AGENT_API_KEY}` } } },
   );
   await client.connect(transport);
 

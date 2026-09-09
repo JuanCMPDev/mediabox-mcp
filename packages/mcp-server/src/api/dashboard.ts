@@ -6,6 +6,7 @@ import { getLibrary }   from "../fetchers/library.js";
 import { getServices }  from "../fetchers/services.js";
 import { jfApi }        from "../helpers/api.js";
 import { qbitApi, qbitPause, qbitResume } from "../helpers/qbittorrent.js";
+import { assertMutationAllowed, MutationContainedError } from "../helpers/containment.js";
 
 export const dashboardRouter = Router();
 
@@ -24,6 +25,15 @@ function wrap(fetcher: () => Promise<unknown>) {
 function ok(res: Response) { res.json({ ok: true }); }
 
 function fail(res: Response, err: unknown, status = 500) {
+  if (err instanceof MutationContainedError) {
+    res.status(403).json({
+      error: err.message,
+      code: err.code,
+      securityGate: err.securityGate,
+      operation: err.operation,
+    });
+    return;
+  }
   res.status(status).json({ error: err instanceof Error ? err.message : String(err) });
 }
 
@@ -40,6 +50,7 @@ dashboardRouter.get("/services",  wrap(getServices));
 /** Stop (kill) an active Jellyfin stream. */
 dashboardRouter.post("/sessions/:id/stop", async (req, res) => {
   try {
+    assertMutationAllowed("dashboard.sessions.stop");
     await jfApi(`/Sessions/${req.params.id}/Playing/Stop`, "POST");
     ok(res);
   } catch (err) { fail(res, err); }
@@ -82,6 +93,7 @@ dashboardRouter.post("/downloads/qbit/:hash/resume", async (req, res) => {
 dashboardRouter.delete("/downloads/qbit/:hash", async (req, res) => {
   const deleteFiles = req.query.deleteFiles === "true" ? "true" : "false";
   try {
+    assertMutationAllowed("dashboard.downloads.qbit.delete");
     await qbitApi("torrents/delete", "POST", { hashes: req.params.hash, deleteFiles });
     ok(res);
   } catch (err) { fail(res, err); }

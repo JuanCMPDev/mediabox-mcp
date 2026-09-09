@@ -1,6 +1,7 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { sonarrApi, textResult } from "../helpers/api.js";
+import { assertMutationAllowed } from "../helpers/containment.js";
 
 const RELEASE_SEARCH_TIMEOUT_MS = 120_000;
 
@@ -51,6 +52,7 @@ export function registerSonarrTools(server: McpServer): void {
         };
       }));
     }
+    assertMutationAllowed("series_search.add");
     const existing = (await sonarrApi("series")).find((s: any) => s.tvdbId === addTvdbId);
     const profiles = await sonarrApi("qualityprofile");
     const profile = profiles.find((p: any) => p.name === quality) || profiles[0];
@@ -148,6 +150,7 @@ export function registerSonarrTools(server: McpServer): void {
       seriesId: z.number(), deleteFiles: z.boolean().default(false),
     },
   }, async ({ seriesId, deleteFiles }) => {
+    assertMutationAllowed("series_remove");
     const resolved = await resolveSeriesId(seriesId);
     const s = await sonarrApi(`series/${resolved}`);
     await sonarrApi(`series/${resolved}?deleteFiles=${deleteFiles}`, "DELETE");
@@ -200,6 +203,7 @@ export function registerSonarrTools(server: McpServer): void {
       episodeNumber: z.number().optional().describe("Episode number within the season"),
     },
   }, async ({ guid, indexerId, episodeId, seriesId, seasonNumber, episodeNumber }) => {
+    assertMutationAllowed("series_grab");
     if (seriesId) seriesId = await resolveSeriesId(seriesId);
 
     // Resolve episodeId from seriesId + seasonNumber + episodeNumber
@@ -287,6 +291,7 @@ export function registerSonarrTools(server: McpServer): void {
         rejection: r.rejections?.[0]?.reason,
       })));
     }
+    assertMutationAllowed("series_import");
     if (!files?.length) throw new Error("files mapping required for import");
     await sonarrApi("manualimport", "POST", { files, importMode: "move" });
     return textResult({ message: `Imported ${files.length} file(s) into Sonarr` });
