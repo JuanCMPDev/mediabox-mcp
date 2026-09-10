@@ -15,6 +15,11 @@ dist/
 /packages/*/media/
 Peliculas/
 Series/
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+.mediabox-operations.db
 
 # IDE & OS
 .claude/

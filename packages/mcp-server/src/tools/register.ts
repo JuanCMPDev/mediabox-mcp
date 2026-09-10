@@ -5,6 +5,7 @@ import { registerSonarrTools } from "./sonarr.js";
 import { registerRadarrTools } from "./radarr.js";
 import { registerDownloadTools } from "./downloads.js";
 import { registerMaintenanceTools } from "./maintenance.js";
+import { registerOperationTools } from "./operations.js";
 import { VERSION } from "../version.js";
 
 export function createMcpServer(): McpServer {
@@ -15,5 +16,6 @@ export function createMcpServer(): McpServer {
   registerRadarrTools(server);
   registerDownloadTools(server);
   registerMaintenanceTools(server);
+  registerOperationTools(server);
   return server;
 }

@@ -376,3 +376,169 @@ export interface RestartServicesResult {
   restarted: string[];
   errors:    Array<{ service: string; message: string }>;
 }
+
+// ── Identity & Authorization (P02 / §4.1) ──────────────────────────────────
+
+export type PrincipalKind =
+  | "owner-ui"
+  | "agent-session"
+  | "installer"
+  | "executor"
+  | "external-client"
+  | "owner"
+  | "agent";
+
+export interface Principal {
+  id: string;
+  installationId: string;
+  kind: PrincipalKind;
+  capabilities: string[];
+  audience: string;
+  sessionId: string;
+  expiresAt: number;
+  credentialVersion: number;
+}
+
+// ── Persistent Operation Plans, Approval & Executor (P03 / §4.2) ───────────
+
+export type OperationStatus =
+  | "planned"
+  | "awaiting_approval"
+  | "queued"
+  | "running"
+  | "verifying"
+  | "succeeded"
+  | "rejected"
+  | "expired"
+  | "stale"
+  | "cancel_requested"
+  | "cancelled"
+  | "failed"
+  | "partial"
+  | "unknown_outcome"
+  | "interrupted";
+
+export interface PlannedTargetFileIdentity {
+  sizeBytes?: number;
+  mtimeMs?: number;
+  inode?: number;
+  sha256?: string;
+}
+
+export interface PlannedTarget {
+  service: string;
+  entityId?: string;
+  rootId: string;
+  relativePath: string;
+  namespaceMap?: Record<string, string>;
+  fileIdentity?: PlannedTargetFileIdentity;
+  observedState: string;
+}
+
+export interface PlannedEffectResources {
+  estimatedDiskBytes?: number;
+  estimatedTimeSec?: number;
+}
+
+export interface PlannedEffect {
+  targetIndex?: number;
+  destination?: string;
+  tracksProfile?: string;
+  serviceAction: string;
+  irreversibleLoss: boolean;
+  requiredResources?: PlannedEffectResources;
+}
+
+export interface Precondition {
+  id: string;
+  type: "file_exists" | "hash_matches" | "size_matches" | "service_online" | "custom";
+  description: string;
+  expected: unknown;
+  actual?: unknown;
+}
+
+export interface RecoveryPlan {
+  strategy: "restore_from_quarantine" | "delete_temporary" | "rollback_service" | "none";
+  quarantinePath?: string;
+  cleanupPaths?: string[];
+  instructions?: string;
+}
+
+export interface OperationPlan {
+  schemaVersion: 1;
+  id: string;
+  installationId: string;
+  ownerId: string;
+  conversationId: string;
+  operation: string;
+  manifestVersion: number;
+  manifestHash: string;
+  createdAt: string;
+  expiresAt: string;
+  policyVersion: string;
+  snapshotId: string;
+  targets: PlannedTarget[];
+  effects: PlannedEffect[];
+  preconditions: Precondition[];
+  recovery: RecoveryPlan;
+}
+
+export interface OperationStepRecord {
+  stepNumber: number;
+  action: string;
+  status: "pending" | "running" | "completed" | "failed";
+  startedAt?: string;
+  completedAt?: string;
+  error?: string;
+  details?: Record<string, unknown>;
+}
+
+export interface OperationPlanRecord {
+  plan: OperationPlan;
+  status: OperationStatus;
+  statusReason?: string;
+  approvedAt?: string;
+  approvedBy?: string;
+  queuedAt?: string;
+  startedAt?: string;
+  finishedAt?: string;
+  currentStep?: number;
+  totalSteps?: number;
+  steps?: OperationStepRecord[];
+  leaseOwner?: string;
+  leaseExpiresAt?: number;
+}
+
+export interface PlanApprovalRequest {
+  planId: string;
+  manifestHash: string;
+  expectedVersion?: number;
+}
+
+export interface PlanRejectionRequest {
+  planId: string;
+  reason: string;
+}
+
+export interface PlanCancellationRequest {
+  planId: string;
+  reason?: string;
+}
+
+export interface OperationPlanSummary {
+  id: string;
+  operation: string;
+  status: OperationStatus;
+  statusReason?: string;
+  createdAt: string;
+  expiresAt: string;
+  targetsCount: number;
+  effectsCount: number;
+  manifestHash: string;
+  conversationId: string;
+  ownerId: string;
+  approvedAt?: string;
+  startedAt?: string;
+  finishedAt?: string;
+}
+
