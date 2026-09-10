@@ -38,12 +38,12 @@ export const ROLE_POLICIES: Record<
   },
   "agent": {
     allowedActions: ["read", "propose"],
-    allowedResources: ["dashboard", "chat", "mcp"],
+    allowedResources: ["dashboard", "chat", "mcp", "operations"],
     prohibitedActions: ["approve", "execute", "admin", "export_secrets"],
   },
   "agent-session": {
     allowedActions: ["read", "propose"],
-    allowedResources: ["dashboard", "chat", "mcp"],
+    allowedResources: ["dashboard", "chat", "mcp", "operations"],
     prohibitedActions: ["approve", "execute", "admin", "export_secrets"],
   },
   "installer": {

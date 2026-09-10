@@ -13,6 +13,8 @@ import { setupRouter }     from "./api/setup.js";
 import { chatProviderInfo } from "./chat/provider.js";
 import { initI18n, localeMiddleware } from "./helpers/i18n.js";
 import { buildCorsOriginCallback, buildOriginMiddleware, type OriginPolicy } from "./helpers/origin.js";
+import { createOperationsRouter } from "./api/operations.js";
+import { defaultOperationStore } from "./operations/default-store.js";
 import { VERSION } from "./version.js";
 
 // Initialise i18next so request handlers can call `req.t()` from the very
@@ -180,6 +182,9 @@ export function createApp() {
 
   // Setup API — desktop wizard deploy, NDJSON event stream (requires Owner identity - SEC-05 / ID-03 / ID-05)
   app.use("/api/setup", requireSafeOrigin, authMiddleware, requireOwner, setupRouter);
+
+  // Operations API — persistent plans, approval & executor (P03 / §4.2)
+  app.use("/api/operations", requireSafeOrigin, authMiddleware, createOperationsRouter(defaultOperationStore));
 
   return app;
 }

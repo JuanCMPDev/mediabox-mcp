@@ -16,6 +16,8 @@
     "ci:build": "npm run build -w @mediabox/contracts && npm run build -w @mediabox/core && npm run build -w @mediabox/chat-core && npm run build -w mediabox-mcp && npm run build -w mcp-telegram-client && npm run build -w create-mediabox && npm run build -w @mediabox/ui",
     "ci:test": "node scripts/ci/verify-suites.mjs",
     "test:security-contracts": "vitest run packages/mcp-server/src/security",
+    "test:operations": "vitest run packages/mcp-server/src/operations",
+    "smoke:node-bun": "node scripts/ci/smoke-node-bun.mjs",
     "dev": "npm-run-all --parallel dev:mcp dev:ui",
     "dev:mcp": "npm run dev --workspace packages/mcp-server",
     "dev:ui": "npm run dev --workspace packages/ui",
