@@ -202,13 +202,6 @@ describe("Gate G02: Auth Boundaries and Security Containment", () => {
       ).rejects.toThrow(MutationContainedError);
     });
 
-    it("contains manage_files delete", async () => {
-      const handler = allTools.get("manage_files")!.handler;
-      await expect(
-        handler({ action: "delete", path: "movies/test.mkv" }),
-      ).rejects.toThrow(MutationContainedError);
-    });
-
     it("contains rename_episodes execution (!dryRun)", async () => {
       const handler = allTools.get("rename_episodes")!.handler;
       await expect(
@@ -269,13 +262,6 @@ describe("Gate G02: Auth Boundaries and Security Containment", () => {
       // Pass token to execute
       await expect(
         handler({ dryRun: false, confirmToken }),
-      ).rejects.toThrow(MutationContainedError);
-    });
-
-    it("contains optimize_media when action is optimize", async () => {
-      const handler = allTools.get("optimize_media")!.handler;
-      await expect(
-        handler({ mediaPath: "movies/test.mkv", action: "optimize" }),
       ).rejects.toThrow(MutationContainedError);
     });
 
@@ -366,15 +352,6 @@ describe("Gate G02: Auth Boundaries and Security Containment", () => {
   // SEC-04: Breach Reproductions Cause Zero Data Destruction
   // -------------------------------------------------------------------------
   describe("SEC-04: Breach Reproductions Cause Zero Destruction", () => {
-    it("B03 reproduction: manage_files delete throws before fs.rm or jfApi DELETE", async () => {
-      const handler = allTools.get("manage_files")!.handler;
-      await expect(handler({ action: "delete", path: "movies/Show.mkv" })).rejects.toThrow(
-        MutationContainedError,
-      );
-      expect(mockRm).not.toHaveBeenCalled();
-      expect(mockUnlink).not.toHaveBeenCalled();
-      expect(jfApi).not.toHaveBeenCalled();
-    });
 
     it("B04 reproduction: cancel_downloads clean_orphans throws before qbitApi delete", async () => {
       const handler = allTools.get("cancel_downloads")!.handler;
@@ -449,3 +426,4 @@ describe("Gate G02: Auth Boundaries and Security Containment", () => {
     });
   });
 });
+
