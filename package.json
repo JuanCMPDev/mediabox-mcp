@@ -11,6 +11,11 @@
     "build": "npm run build --workspaces --if-present",
     "test": "npm run test  --workspaces --if-present",
     "typecheck": "npm run build --workspaces --if-present",
+    "ci:policy": "node scripts/ci/check-policy.mjs",
+    "ci:typecheck": "npm run typecheck",
+    "ci:build": "npm run build -w @mediabox/contracts && npm run build -w @mediabox/core && npm run build -w @mediabox/chat-core && npm run build -w mediabox-mcp && npm run build -w mcp-telegram-client && npm run build -w create-mediabox && npm run build -w @mediabox/ui",
+    "ci:test": "node scripts/ci/verify-suites.mjs",
+    "test:security-contracts": "vitest run packages/mcp-server/src/security/containment.test.ts",
     "dev": "npm-run-all --parallel dev:mcp dev:ui",
     "dev:mcp": "npm run dev --workspace packages/mcp-server",
     "dev:ui": "npm run dev --workspace packages/ui",
@@ -26,6 +31,10 @@
   },
   "devDependencies": {
     "npm-run-all": "^4.1.5"
+  },
+  "overrides": {
+    "fast-uri": "^3.1.7",
+    "ip-address": "^10.7.0"
   },
   "volta": {
     "node": "22.19.0"

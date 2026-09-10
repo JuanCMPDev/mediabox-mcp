@@ -1,6 +1,7 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { radarrApi, textResult } from "../helpers/api.js";
+import { assertMutationAllowed } from "../helpers/containment.js";
 
 const RELEASE_SEARCH_TIMEOUT_MS = 120_000;
 
@@ -53,6 +54,7 @@ export function registerRadarrTools(server: McpServer): void {
         };
       }));
     }
+    assertMutationAllowed("movie_search.add");
     const existing = (await radarrApi("movie")).find((m: any) => m.tmdbId === addTmdbId);
     const profiles = await radarrApi("qualityprofile");
     const profile = profiles.find((p: any) => p.name === quality) || profiles[0];
@@ -95,6 +97,7 @@ export function registerRadarrTools(server: McpServer): void {
       deleteFiles: z.boolean().default(false),
     },
   }, async ({ movieId, deleteFiles }) => {
+    assertMutationAllowed("movie_remove");
     const resolved = await resolveMovieId(movieId);
     const m = await radarrApi(`movie/${resolved}`);
     await radarrApi(`movie/${resolved}?deleteFiles=${deleteFiles}`, "DELETE");
@@ -128,6 +131,7 @@ export function registerRadarrTools(server: McpServer): void {
       movieId: z.number().optional().describe("Radarr internal movie id (or tmdbId — auto-resolved). If provided, cancels any active download for this movie before grabbing."),
     },
   }, async ({ guid, indexerId, movieId }) => {
+    assertMutationAllowed("movie_grab");
     let resolved: number | undefined;
     if (movieId) {
       resolved = await resolveMovieId(movieId);
@@ -212,6 +216,7 @@ export function registerRadarrTools(server: McpServer): void {
         rejection: r.rejections?.[0]?.reason,
       })));
     }
+    assertMutationAllowed("movie_import");
     if (!files?.length) throw new Error("files mapping required for import");
     await radarrApi("manualimport", "POST", { files, importMode: "move" });
     return textResult({ message: `Imported ${files.length} movie(s) into Radarr` });

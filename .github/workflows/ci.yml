@@ -2,13 +2,13 @@ name: CI
 
 on:
   push:
-    branches: [master]
+    branches: [master, "integration/**", "fix/**"]
   pull_request:
-    branches: [master]
+    branches: [master, "integration/**"]
 
 jobs:
-  build:
-    name: Typecheck, Build & Test
+  gate-policy-fixtures:
+    name: gate/policy-fixtures (G00)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -21,26 +21,53 @@ jobs:
       - name: Install workspaces
         run: npm ci
 
-      - name: Build @mediabox/contracts
-        run: npm run build -w @mediabox/contracts
+      - name: Validate Policy, Acceptance Matrix & Test Sandbox
+        run: npm run ci:policy
 
-      - name: Build @mediabox/chat-core
-        run: npm run build -w @mediabox/chat-core
+  gate-build-unit:
+    name: gate/build-unit (G01)
+    needs: [gate-policy-fixtures]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
 
-      - name: Build @mediabox/core
-        run: npm run build -w @mediabox/core
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
 
-      - name: Test @mediabox/core
-        run: npm run test -w @mediabox/core
+      - name: Install workspaces
+        run: npm ci
 
-      - name: Build mediabox-mcp
-        run: npm run build -w mediabox-mcp
+      - name: Topological Build
+        run: npm run ci:build
 
-      - name: Build mcp-telegram-client
-        run: npm run build -w mcp-telegram-client
+      - name: Typecheck
+        run: npm run ci:typecheck
 
-      - name: Build create-mediabox
-        run: npm run build -w create-mediabox
+      - name: Run and Verify All Test Suites (HAR-04)
+        run: npm run ci:test
+
+  gate-auth-boundaries:
+    name: gate/auth-boundaries (G02)
+    needs: [gate-build-unit]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install workspaces
+        run: npm ci
+
+      - name: Build workspaces
+        run: npm run ci:build
+
+      - name: Verify Security & Containment Contracts (SEC-01..SEC-06)
+        run: npm run test:security-contracts
 
   audit:
     name: Security Audit

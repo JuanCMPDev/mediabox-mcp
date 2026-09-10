@@ -21,6 +21,13 @@ vi.mock("../helpers/pyload.js", () => ({
 vi.mock("../helpers/qbittorrent.js", () => ({
   qbitApi: vi.fn().mockResolvedValue({}),
 }));
+vi.mock("node:fs/promises", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("node:fs/promises")>();
+  return {
+    ...actual,
+    rm: vi.fn().mockResolvedValue(undefined),
+  };
+});
 
 import { jfApi, sonarrApi, radarrApi } from "../helpers/api.js";
 import { registerLibraryTools } from "./library.js";
@@ -208,35 +215,25 @@ describe("confirm tokens are wired into destructive tools (P1.2)", () => {
     return JSON.parse(result.content[0].text);
   }
 
-  it("manage_files delete (jellyfinItemId) without token returns a confirm handle, no destruction", async () => {
-    vi.mocked(jfApi).mockResolvedValueOnce({
-      Items: [{ Id: "abc", Name: "The Show", Type: "Series", Path: "/data/anime/The Show" }],
-    });
+  it("manage_files delete (jellyfinItemId) is blocked under P01 security containment, no destruction", async () => {
     const tools = loadLibraryTools();
     const handler = tools.get("manage_files")!.handler;
 
-    const result = await handler({ action: "delete", jellyfinItemId: "abc" });
-    const body = payloadOf(result);
-
-    expect(body.requiresConfirmation).toBe(true);
-    expect(body.confirmToken).toMatch(/^[a-f0-9]{24}$/);
-    expect(body.preview).toMatchObject({ kind: "jellyfin", id: "abc", name: "The Show" });
-    // jfApi was called for the lookup but NOT for DELETE — no destruction.
-    expect(jfApi).toHaveBeenCalledTimes(1);
-    expect(vi.mocked(jfApi).mock.calls[0][0]).toContain("/Items?ids=abc");
+    await expect(handler({ action: "delete", jellyfinItemId: "abc" })).rejects.toThrow(
+      /blocked under P01 security containment/,
+    );
+    expect(jfApi).not.toHaveBeenCalled();
     expect(vi.mocked(sonarrApi)).not.toHaveBeenCalled();
     expect(vi.mocked(radarrApi)).not.toHaveBeenCalled();
   });
 
-  it("manage_files delete with bogus confirmToken rejects (no destruction)", async () => {
+  it("manage_files delete with path is blocked under P01 security containment (no destruction)", async () => {
     const tools = loadLibraryTools();
     const handler = tools.get("manage_files")!.handler;
 
-    await expect(
-      handler({ action: "delete", jellyfinItemId: "abc", confirmToken: "deadbeefdeadbeefdeadbeef" }),
-    ).rejects.toThrow(/Invalid or expired confirmToken/);
-
-    // We rejected without ever talking to Jellyfin.
+    await expect(handler({ action: "delete", path: "movies/some.mkv" })).rejects.toThrow(
+      /blocked under P01 security containment/,
+    );
     expect(jfApi).not.toHaveBeenCalled();
   });
 
@@ -266,39 +263,18 @@ describe("confirm tokens are wired into destructive tools (P1.2)", () => {
     );
   });
 
-  it("manage_files delete (jellyfinItemId) accepts a freshly-issued token and proceeds", async () => {
-    // First call (no token) issues the token + builds the preview.
-    vi.mocked(jfApi).mockResolvedValueOnce({
-      Items: [{ Id: "abc", Name: "The Show", Type: "Series", Path: "/data/anime/The Show" }],
-    });
-    const tools = loadLibraryTools();
-    const handler = tools.get("manage_files")!.handler;
+  it("cleanup_server dryRun=false with valid token rejects under P01 containment (no destruction)", async () => {
+    vi.mocked(sonarrApi).mockResolvedValue([]);
+    vi.mocked(radarrApi).mockResolvedValue([]);
+    const tools = loadMaintenanceTools();
+    const handler = tools.get("cleanup_server")!.handler;
 
-    const previewResult = await handler({ action: "delete", jellyfinItemId: "abc" });
-    const { confirmToken } = payloadOf(previewResult);
+    const preview = await handler({ dryRun: false });
+    const { confirmToken } = payloadOf(preview);
 
-    // Second call: same target + the issued token. Lookup happens again and
-    // then DELETE goes through. We mock both jfApi calls + the cleanup loop.
-    vi.mocked(jfApi).mockResolvedValueOnce({
-      Items: [{ Id: "abc", Name: "The Show", Type: "Series", Path: "/data/anime/The Show" }],
-    });
-    vi.mocked(jfApi).mockResolvedValueOnce({}); // DELETE
-    vi.mocked(sonarrApi).mockResolvedValueOnce([]); // series list (no match → no DELETE)
-    vi.mocked(jfApi).mockResolvedValueOnce({}); // /Library/Refresh
-
-    const applyResult = await handler({
-      action: "delete",
-      jellyfinItemId: "abc",
-      confirmToken,
-    });
-    const body = payloadOf(applyResult);
-
-    expect(body.message).toMatch(/Deleted "The Show"/);
-    expect(body.requiresConfirmation).toBeUndefined();
-
-    // Re-using the same token must fail (single-use).
-    await expect(
-      handler({ action: "delete", jellyfinItemId: "abc", confirmToken }),
-    ).rejects.toThrow(/Invalid or expired confirmToken/);
+    await expect(handler({ dryRun: false, confirmToken })).rejects.toThrow(
+      /blocked under P01 security containment/,
+    );
+    expect(vi.mocked(sonarrApi).mock.calls.every(([ep]) => !String(ep).includes("DELETE"))).toBe(true);
   });
 });

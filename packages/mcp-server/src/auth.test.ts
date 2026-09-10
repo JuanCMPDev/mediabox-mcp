@@ -9,7 +9,7 @@ import { describe, it, expect, vi } from "vitest";
 const TEST_KEY = "unit-test-internal-key-0123456789";
 process.env.INTERNAL_API_KEY = TEST_KEY;
 
-const { authMiddleware, timingSafeEqualStr } = await import("./auth.js");
+const { authMiddleware, requireOwner, timingSafeEqualStr, AGENT_API_KEY } = await import("./auth.js");
 
 function mockRes() {
   const res: any = { statusCode: 0, body: undefined };
@@ -84,5 +84,57 @@ describe("authMiddleware", () => {
     await authMiddleware({ headers: {} } as any, res as any, next);
     expect(next).not.toHaveBeenCalled();
     expect(res.status).toHaveBeenCalledWith(401);
+  });
+
+  it("assigns owner principal for INTERNAL_API_KEY", async () => {
+    const next = vi.fn();
+    const res = mockRes();
+    const req: any = { headers: { authorization: `Bearer ${TEST_KEY}` } };
+    await authMiddleware(req, res as any, next);
+    expect(next).toHaveBeenCalledTimes(1);
+    expect(req.principal).toBeDefined();
+    expect(req.principal.kind).toBe("owner");
+    expect(req.principal.id).toBe("owner-ui");
+  });
+
+  it("assigns agent principal for AGENT_API_KEY", async () => {
+    const next = vi.fn();
+    const res = mockRes();
+    const req: any = { headers: { authorization: `Bearer ${AGENT_API_KEY}` } };
+    await authMiddleware(req, res as any, next);
+    expect(next).toHaveBeenCalledTimes(1);
+    expect(req.principal).toBeDefined();
+    expect(req.principal.kind).toBe("agent");
+    expect(req.principal.id).toBe("agent-session");
+  });
+});
+
+describe("requireOwner", () => {
+  it("allows owner principal to proceed", () => {
+    const next = vi.fn();
+    const res = mockRes();
+    const req: any = { principal: { kind: "owner", id: "owner-ui" } };
+    requireOwner(req, res as any, next);
+    expect(next).toHaveBeenCalledTimes(1);
+    expect(res.status).not.toHaveBeenCalled();
+  });
+
+  it("blocks agent principal with 403 ERR_FORBIDDEN_AGENT", () => {
+    const next = vi.fn();
+    const res = mockRes();
+    const req: any = { principal: { kind: "agent", id: "agent-session" } };
+    requireOwner(req, res as any, next);
+    expect(next).not.toHaveBeenCalled();
+    expect(res.status).toHaveBeenCalledWith(403);
+    expect(res.body).toMatchObject({ code: "ERR_FORBIDDEN_AGENT" });
+  });
+
+  it("blocks requests without principal with 403", () => {
+    const next = vi.fn();
+    const res = mockRes();
+    const req: any = {};
+    requireOwner(req, res as any, next);
+    expect(next).not.toHaveBeenCalled();
+    expect(res.status).toHaveBeenCalledWith(403);
   });
 });

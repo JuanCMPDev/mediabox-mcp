@@ -7,6 +7,7 @@ import { pyloadApi, pyloadApiJson } from "../helpers/pyload.js";
 import { execFileAsync, moveFile, isVideoFile, extractEpisodeNumber, resolvePath } from "../helpers/files.js";
 import { startJob, estimateTime } from "../helpers/jobs.js";
 import { issueConfirmToken, consumeConfirmToken } from "../helpers/confirm-tokens.js";
+import { assertMutationAllowed } from "../helpers/containment.js";
 import { MEDIA_PATH } from "../config.js";
 
 export function registerLibraryTools(server: McpServer): void {
@@ -30,6 +31,7 @@ export function registerLibraryTools(server: McpServer): void {
       // throws PathSandboxError on traversal / out-of-root absolutes and returns
       // an absolute path under MEDIA_PATH — exactly what Jellyfin expects.
       const safeFolder = resolvePath(folder);
+      assertMutationAllowed("manage_library.create");
       await fs.mkdir(safeFolder, { recursive: true });
       await jfApi(`/Library/VirtualFolders?collectionType=${type}&refreshLibrary=true&name=${encodeURIComponent(name)}&paths=${encodeURIComponent(safeFolder)}`, "POST", { LibraryOptions: {} });
       return textResult({ message: `Library "${name}" created at ${safeFolder}` });
@@ -64,6 +66,11 @@ export function registerLibraryTools(server: McpServer): void {
     }
     if (action === "move") {
       if (!sourcePaths?.length || !destFolder) throw new Error("sourcePaths and destFolder required");
+      for (const sp of sourcePaths) {
+        resolvePath(sp);
+      }
+      resolvePath(destFolder);
+      assertMutationAllowed("manage_files.move");
       let totalSize = 0;
       for (const sp of sourcePaths) {
         const src = resolvePath(sp);
@@ -115,6 +122,7 @@ export function registerLibraryTools(server: McpServer): void {
       //    lookup or token issuance.
       if (!jellyfinItemId && !filePath) throw new Error("Provide jellyfinItemId or path");
       const fullPath = filePath ? resolvePath(filePath) : null;  // throws PathSandboxError on traversal
+      assertMutationAllowed("manage_files.delete");
       const target = jellyfinItemId
         ? { kind: "jellyfin" as const, id: jellyfinItemId }
         : { kind: "path" as const, path: filePath };
@@ -235,6 +243,9 @@ export function registerLibraryTools(server: McpServer): void {
     }
     if (!showPath) throw new Error("Provide showPath or jellyfinItemId");
     const fullPath = resolvePath(showPath);
+    if (!dryRun) {
+      assertMutationAllowed("rename_episodes");
+    }
     const seasonPad = String(seasonNumber).padStart(2, "0");
     const seasonDir = path.join(fullPath, `Season ${seasonPad}`);
     const vids: { fullPath: string; name: string }[] = [];
@@ -314,6 +325,9 @@ export function registerLibraryTools(server: McpServer): void {
     },
   }, async ({ mediaPath, dryRun }) => {
     const fullPath = resolvePath(mediaPath);
+    if (!dryRun) {
+      assertMutationAllowed("fix_subtitles");
+    }
     const stat = await fs.stat(fullPath);
     const mkvs: string[] = [];
     if (stat.isFile() && fullPath.endsWith(".mkv")) mkvs.push(fullPath);

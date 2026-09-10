@@ -6,6 +6,7 @@ import { jfApi, sonarrApi, radarrApi, textResult } from "../helpers/api.js";
 import { execFileAsync, resolvePath } from "../helpers/files.js";
 import { jobs, startJob, estimateTime } from "../helpers/jobs.js";
 import { issueConfirmToken, consumeConfirmToken } from "../helpers/confirm-tokens.js";
+import { assertMutationAllowed } from "../helpers/containment.js";
 import { MEDIA_PATH, DOWNLOADS_PATH } from "../config.js";
 
 export function registerMaintenanceTools(server: McpServer): void {
@@ -22,6 +23,9 @@ export function registerMaintenanceTools(server: McpServer): void {
     },
   }, async ({ mediaPath, action, keepAudioLangs, keepSubLangs, removeAllSubs, confirmToken }) => {
     const fullPath = resolvePath(mediaPath);
+    if (action === "optimize") {
+      assertMutationAllowed("optimize_media");
+    }
     const stat = await fs.stat(fullPath);
     const mkvs: string[] = [];
     if (stat.isFile() && fullPath.endsWith(".mkv")) mkvs.push(fullPath);
@@ -221,7 +225,7 @@ export function registerMaintenanceTools(server: McpServer): void {
         if (!consumeConfirmToken("cleanup_server.apply", confirmToken, {})) {
           throw new Error("Invalid or expired confirmToken — call cleanup_server with dryRun=false (and no confirmToken) to get a fresh preview.");
         }
-        // valid token: stay with dryRun=false
+        assertMutationAllowed("cleanup_server");
       } else {
         effectiveDryRun = true;
         issuedToken = issueConfirmToken("cleanup_server.apply", {});

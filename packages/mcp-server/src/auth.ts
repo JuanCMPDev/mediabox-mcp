@@ -1,65 +1,30 @@
-import type { OAuthServerProvider } from "@modelcontextprotocol/sdk/server/auth/provider.js";
-import type { OAuthRegisteredClientsStore } from "@modelcontextprotocol/sdk/server/auth/clients.js";
-import type { AuthInfo } from "@modelcontextprotocol/sdk/server/auth/types.js";
-import type { AuthorizationParams } from "@modelcontextprotocol/sdk/server/auth/provider.js";
-import type { OAuthClientInformationFull, OAuthTokens } from "@modelcontextprotocol/sdk/shared/auth.js";
 import { Request, Response, NextFunction } from "express";
 import crypto from "crypto";
 
-class InMemoryClientsStore implements OAuthRegisteredClientsStore {
-  private clients = new Map<string, OAuthClientInformationFull>();
-  async getClient(clientId: string) { return this.clients.get(clientId); }
-  async registerClient(metadata: OAuthClientInformationFull) { this.clients.set(metadata.client_id, metadata); return metadata; }
+export interface Principal {
+  id: string;
+  kind: "owner" | "agent";
+  capabilities: string[];
 }
 
-class JellyfinOAuthProvider implements OAuthServerProvider {
-  clientsStore = new InMemoryClientsStore();
-  private codes = new Map<string, { client: OAuthClientInformationFull; params: AuthorizationParams }>();
-  private tokens = new Map<string, { clientId: string; scopes: string[]; expiresAt: number; type: "access" | "refresh" }>();
-
-  async authorize(client: OAuthClientInformationFull, params: AuthorizationParams, res: Response) {
-    const code = crypto.randomUUID();
-    this.codes.set(code, { client, params });
-    const url = new URL(params.redirectUri);
-    url.searchParams.set("code", code);
-    if (params.state !== undefined) url.searchParams.set("state", params.state);
-    res.redirect(url.toString());
-  }
-
-  async challengeForAuthorizationCode(_c: OAuthClientInformationFull, code: string) {
-    return this.codes.get(code)?.params.codeChallenge || "none";
-  }
-
-  async exchangeAuthorizationCode(client: OAuthClientInformationFull, code: string) {
-    const data = this.codes.get(code);
-    if (!data || data.client.client_id !== client.client_id) throw new Error("Invalid code");
-    this.codes.delete(code);
-    const at = crypto.randomUUID(), rt = crypto.randomUUID();
-    this.tokens.set(at, { clientId: client.client_id, scopes: data.params.scopes || [], expiresAt: Date.now() + 86400_000, type: "access" });
-    this.tokens.set(rt, { clientId: client.client_id, scopes: data.params.scopes || [], expiresAt: Date.now() + 2592000_000, type: "refresh" });
-    return { access_token: at, token_type: "bearer" as const, expires_in: 86400, refresh_token: rt, scope: (data.params.scopes || []).join(" ") } satisfies OAuthTokens;
-  }
-
-  async exchangeRefreshToken(client: OAuthClientInformationFull, refreshToken: string) {
-    const data = this.tokens.get(refreshToken);
-    if (!data || data.type !== "refresh" || data.clientId !== client.client_id || data.expiresAt < Date.now()) throw new Error("Invalid refresh token");
-    this.tokens.delete(refreshToken);
-    const at = crypto.randomUUID(), rt = crypto.randomUUID();
-    this.tokens.set(at, { clientId: client.client_id, scopes: data.scopes, expiresAt: Date.now() + 86400_000, type: "access" });
-    this.tokens.set(rt, { clientId: client.client_id, scopes: data.scopes, expiresAt: Date.now() + 2592000_000, type: "refresh" });
-    return { access_token: at, token_type: "bearer" as const, expires_in: 86400, refresh_token: rt, scope: data.scopes.join(" ") } satisfies OAuthTokens;
-  }
-
-  async verifyAccessToken(token: string): Promise<AuthInfo> {
-    const data = this.tokens.get(token);
-    if (!data || data.type !== "access" || data.expiresAt < Date.now()) throw new Error("Invalid token");
-    return { token, clientId: data.clientId, scopes: data.scopes, expiresAt: Math.floor(data.expiresAt / 1000) };
+declare global {
+  namespace Express {
+    interface Request {
+      principal?: Principal;
+    }
   }
 }
 
-export const oauthProvider = new JellyfinOAuthProvider();
-
+/**
+ * Owner administration key (UI, setup wizard, host operations).
+ */
 export const INTERNAL_API_KEY = process.env.INTERNAL_API_KEY || crypto.randomUUID();
+
+/**
+ * Dedicated agent key for loopback and delegating clients.
+ * Distinct from INTERNAL_API_KEY to enforce separation of authority (B02 / INV-SEPARATION).
+ */
+export const AGENT_API_KEY = process.env.AGENT_API_KEY || `agent-${crypto.randomUUID()}`;
 
 /**
  * Constant-time string comparison. Hashes both sides to fixed-length SHA-256
@@ -68,16 +33,64 @@ export const INTERNAL_API_KEY = process.env.INTERNAL_API_KEY || crypto.randomUUI
  * buffers.
  */
 export function timingSafeEqualStr(a: string, b: string): boolean {
+  if (typeof a !== "string" || typeof b !== "string") return false;
   const ah = crypto.createHash("sha256").update(a).digest();
   const bh = crypto.createHash("sha256").update(b).digest();
   return crypto.timingSafeEqual(ah, bh);
 }
 
+/**
+ * Authenticates requests and assigns an authenticated Principal.
+ * Localhost origin or known session IDs do NOT authenticate on their own (INV-AUTH / SEC-02).
+ */
 export async function authMiddleware(req: Request, res: Response, next: NextFunction) {
   const h = req.headers.authorization;
-  if (h?.startsWith("Bearer ")) {
-    if (timingSafeEqualStr(h.slice(7), INTERNAL_API_KEY)) return next();
-    try { await oauthProvider.verifyAccessToken(h.slice(7)); return next(); } catch {}
+  if (!h || !h.startsWith("Bearer ")) {
+    res.status(401).json({ error: "Unauthorized: Missing or malformed Bearer token" });
+    return;
   }
-  res.status(401).json({ error: "Unauthorized" });
+
+  const token = h.slice(7).trim();
+  if (!token) {
+    res.status(401).json({ error: "Unauthorized: Empty token" });
+    return;
+  }
+
+  // 1. Owner Principal
+  if (timingSafeEqualStr(token, INTERNAL_API_KEY)) {
+    req.principal = {
+      id: "owner-ui",
+      kind: "owner",
+      capabilities: ["*"],
+    };
+    return next();
+  }
+
+  // 2. Delegated Agent Principal
+  if (timingSafeEqualStr(token, AGENT_API_KEY)) {
+    req.principal = {
+      id: "agent-session",
+      kind: "agent",
+      capabilities: ["mcp:tools:read", "mcp:tools:propose"],
+    };
+    return next();
+  }
+
+  // Unrecognized, expired or external token rejected (SEC-02)
+  res.status(401).json({ error: "Unauthorized: Invalid or expired credentials" });
+}
+
+/**
+ * Restricts an endpoint strictly to owner identity (SEC-05 / INV-SEPARATION).
+ * Prevents agents from accessing raw env, secrets, or docker administration.
+ */
+export function requireOwner(req: Request, res: Response, next: NextFunction) {
+  if (!req.principal || req.principal.kind !== "owner") {
+    res.status(403).json({
+      error: "Forbidden: Agent session is prohibited from accessing administrative routes",
+      code: "ERR_FORBIDDEN_AGENT",
+    });
+    return;
+  }
+  next();
 }
