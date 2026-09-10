@@ -376,3 +376,26 @@ export interface RestartServicesResult {
   restarted: string[];
   errors:    Array<{ service: string; message: string }>;
 }
+
+// ── Identity & Authorization (P02 / §4.1) ──────────────────────────────────
+
+export type PrincipalKind =
+  | "owner-ui"
+  | "agent-session"
+  | "installer"
+  | "executor"
+  | "external-client"
+  | "owner"
+  | "agent";
+
+export interface Principal {
+  id: string;
+  installationId: string;
+  kind: PrincipalKind;
+  capabilities: string[];
+  audience: string;
+  sessionId: string;
+  expiresAt: number;
+  credentialVersion: number;
+}
+
