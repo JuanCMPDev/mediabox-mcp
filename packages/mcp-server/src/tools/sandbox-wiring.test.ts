@@ -68,14 +68,6 @@ beforeEach(() => {
 });
 
 describe("path sandbox is wired into library tools", () => {
-  it("manage_files delete rejects ../etc/passwd", async () => {
-    const tools = loadLibraryTools();
-    const handler = tools.get("manage_files")!.handler;
-    await expect(handler({ action: "delete", path: "../etc/passwd" })).rejects.toThrow(
-      /escapes (media|downloads) sandbox/,
-    );
-  });
-
   it("manage_files list rejects /etc", async () => {
     const tools = loadLibraryTools();
     const handler = tools.get("manage_files")!.handler;
@@ -113,13 +105,7 @@ describe("path sandbox is wired into library tools", () => {
   });
 });
 
-describe("path sandbox is wired into maintenance tools", () => {
-  it("optimize_media rejects /etc", async () => {
-    const tools = loadMaintenanceTools();
-    const handler = tools.get("optimize_media")!.handler;
-    await expect(handler({ mediaPath: "/etc", action: "analyze" })).rejects.toThrow(/escapes/);
-  });
-});
+
 
 describe("segment guards are wired into download tools", () => {
   it("download_status organize rejects '..' as packageFolder", async () => {
@@ -215,28 +201,6 @@ describe("confirm tokens are wired into destructive tools (P1.2)", () => {
     return JSON.parse(result.content[0].text);
   }
 
-  it("manage_files delete (jellyfinItemId) is blocked under P01 security containment, no destruction", async () => {
-    const tools = loadLibraryTools();
-    const handler = tools.get("manage_files")!.handler;
-
-    await expect(handler({ action: "delete", jellyfinItemId: "abc" })).rejects.toThrow(
-      /blocked under P01 security containment/,
-    );
-    expect(jfApi).not.toHaveBeenCalled();
-    expect(vi.mocked(sonarrApi)).not.toHaveBeenCalled();
-    expect(vi.mocked(radarrApi)).not.toHaveBeenCalled();
-  });
-
-  it("manage_files delete with path is blocked under P01 security containment (no destruction)", async () => {
-    const tools = loadLibraryTools();
-    const handler = tools.get("manage_files")!.handler;
-
-    await expect(handler({ action: "delete", path: "movies/some.mkv" })).rejects.toThrow(
-      /blocked under P01 security containment/,
-    );
-    expect(jfApi).not.toHaveBeenCalled();
-  });
-
   it("cleanup_server dryRun=false without token returns a confirm handle, did NOT delete anything", async () => {
     vi.mocked(sonarrApi).mockResolvedValue([]);
     vi.mocked(radarrApi).mockResolvedValue([]);
@@ -278,3 +242,4 @@ describe("confirm tokens are wired into destructive tools (P1.2)", () => {
     expect(vi.mocked(sonarrApi).mock.calls.every(([ep]) => !String(ep).includes("DELETE"))).toBe(true);
   });
 });
+

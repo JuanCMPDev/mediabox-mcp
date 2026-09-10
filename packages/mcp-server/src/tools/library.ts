@@ -9,7 +9,8 @@ import { startJob, estimateTime } from "../helpers/jobs.js";
 import { issueConfirmToken, consumeConfirmToken } from "../helpers/confirm-tokens.js";
 import { assertMutationAllowed } from "../helpers/containment.js";
 import { MEDIA_PATH } from "../config.js";
-
+import { defaultOperationStore } from "../operations/default-store.js";
+import { createDeletePlan } from "../operations/planners/delete.js";
 export function registerLibraryTools(server: McpServer): void {
   // 5. MANAGE LIBRARY
   server.registerTool("manage_library", {
@@ -45,16 +46,14 @@ export function registerLibraryTools(server: McpServer): void {
 
   // 6. MANAGE FILES
   server.registerTool("manage_files", {
-    description: "List, move, or delete files and folders. Paths starting with 'downloads/' access the downloads folder. All other paths are relative to media volume. DELETE is a two-step flow: the first call returns a preview + confirmToken; show the preview to the user, then re-call with the same target and confirmToken to actually delete.",
+    description: "List or move files and folders. Paths starting with 'downloads/' access the downloads folder. All other paths are relative to media volume.",
     inputSchema: {
-      action: z.enum(["list", "move", "delete"]).describe("Action to perform"),
+      action: z.enum(["list", "move"]).describe("Action to perform"),
       path: z.string().optional().describe("Path (e.g. 'anime/Show', 'downloads/', 'movies/')"),
       sourcePaths: z.array(z.string()).optional().describe("Source paths for move (e.g. ['downloads/file.mkv', 'tv/Show1'])"),
       destFolder: z.string().optional().describe("Destination folder for move (e.g. 'movies/Movie Name')"),
-      jellyfinItemId: z.string().optional().describe("Jellyfin item ID to delete (also removes files)"),
-      confirmToken: z.string().optional().describe("Token returned from a prior preview call. Required to actually execute a delete. Bound to the original target — re-issue if you change jellyfinItemId or path."),
     },
-  }, async ({ action, path: filePath, sourcePaths, destFolder, jellyfinItemId, confirmToken }) => {
+  }, async ({ action, path: filePath, sourcePaths, destFolder }) => {
     if (action === "list") {
       const full = filePath ? resolvePath(filePath) : MEDIA_PATH;
       const entries = await fs.readdir(full, { withFileTypes: true });
@@ -117,109 +116,30 @@ export function registerLibraryTools(server: McpServer): void {
       await jfApi("/Library/Refresh", "POST");
       return textResult({ message: "Moved", results });
     }
-    if (action === "delete") {
-      // 1. Input validation — fail fast on missing/unsafe args before any
-      //    lookup or token issuance.
-      if (!jellyfinItemId && !filePath) throw new Error("Provide jellyfinItemId or path");
-      const fullPath = filePath ? resolvePath(filePath) : null;  // throws PathSandboxError on traversal
-      assertMutationAllowed("manage_files.delete");
-      const target = jellyfinItemId
-        ? { kind: "jellyfin" as const, id: jellyfinItemId }
-        : { kind: "path" as const, path: filePath };
-
-      // 2. Token gate. With a token, we consume + execute. Without, we
-      //    build a preview and return a fresh token so the LLM can show
-      //    the user what's about to be deleted and confirm verbally.
-      if (confirmToken) {
-        if (!consumeConfirmToken("manage_files.delete", confirmToken, target)) {
-          throw new Error("Invalid or expired confirmToken — re-issue by calling delete again without confirmToken to get a new preview.");
-        }
-        // fall through to execute
-      } else {
-        if (jellyfinItemId) {
-          const lookup = await jfApi(`/Items?ids=${jellyfinItemId}&Fields=Path`);
-          const item = lookup.Items?.[0];
-          if (!item) throw new Error("Item not found");
-          const token = issueConfirmToken("manage_files.delete", target);
-          return textResult({
-            requiresConfirmation: true,
-            confirmToken: token,
-            preview: { kind: "jellyfin", id: item.Id, name: item.Name, type: item.Type, path: item.Path },
-            // Note: the literal token is NOT in this message string — it
-            // travels in the confirmToken field above. Including it here
-            // would leak it into the LLM's user-facing reply (observed Apr
-            // 30: GPT-4o paraphrased the token verbatim and asked the user
-            // to "resend the request with this token").
-            message: `Preview only — nothing has been deleted. Will delete "${item.Name}" (${item.Type}) from Jellyfin + Sonarr/Radarr + disk. Show this preview to the user. If they confirm, YOU (the assistant) re-call manage_files with the same args plus confirmToken from this response. Never expose confirmToken to the user.`,
-          });
-        }
-        // path branch
-        const stat = await fs.stat(fullPath!).catch(() => null);
-        if (!stat) throw new Error(`Path not found: ${filePath}`);
-        const token = issueConfirmToken("manage_files.delete", target);
-        return textResult({
-          requiresConfirmation: true,
-          confirmToken: token,
-          preview: {
-            kind: "path",
-            path: filePath,
-            isDirectory: stat.isDirectory(),
-            sizeBytes: stat.size,
-          },
-          message: `Preview only — nothing has been deleted. Will delete ${stat.isDirectory() ? "directory" : "file"} ${filePath} (${(stat.size / 1048576).toFixed(1)}MB). Show this to the user. If they confirm, YOU (the assistant) re-call manage_files with the same args plus confirmToken from this response. Never expose confirmToken to the user.`,
-        });
-      }
-
-      // 3. Execute (token was valid).
-      if (jellyfinItemId) {
-        const lookup = await jfApi(`/Items?ids=${jellyfinItemId}&Fields=Path`);
-        const item = lookup.Items?.[0];
-        if (!item) throw new Error("Item not found");
-
-        // Delete files from disk BEFORE removing from Jellyfin
-        if (item.Path) {
-          const dir = item.Type === "Series" || item.Type === "BoxSet" ? item.Path : path.dirname(item.Path);
-          await fs.rm(dir, { recursive: true, force: true });
-        }
-
-        await jfApi(`/Items/${jellyfinItemId}`, "DELETE").catch(() => {});
-
-        if (item.Type === "Series") {
-          try {
-            const sonarrSeries = await sonarrApi("series");
-            const match = sonarrSeries.find((s: any) => s.title === item.Name || item.Path?.includes(s.path));
-            if (match) await sonarrApi(`series/${match.id}?deleteFiles=true`, "DELETE");
-          } catch {}
-        }
-
-        if (item.Type === "Movie") {
-          try {
-            const radarrMovies = await radarrApi("movie");
-            const match = radarrMovies.find((m: any) => m.title === item.Name || item.Path?.includes(m.path));
-            if (match) await radarrApi(`movie/${match.id}?deleteFiles=true`, "DELETE");
-          } catch {}
-        }
-
-        // Clean matching PyLoad packages (finished/failed leftovers)
-        try {
-          const nameLower = item.Name.toLowerCase();
-          for (const getter of ["get_queue", "get_collector"]) {
-            const pkgs = await pyloadApi(getter);
-            if (!Array.isArray(pkgs)) continue;
-            const matchIds = pkgs.filter((p: any) => p.name?.toLowerCase().includes(nameLower)).map((p: any) => p.pid);
-            if (matchIds.length) await pyloadApiJson("deletePackages", { package_ids: matchIds });
-          }
-        } catch {}
-
-        await jfApi("/Library/Refresh", "POST");
-        return textResult({ message: `Deleted "${item.Name}" (${item.Type}) from Jellyfin, Sonarr/Radarr, and disk` });
-      }
-      // path branch — fullPath was resolved + sandbox-checked at step 1
-      await fs.rm(fullPath!, { recursive: true, force: true });
-      await jfApi("/Library/Refresh", "POST");
-      return textResult({ message: `Deleted ${filePath}` });
-    }
     throw new Error("Invalid action");
+  });
+
+  server.registerTool("propose_cleanup", {
+    description: "Propose a plan to delete/cleanup files. This replaces the old destructive delete flow. Returns an OperationPlan summary. Use operation_status to monitor.",
+    inputSchema: {
+      paths: z.array(z.string()).describe("Paths to delete (e.g. 'tv/Show', 'downloads/file.mkv')"),
+    },
+  }, async ({ paths }) => {
+    const plan = await createDeletePlan({
+      logicalPaths: paths,
+      // Default to "local" owner since MCP doesn't carry user session out of the box right now
+      ownerId: "local",
+      conversationId: "local",
+    });
+    
+    defaultOperationStore.createPlan(plan);
+    
+    return textResult({
+      message: `Proposed cleanup plan ${plan.id}. Please ask the user to review and approve the plan. Use operation_status tool with planId '${plan.id}' to check its progress.`,
+      planId: plan.id,
+      operation: plan.operation,
+      expiresAt: plan.expiresAt,
+    });
   });
 
   // 7. RENAME EPISODES
