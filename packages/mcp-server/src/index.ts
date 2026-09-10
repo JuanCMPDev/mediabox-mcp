@@ -15,11 +15,18 @@ import { initI18n, localeMiddleware } from "./helpers/i18n.js";
 import { buildCorsOriginCallback, buildOriginMiddleware, type OriginPolicy } from "./helpers/origin.js";
 import { createOperationsRouter } from "./api/operations.js";
 import { defaultOperationStore } from "./operations/default-store.js";
+import { OperationExecutor } from "./operations/executor.js";
+import { registerStepHandlers } from "./operations/handlers.js";
 import { VERSION } from "./version.js";
 
 // Initialise i18next so request handlers can call `req.t()` from the very
 // first request — top-level await is fine in Node 22.
 await initI18n();
+
+// Start the global background operation executor
+export const globalOperationExecutor = new OperationExecutor(defaultOperationStore);
+registerStepHandlers(globalOperationExecutor);
+globalOperationExecutor.start();
 
 interface TransportSessionBinding {
   transport: StreamableHTTPServerTransport;
