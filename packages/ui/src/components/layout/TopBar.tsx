@@ -7,9 +7,12 @@ import { closeWindow, minimizeWindow, toggleMaximize } from '@/lib/tauri-bridge'
 interface TopBarProps {
   activeView: View;
   serverOnline: boolean;
+  /** Small shell-level controls rendered in the right cluster (e.g. the
+   *  operations badge). Anything interactive here must be `no-drag`. */
+  actions?: React.ReactNode;
 }
 
-export function TopBar({ activeView, serverOnline }: TopBarProps) {
+export function TopBar({ activeView, serverOnline, actions }: TopBarProps) {
   const { t } = useTranslation();
   const [time, setTime] = useState(() => formatTime(new Date()));
 
@@ -49,6 +52,7 @@ export function TopBar({ activeView, serverOnline }: TopBarProps) {
       <div className={styles.center} data-tauri-drag-region />
 
       <div className={styles.right}>
+        {actions}
         <div className={styles.breadcrumb}>
           <span>Mediabox</span>
           <span>/</span>

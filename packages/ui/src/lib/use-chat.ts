@@ -2,6 +2,7 @@ import { useState, useRef, useCallback, useEffect } from 'react';
 import { streamChat }   from './chat-stream';
 import { api }          from './api';
 import type { ChatMessage, ToolCallRecord } from './types';
+import type { TypedSelection } from '@mediabox/contracts';
 
 const STORAGE_KEY = 'mediabox:conversation-id';
 
@@ -79,7 +80,7 @@ export function useChat() {
       });
   }, []);
 
-  const send = useCallback(async (text: string) => {
+  const send = useCallback(async (text: string, selection?: TypedSelection) => {
     setState(s => {
       if (s.isStreaming || !text.trim()) return s;
 
@@ -107,7 +108,7 @@ export function useChat() {
     try {
       const cid = conversationIdRef.current;
 
-      for await (const evt of streamChat(text, cid ?? undefined)) {
+      for await (const evt of streamChat(text, cid ?? undefined, selection)) {
         switch (evt.type) {
           case 'conversation':
             // Sidecar may issue a new id (first turn) or echo the same one.
@@ -213,10 +214,12 @@ export function useChat() {
     }
   }, []);
 
-  /** Clicking a choice card sends its `value` as the next user turn AND
-   *  consumes the cards on the originating message so they aren't clickable
-   *  twice. */
-  const pickChoice = useCallback(async (messageId: string, choiceId: string) => {
+  /** Clicking a choice card sends its `value` as the next user turn — together
+   *  with the card's typed `selection` when the assistant attached one
+   *  (CAT-04), so the server builds a deterministic turn instead of
+   *  re-parsing free text — AND consumes the cards on the originating message
+   *  so they aren't clickable twice. The user bubble still shows `value`. */
+  const pickChoice = useCallback(async (messageId: string, choiceId: string, selection?: TypedSelection) => {
     const target = messagesRef.current.find(m => m.id === messageId);
     const item   = target?.choices?.items.find(i => i.id === choiceId);
     if (!item) return;
@@ -228,7 +231,7 @@ export function useChat() {
       ),
     }));
 
-    await send(item.value);
+    await send(item.value, item.selection ?? selection);
   }, [send]);
 
   const clear = useCallback(async () => {

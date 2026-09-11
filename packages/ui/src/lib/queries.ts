@@ -1,6 +1,11 @@
 import { useQuery } from '@tanstack/react-query';
 import { api } from './api';
 import { useRefreshIntervals } from './use-app-preferences';
+import {
+  ACTIVE_OPERATION_STATUSES,
+  ALL_OPERATION_STATUSES,
+  isTerminalOperationStatus,
+} from './operations';
 
 /* ── Polling intervals ───────────────────────────────────────────────────────
  * Per-query refetch cadence is sourced from `useRefreshIntervals()` so the
@@ -67,6 +72,48 @@ export function useSetupInfo() {
     queryKey: ['setup-info'],
     queryFn:  api.setupInfo,
     refetchInterval: intervals.setupInfo,
+    retry: 1,
+  });
+}
+
+/* ── Operation plans (owner approval flow, Blueprint §4) ─────────────────────
+ * These poll on fixed cadences rather than the refresh profile: a plan that
+ * waits for approval expires on a short TTL, so the owner must see it fast.
+ * Every key starts with 'operations' so one invalidateQueries({ queryKey:
+ * ['operations'] }) after approve/reject/cancel refreshes all of them.
+ * ──────────────────────────────────────────────────────────────────────── */
+
+/** Plans that still need the owner's attention — pending approval or in flight. */
+export function useActiveOperations() {
+  return useQuery({
+    queryKey: ['operations', 'active'],
+    queryFn:  async () => (await api.operationsList(ACTIVE_OPERATION_STATUSES, 20)).plans,
+    refetchInterval: 3000,
+    retry: 1,
+  });
+}
+
+/** One plan record, polled every 2s until it reaches a terminal status
+ *  (then polling stops). Disabled while `id` is null. */
+export function useOperation(id: string | null) {
+  return useQuery({
+    queryKey: ['operations', 'plan', id],
+    queryFn:  () => api.operationGet(id as string),
+    enabled:  id !== null,
+    refetchInterval: (query) => {
+      const status = query.state.data?.status;
+      return status && isTerminalOperationStatus(status) ? false : 2000;
+    },
+    retry: 1,
+  });
+}
+
+/** Recent plans across every status — the Settings → Operations list. */
+export function useRecentOperations(limit = 20) {
+  return useQuery({
+    queryKey: ['operations', 'recent', limit],
+    queryFn:  async () => (await api.operationsList(ALL_OPERATION_STATUSES, limit)).plans,
+    refetchInterval: 10_000,
     retry: 1,
   });
 }

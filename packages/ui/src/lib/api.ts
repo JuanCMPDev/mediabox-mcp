@@ -10,6 +10,8 @@ import type {
   EnvUpdate,
   EnvUpdateResult,
   RestartServicesResult,
+  OperationPlanRecord,
+  OperationPlanSummary,
 } from '@mediabox/contracts';
 
 import { getRuntimeConfig } from './runtime-config';
@@ -27,13 +29,41 @@ const HEADERS = () => {
   };
 };
 
+/** Error thrown by every REST helper below. `message` carries the server's
+ *  `error` field whenever the body is the mcp-server's JSON error shape
+ *  (`{ error, code }` — e.g. ERR_MANIFEST_HASH_MISMATCH on a stale approval),
+ *  so callers can show it verbatim; otherwise it falls back to the raw
+ *  `API <status>: <body>` text. `code` is the machine-readable error code. */
+export class ApiError extends Error {
+  constructor(
+    readonly status: number,
+    message: string,
+    readonly code?: string,
+  ) {
+    super(message);
+    this.name = 'ApiError';
+  }
+}
+
+function toApiError(status: number, path: string, text: string): ApiError {
+  try {
+    const body = JSON.parse(text) as { error?: unknown; code?: unknown };
+    if (body && typeof body.error === 'string' && body.error) {
+      return new ApiError(status, body.error, typeof body.code === 'string' ? body.code : undefined);
+    }
+  } catch {
+    // Not JSON — fall through to the generic message.
+  }
+  return new ApiError(status, `API ${status}: ${text || path}`);
+}
+
 async function get<T>(path: string): Promise<T> {
   const { apiUrl } = getRuntimeConfig();
   const res = await fetch(`${apiUrl}${path}`, {
     headers: HEADERS(),
     signal: AbortSignal.timeout(10_000),
   });
-  if (!res.ok) throw new Error(`API ${res.status}: ${path}`);
+  if (!res.ok) throw toApiError(res.status, path, await res.text());
   return res.json() as Promise<T>;
 }
 
@@ -45,7 +75,7 @@ async function post<T = void>(path: string, body?: unknown, timeoutMs = 10_000):
     body:   body ? JSON.stringify(body) : undefined,
     signal: AbortSignal.timeout(timeoutMs),
   });
-  if (!res.ok) throw new Error(`API ${res.status}: ${await res.text()}`);
+  if (!res.ok) throw toApiError(res.status, path, await res.text());
   if (res.status === 204) return undefined as T;
   const text = await res.text();
   return (text ? JSON.parse(text) : undefined) as T;
@@ -59,7 +89,7 @@ async function patch<T = void>(path: string, body?: unknown, timeoutMs = 15_000)
     body:   body ? JSON.stringify(body) : undefined,
     signal: AbortSignal.timeout(timeoutMs),
   });
-  if (!res.ok) throw new Error(`API ${res.status}: ${await res.text()}`);
+  if (!res.ok) throw toApiError(res.status, path, await res.text());
   const text = await res.text();
   return (text ? JSON.parse(text) : undefined) as T;
 }
@@ -70,7 +100,7 @@ async function getText(path: string): Promise<string> {
     headers: HEADERS(),
     signal: AbortSignal.timeout(10_000),
   });
-  if (!res.ok) throw new Error(`API ${res.status}: ${path}`);
+  if (!res.ok) throw toApiError(res.status, path, await res.text());
   return res.text();
 }
 
@@ -81,7 +111,7 @@ async function del(path: string): Promise<void> {
     headers: HEADERS(),
     signal:  AbortSignal.timeout(10_000),
   });
-  if (!res.ok) throw new Error(`API ${res.status}: ${await res.text()}`);
+  if (!res.ok) throw toApiError(res.status, path, await res.text());
 }
 
 export const api = {
@@ -161,5 +191,36 @@ export const api = {
   },
   setupProwlarrIndexers() {
     return get<{ count: number; url: string }>('/api/setup/prowlarr/indexers');
+  },
+
+  // ── Operation plans (owner approval flow, Blueprint §4) ────────────────────
+  // These calls carry the owner key, the only principal allowed to approve —
+  // the server answers 403 (ERR_FORBIDDEN_SCOPE / ERR_FORBIDDEN_AGENT) to
+  // anything else, 409 on a manifest-hash mismatch and 410 once a plan expired.
+  operationsList(statuses?: readonly string[], limit = 20): Promise<{ plans: OperationPlanSummary[] }> {
+    const params = new URLSearchParams({ limit: String(limit) });
+    if (statuses && statuses.length > 0) params.set('statuses', statuses.join(','));
+    return get(`/api/operations/plans?${params.toString()}`);
+  },
+  operationGet(id: string): Promise<OperationPlanRecord> {
+    return get(`/api/operations/plans/${encodeURIComponent(id)}`);
+  },
+  operationApprove(id: string, manifestHash: string): Promise<OperationPlanRecord> {
+    return post<OperationPlanRecord>(
+      `/api/operations/plans/${encodeURIComponent(id)}/approve`,
+      { manifestHash },
+    );
+  },
+  operationReject(id: string, reason: string): Promise<OperationPlanRecord> {
+    return post<OperationPlanRecord>(
+      `/api/operations/plans/${encodeURIComponent(id)}/reject`,
+      { reason },
+    );
+  },
+  operationCancel(id: string, reason?: string): Promise<OperationPlanRecord> {
+    return post<OperationPlanRecord>(
+      `/api/operations/plans/${encodeURIComponent(id)}/cancel`,
+      reason ? { reason } : {},
+    );
   },
 };

@@ -148,3 +148,41 @@ describe("generateDockerCompose", () => {
     expect(parsed.services["mcp-server"].environment).toContain("BIND_HOST=0.0.0.0");
   });
 });
+
+describe("generateDockerCompose — agent credential wiring (Blueprint §4.1 / B02)", () => {
+  it("passes AGENT_API_KEY and MEDIABOX_INSTALLATION_ID to mcp-server next to INTERNAL_API_KEY", () => {
+    const parsed = parse(generateDockerCompose(baseConfig())) as any;
+    const env: string[] = parsed.services["mcp-server"].environment;
+    expect(env).toContain("INTERNAL_API_KEY=${INTERNAL_API_KEY}");
+    expect(env).toContain("AGENT_API_KEY=${AGENT_API_KEY}");
+    expect(env).toContain("MEDIABOX_INSTALLATION_ID=${MEDIABOX_INSTALLATION_ID}");
+  });
+
+  it("gives the telegram bot the agent credential, never the owner key", () => {
+    const cfg = baseConfig();
+    cfg.telegram = {
+      botToken: "bot",
+      llm: { kind: "openrouter", apiKey: "k", model: "m" },
+      allowedUserIds: [],
+    };
+    const parsed = parse(generateDockerCompose(cfg)) as any;
+    const env: string[] = parsed.services["telegram-bot"].environment;
+    expect(env).toContain("MCP_AGENT_API_KEY=${AGENT_API_KEY}");
+    expect(env).not.toContain("MCP_INTERNAL_API_KEY=${INTERNAL_API_KEY}");
+    expect(env.some((e) => e.startsWith("MCP_INTERNAL_API_KEY="))).toBe(false);
+    expect(env.some((e) => e.includes("${INTERNAL_API_KEY}"))).toBe(false);
+  });
+
+  it("wires the agent credential for the google provider variant too", () => {
+    const cfg = baseConfig();
+    cfg.telegram = {
+      botToken: "bot",
+      llm: { kind: "google", apiKey: "k" },
+      allowedUserIds: [],
+    };
+    const parsed = parse(generateDockerCompose(cfg)) as any;
+    const env: string[] = parsed.services["telegram-bot"].environment;
+    expect(env).toContain("MCP_AGENT_API_KEY=${AGENT_API_KEY}");
+    expect(env.some((e) => e.includes("INTERNAL_API_KEY"))).toBe(false);
+  });
+});

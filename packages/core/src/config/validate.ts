@@ -41,6 +41,11 @@ export function validateDeployConfig(config: DeployConfig): string[] {
   // MCP
   if (!config.mcp.publicUrl) errors.push("mcp.publicUrl is required");
   if (!config.mcp.internalApiKey) errors.push("mcp.internalApiKey is required");
+  // Blueprint §4.1 / B02: the agent credential must never equal the owner key,
+  // otherwise the Telegram bot / loopback client would carry owner authority.
+  if (config.mcp.agentApiKey && config.mcp.agentApiKey === config.mcp.internalApiKey) {
+    errors.push("mcp.agentApiKey must differ from mcp.internalApiKey (Blueprint §4.1 / B02)");
+  }
 
   // Telegram (only if enabled)
   if (config.telegram) {

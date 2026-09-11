@@ -1,0 +1,44 @@
+/* Top-bar pill: count of active operation plans. It sits inside TopBar's
+ * `.right` cluster, so it must opt out of the Tauri drag region. */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 8px 3px 6px;
+  border-radius: var(--radius-full);
+  border: 1px solid rgba(173, 198, 255, 0.18);
+  background: rgba(173, 198, 255, 0.08);
+  color: var(--primary);
+  font: 600 11px var(--font-sans);
+  line-height: 1;
+  cursor: pointer;
+  -webkit-app-region: no-drag;
+  app-region: no-drag;
+  transition: background var(--transition-fast), border-color var(--transition-fast);
+}
+
+.badge:hover {
+  background: rgba(173, 198, 255, 0.14);
+  border-color: rgba(173, 198, 255, 0.30);
+}
+
+/* Something waits for the owner: amber + a soft pulse. */
+.badgePending {
+  border-color: rgba(255, 189, 46, 0.35);
+  background: rgba(255, 189, 46, 0.10);
+  color: #ffd76b;
+  animation: ops-badge-pulse 1.6s ease-in-out infinite;
+}
+
+.badgePending:hover {
+  background: rgba(255, 189, 46, 0.18);
+}
+
+@keyframes ops-badge-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(255, 189, 46, 0); }
+  50%      { box-shadow: 0 0 0 4px rgba(255, 189, 46, 0.14); }
+}
+
+.badgeCount {
+  font-variant-numeric: tabular-nums;
+}
