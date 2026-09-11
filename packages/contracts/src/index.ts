@@ -850,3 +850,267 @@ export interface QuarantineEntry {
   reclaimableOnPurgeBytes: number;
 }
 
+// ── Model Evaluation & Objective Comparator (P11 / §4.1..4.5) ────────────────
+
+export type EvaluationScenarioCategory = 'READ' | 'SEARCH' | 'DOWNLOAD' | 'STORAGE' | 'ADV';
+
+export interface ModelProfileRAM {
+  physicalBytes: number;
+  usableBytes: number;
+  reservedSystemBytes: number;
+  reservedInferenceBytes: number;
+}
+
+export interface ModelProfileOS {
+  name: string;
+  build: string;
+  platform: string;
+  arch: string;
+}
+
+export interface ModelProfileGPU {
+  name: string;
+  vramBytes: number;
+  driver: string;
+  backend: string;
+}
+
+export interface ModelProfileRuntime {
+  name: string;
+  version: string;
+  binaryOrDigest: string;
+  model: string;
+}
+
+export interface ModelProfileArtifacts {
+  name: string;
+  totalParameters: number;
+  activeParameters: number;
+  isMoe: boolean;
+  quantization: string;
+  hashes: {
+    weightsSha256: string;
+    tokenizerSha256: string;
+    templateSha256: string;
+  };
+  parser: string;
+}
+
+export interface ModelProfileSampling {
+  temperature: number;
+  seed?: number;
+  topP?: number;
+  unsupported?: string[];
+}
+
+export interface ModelProfileJellyfinLoad {
+  activeTranscode: boolean;
+  sharedDevice: boolean;
+  measuredFps?: number;
+}
+
+export interface ModelProfileDeviceSharing {
+  sharesGpuWithTranscode: boolean;
+  gpuId?: string;
+}
+
+export interface ModelProfileMemoryPolicy {
+  maxMemoryFractionOfReservedBudget: number;
+  maxMemorySampleIntervalMs: number;
+}
+
+export interface ModelProfile {
+  schemaVersion: 1;
+  profileId: string;
+  cpu: string;
+  ram: ModelProfileRAM;
+  os: ModelProfileOS;
+  gpu: ModelProfileGPU;
+  runtime: ModelProfileRuntime;
+  model: ModelProfileArtifacts;
+  sampling: ModelProfileSampling;
+  context: number;
+  maxConcurrency: number;
+  jellyfinLoad: ModelProfileJellyfinLoad;
+  deviceSharing: ModelProfileDeviceSharing;
+  memoryPolicy: ModelProfileMemoryPolicy;
+}
+
+export interface ScenarioFactExtractor {
+  requiredEntities: string[];
+  requiredValues: string[];
+  requiredStates: string[];
+  forbiddenPhrases?: string[];
+  negations?: string[];
+}
+
+export interface ScenarioTurnSpec {
+  user: string;
+  selection?: TypedSelection;
+  ownerActor?: {
+    action: 'approve_plan' | 'reject_plan' | 'duplicate_click';
+    planId?: string;
+  };
+  expected?: {
+    ledger?: Array<{ tool: string; args?: Record<string, unknown> }>;
+    state?: Record<string, unknown>;
+    facts?: ScenarioFactExtractor;
+    guardCode?: string;
+    expectedRejection?: boolean;
+    forbiddenTools?: string[];
+    maxInferences?: number;
+    maxToolCalls?: number;
+  };
+  scriptedProvider?: Array<Array<{ type: string; [key: string]: unknown }>>;
+}
+
+export interface EvaluationScenario {
+  id: string;
+  category: EvaluationScenarioCategory;
+  title: string;
+  description: string;
+  locale: 'es' | 'en';
+  warmFirstEventEligible: boolean;
+  warmTaskEligible: boolean;
+  fixtures: Record<string, unknown>;
+  initialState?: Record<string, unknown>;
+  turns: ScenarioTurnSpec[];
+}
+
+export interface ScenarioExecutionViolations {
+  authorization: number;
+  scope: number;
+  egress: number;
+  invalidArguments: number;
+}
+
+export interface ScenarioExecutionRecord {
+  scenarioId: string;
+  category: EvaluationScenarioCategory;
+  passNumber: number;
+  attemptNumber: number;
+  startedAt: string;
+  completedAt: string;
+  durationMs: number;
+  firstVisibleEventMs: number | null;
+  taskDurationMs: number | null;
+  promptTokens: number;
+  completionTokens: number;
+  totalTokens: number;
+  ledger: Array<{ tool: string; args?: Record<string, unknown> }>;
+  violations: ScenarioExecutionViolations;
+  factsMatched: boolean;
+  factsDetails?: {
+    missingEntities?: string[];
+    missingValues?: string[];
+    missingStates?: string[];
+    foundForbidden?: string[];
+    missingNegations?: string[];
+  };
+  success: boolean;
+  error?: string;
+}
+
+export interface EvaluationPassSummary {
+  passNumber: number;
+  scenarioCount: number;
+  successCount: number;
+  failureCount: number;
+  passRate: number;
+  categoryRates: Record<string, { count: number; success: number; rate: number }>;
+  violations: ScenarioExecutionViolations;
+  warmFirstUsefulEventP95Ms: number;
+  warmEligibleTaskP95Ms: number;
+}
+
+export interface EvaluationPerformanceReport {
+  warmFirstUsefulEventP95Ms: number;
+  warmEligibleTaskP95Ms: number;
+  coldCanaryTimingsMs: number[];
+  peakMemoryFraction: number;
+  mediaThroughputDegradation: number;
+  oomOrRestarts: number;
+}
+
+export interface EvaluationContract {
+  schemaVersion: 1;
+  contractId: string;
+  status: string;
+  categories: Record<string, { count: number; minSuccessPerPass: number }>;
+  passes: number;
+  scenariosPerPass: number;
+  plannedExecutions: number;
+  minSuccessPerPass: number;
+  maxAuthorizationViolations: number;
+  maxScopeViolations: number;
+  maxEgressViolations: number;
+  maxInvalidArgumentsExecuted: number;
+  agentLimits: {
+    contextTokens: number;
+    outputReserveTokens: number;
+    minimumSafetyMarginTokens: number;
+    initialInputBudgetTokens: number;
+    maxInferencesPerTurn: number;
+    maxToolCallsPerTurn: number;
+    maxVirtualToolsExcludingPresentChoices: number;
+    maxRepairs: number;
+    turnTimeoutMs: number;
+  };
+  performance: {
+    quantile: string;
+    mandatoryWarmEligibleScenarioRanges: string[];
+    minimumWarmEligibleTasksPerPass: number;
+    warmFirstUsefulEventP95Ms: number;
+    warmEligibleTaskP95Ms: number;
+    coldLoadAndCanaryMaxMs: number;
+    coldRuns: number;
+    maxRuntimeMemoryFractionOfReservedBudget: number;
+    maxMemorySampleIntervalMs: number;
+    mediaBaselineRuns: number;
+    mediaConcurrentRuns: number;
+    maxMediaThroughputLoss: number;
+    maxOomOrRestarts: number;
+  };
+  evidence: {
+    realModelRequired: boolean;
+    isolatedControllerRequired: boolean;
+    exactCandidateRequired: boolean;
+    retainAllAttempts: boolean;
+    infrastructureRerunUnit: string;
+    minimumRetentionDays: number;
+  };
+}
+
+export interface ExperimentManifest {
+  schemaVersion: 1;
+  repo: string;
+  baseRef: string;
+  baseSha: string;
+  headSha: string;
+  checkoutSha: string;
+  treeSha: string;
+  workflowRef?: string;
+  runId?: string;
+  controllerId: string;
+  timestamp: string;
+  profile: ModelProfile;
+  contract: EvaluationContract;
+  hashes: {
+    contractSha256: string;
+    corpusSha256: string;
+    profileSha256: string;
+    scorerSha256: string;
+    packageLockSha256: string;
+  };
+  toolchains: {
+    node: string;
+    os: string;
+  };
+  executions: ScenarioExecutionRecord[];
+  passes: EvaluationPassSummary[];
+  performance: EvaluationPerformanceReport;
+  finalStatus: 'passed' | 'failed' | 'not_compatible';
+  certified: boolean;
+}
+
+

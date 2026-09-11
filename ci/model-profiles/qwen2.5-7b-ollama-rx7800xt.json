@@ -1,0 +1,63 @@
+{
+  "schemaVersion": 1,
+  "profileId": "qwen2.5-7b-ollama-rx7800xt",
+  "cpu": "AMD Ryzen 7 7800X3D (8C/16T)",
+  "ram": {
+    "physicalBytes": 34359738368,
+    "usableBytes": 32212254720,
+    "reservedSystemBytes": 8589934592,
+    "reservedInferenceBytes": 17179869184
+  },
+  "os": {
+    "name": "Windows",
+    "build": "10.0.22631",
+    "platform": "win32",
+    "arch": "x64"
+  },
+  "gpu": {
+    "name": "AMD Radeon RX 7800 XT",
+    "vramBytes": 17179869184,
+    "driver": "24.7.1",
+    "backend": "rocm-hip"
+  },
+  "runtime": {
+    "name": "ollama",
+    "version": "0.5.7",
+    "binaryOrDigest": "sha256:4a65b93d640b7d341d3b4bbd2df89dfcbe93ca7cb3c31671fc6cfbe5fbb0e629",
+    "model": "qwen2.5:7b-instruct-q4_K_M"
+  },
+  "model": {
+    "name": "qwen2.5:7b-instruct",
+    "totalParameters": 7615616000,
+    "activeParameters": 7615616000,
+    "isMoe": false,
+    "quantization": "Q4_K_M",
+    "hashes": {
+      "weightsSha256": "4a65b93d640b7d341d3b4bbd2df89dfcbe93ca7cb3c31671fc6cfbe5fbb0e629",
+      "tokenizerSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "templateSha256": "8d39f72b21c4b1897d26bb4c87c2b0b1a03f44e1c2d0f023f95e5d17c76a5a92"
+    },
+    "parser": "qwen-hermes"
+  },
+  "sampling": {
+    "temperature": 0,
+    "seed": 42,
+    "topP": 1,
+    "unsupported": []
+  },
+  "context": 8192,
+  "maxConcurrency": 1,
+  "jellyfinLoad": {
+    "activeTranscode": false,
+    "sharedDevice": true,
+    "measuredFps": 120.5
+  },
+  "deviceSharing": {
+    "sharesGpuWithTranscode": true,
+    "gpuId": "0"
+  },
+  "memoryPolicy": {
+    "maxMemoryFractionOfReservedBudget": 0.7,
+    "maxMemorySampleIntervalMs": 250
+  }
+}

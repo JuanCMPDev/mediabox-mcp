@@ -37,7 +37,11 @@
     "sidecar:build": "node packages/desktop/scripts/build-sidecar.mjs",
     "bundle:desktop": "npm run bundle --workspace packages/desktop",
     "icons:desktop": "npm run icons  --workspace packages/desktop",
-    "test:local-provider": "vitest run packages/chat-core/src/providers packages/core/src/hardware packages/core/src/models"
+    "test:local-provider": "vitest run packages/chat-core/src/providers packages/core/src/hardware packages/core/src/models",
+    "test:eval-harness": "node --test tests/eval-harness/*.test.mjs",
+    "eval:local": "node evals/local-agent/runner.mjs",
+    "ci:evidence": "node scripts/ci/evidence.mjs",
+    "ci:verify-evidence": "node scripts/ci/verify-evidence.mjs"
   },
   "engines": {
     "node": ">=20"

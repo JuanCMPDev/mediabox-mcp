@@ -244,6 +244,29 @@ jobs:
       - name: Verify Isolated Local Egress & Secret Neutralization (NET-01..NET-06)
         run: npm run test:local-egress
 
+  gate-model-quality:
+    name: gate/model-quality (G10)
+    needs: [gate-build-unit]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 22.19.0
+          cache: npm
+
+      - name: Install workspaces
+        run: npm ci
+
+      - name: Build workspaces
+        run: npm run ci:build
+
+      - name: Verify Local Evaluation Test Harness (CI without GPU)
+        run: npm run test:eval-harness
+
+      - name: Verify Certified Model Quality Evidence (G10)
+        run: npm run ci:verify-evidence
 
   audit:
     name: Security Audit
@@ -327,6 +350,7 @@ jobs:
       - gate-agent-replay
       - gate-runtime-packaging
       - gate-local-egress
+      - gate-model-quality
       - audit
       - docker-build
     runs-on: ubuntu-latest

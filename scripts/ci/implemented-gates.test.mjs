@@ -10,16 +10,16 @@ const baseline = {
   workflow: fs.readFileSync(new URL(".github/workflows/ci.yml", repoRoot), "utf8"),
 };
 
-test("G00 accepts current implemented gates without requiring future G10+ scripts", () => {
+test("G00 accepts current implemented gates without requiring future G11+ scripts", () => {
   const candidate = structuredClone(baseline);
-  for (const gate of ["G10", "G11", "G12"]) {
+  for (const gate of ["G11", "G12"]) {
     candidate.matrix.gates[gate].requiredCheck = `npm run future:${gate}`;
   }
   assert.deepEqual(validateImplementedGateScripts(candidate), []);
 });
 
-test("G00 rejects removal of every npm script required by G00..G09", () => {
-  for (let i = 0; i <= 9; i++) {
+test("G00 rejects removal of every npm script required by G00..G10", () => {
+  for (let i = 0; i <= 10; i++) {
     const gateId = `G${String(i).padStart(2, "0")}`;
     for (const script of npmScriptsIn(baseline.matrix.gates[gateId].requiredCheck)) {
       const candidate = structuredClone(baseline);
@@ -57,5 +57,17 @@ test("G00 rejects silently ignored local egress failures", () => {
   const candidate = structuredClone(baseline);
   candidate.workflow = candidate.workflow.replace("run: npm run test:local-egress", "continue-on-error: true\n        run: npm run test:local-egress");
   assert.ok(validateImplementedGateScripts(candidate).includes("G09: egress test failures must not be ignored with continue-on-error"));
+});
+
+test("G00 rejects a model quality test present only as a commented workflow command", () => {
+  const candidate = structuredClone(baseline);
+  candidate.workflow = candidate.workflow.replace("run: npm run ci:verify-evidence", "# run: npm run ci:verify-evidence");
+  assert.ok(validateImplementedGateScripts(candidate).includes("G10: workflow job does not run ci:verify-evidence"));
+});
+
+test("G00 rejects silently ignored model quality failures", () => {
+  const candidate = structuredClone(baseline);
+  candidate.workflow = candidate.workflow.replace("run: npm run ci:verify-evidence", "continue-on-error: true\n        run: npm run ci:verify-evidence");
+  assert.ok(validateImplementedGateScripts(candidate).includes("G10: model quality test failures must not be ignored with continue-on-error"));
 });
 

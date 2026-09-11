@@ -5,7 +5,7 @@ export function npmScriptsIn(command) {
 
 export function validateImplementedGateScripts({ matrix, packageJson, workflow }) {
   const errors = [];
-  for (let i = 0; i <= 9; i++) {
+  for (let i = 0; i <= 10; i++) {
     const gateId = `G${String(i).padStart(2, "0")}`;
     const command = matrix.gates?.[gateId]?.requiredCheck;
     if (typeof command !== "string" || npmScriptsIn(command).length === 0) {
@@ -19,7 +19,7 @@ export function validateImplementedGateScripts({ matrix, packageJson, workflow }
     }
   }
 
-  // G10+ commands remain declared future work. G08 must actually run both
+  // G11+ commands remain declared future work. G08 must actually run both
   // existing smokes in its job, rather than just naming them in the matrix.
   const lines = workflow.split(/\r?\n/);
   const start = lines.findIndex((line) => /^  gate-runtime-packaging:\s*$/.test(line));
@@ -58,5 +58,25 @@ export function validateImplementedGateScripts({ matrix, packageJson, workflow }
       errors.push("G09: egress test failures must not be ignored with continue-on-error");
     }
   }
+
+  // G10 must actually run test:eval-harness and ci:verify-evidence in its workflow job
+  const g10Start = lines.findIndex((line) => /^  gate-model-quality:\s*$/.test(line));
+  if (g10Start === -1) {
+    errors.push("G10: workflow job gate-model-quality is missing");
+  } else {
+    const end = lines.findIndex((line, index) => index > g10Start && /^  [\w-]+:\s*$/.test(line));
+    const job = lines.slice(g10Start + 1, end === -1 ? lines.length : end);
+    const runCommands = job.flatMap((line) => {
+      const match = line.match(/^\s+run:\s+(.+)$/);
+      return match ? npmScriptsIn(match[1]) : [];
+    });
+    for (const script of ["test:eval-harness", "ci:verify-evidence"]) {
+      if (!runCommands.includes(script)) errors.push(`G10: workflow job does not run ${script}`);
+    }
+    if (job.some((line) => /^\s+continue-on-error:\s+true\s*$/.test(line))) {
+      errors.push("G10: model quality test failures must not be ignored with continue-on-error");
+    }
+  }
+
   return errors;
 }
