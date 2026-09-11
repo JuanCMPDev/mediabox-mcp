@@ -223,6 +223,28 @@ jobs:
       - name: Run desktop sidecar subprocess smoke under Node and compiled Bun (G08)
         run: npm run smoke:desktop
 
+  gate-local-egress:
+    name: gate/local-egress (G09)
+    needs: [gate-build-unit]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 22.19.0
+          cache: npm
+
+      - name: Install workspaces
+        run: npm ci
+
+      - name: Build workspaces
+        run: npm run ci:build
+
+      - name: Verify Isolated Local Egress & Secret Neutralization (NET-01..NET-06)
+        run: npm run test:local-egress
+
+
   audit:
     name: Security Audit
     runs-on: ubuntu-latest
@@ -304,6 +326,7 @@ jobs:
       - gate-query-contracts
       - gate-agent-replay
       - gate-runtime-packaging
+      - gate-local-egress
       - audit
       - docker-build
     runs-on: ubuntu-latest

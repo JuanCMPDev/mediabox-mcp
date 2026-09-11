@@ -34,6 +34,7 @@ export function generateEnv(config: DeployConfig, keys?: DiscoveredKeys): string
     "",
     `DEPLOYMENT_MODE=${deployment.mode}`,
     ...(deployment.baseDomain ? [`BASE_DOMAIN=${deployment.baseDomain}`] : []),
+    ...(deployment.privacyProfile ? [`PRIVACY_PROFILE=${deployment.privacyProfile}`] : []),
     "",
     "# Host parameters (PR 3.4a edits these via Settings → System)",
     `TZ=${system.timezone}`,

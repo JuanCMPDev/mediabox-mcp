@@ -138,6 +138,28 @@ export function generateDockerCompose(config: DeployConfig): string {
   const ghcrMcpImage = `${GHCR_MCP_IMAGE_BASE}:\${IMAGE_TAG:-${deployment.imageTag}}`;
   const ghcrTelegramImage = `${GHCR_TELEGRAM_IMAGE_BASE}:\${IMAGE_TAG:-${deployment.imageTag}}`;
 
+  const privacy = deployment.privacyProfile;
+  const isStrictPrivacy = privacy === "offline-library" || privacy === "local-agent-online-media";
+
+  // Strict network topology (§3.1):
+  // - mediabox-inference-net is strictly internal (internal: true) between agent and inference.
+  // - mediabox-services-net connects agent with internal media services (internal: true).
+  // - mediabox-external-net is bridge with egress only for downloaders/indexers in online-media.
+  // When privacyProfile is omitted (unverified / legacy), defaults to backward-compatible mediabox-net bridge.
+  const mcpNetworks = isStrictPrivacy
+    ? ["mediabox-inference-net", "mediabox-services-net"]
+    : ["mediabox-net"];
+
+  const inferenceNetworks = isStrictPrivacy
+    ? ["mediabox-inference-net"]
+    : ["mediabox-net"];
+
+  const serviceNetworks = !isStrictPrivacy
+    ? ["mediabox-net"]
+    : privacy === "offline-library"
+      ? ["mediabox-services-net"]
+      : ["mediabox-services-net", "mediabox-external-net"];
+
   const services: Record<string, any> = {};
 
   // ── Jellyfin ──────────────────────────────────────────────────────────
@@ -147,7 +169,7 @@ export function generateDockerCompose(config: DeployConfig): string {
   services.jellyfin = {
     image: "lscr.io/linuxserver/jellyfin:latest",
     container_name: "jellyfin",
-    networks: ["mediabox-net"],
+    networks: serviceNetworks,
     ports: jellyfinPorts,
     environment: lsEnv(config),
     volumes: [
@@ -164,10 +186,11 @@ export function generateDockerCompose(config: DeployConfig): string {
   // ── MCP Server ────────────────────────────────────────────────────────
   const mcpServer: Record<string, any> = {
     container_name: "mcp-server",
-    networks: ["mediabox-net"],
+    networks: mcpNetworks,
     ports: [port("3000:3000", bindLocal)],
     environment: [
       "TZ=${TZ:-UTC}",
+      ...(privacy ? [`PRIVACY_PROFILE=${privacy}`] : []),
       "JELLYFIN_URL=http://jellyfin:8096",
       "JELLYFIN_API_KEY=${JELLYFIN_API_KEY}",
       "MEDIA_PATH=/data",
@@ -236,7 +259,7 @@ export function generateDockerCompose(config: DeployConfig): string {
   services.pyload = {
     image: "lscr.io/linuxserver/pyload-ng:latest",
     container_name: "pyload",
-    networks: ["mediabox-net"],
+    networks: serviceNetworks,
     ports: [port("8001:8000", bindLocal)],
     environment: lsEnv(config),
     volumes: ["./config/pyload:/config", "./downloads:/downloads"],
@@ -244,10 +267,11 @@ export function generateDockerCompose(config: DeployConfig): string {
   };
 
   // ── Telegram Bot (optional) ───────────────────────────────────────────
-  if (config.telegram) {
+  // Offline-library disables Telegram in process and network (§3.1).
+  if (config.telegram && privacy !== "offline-library") {
     const telegramBot: Record<string, any> = {
       container_name: "telegram-bot",
-      networks: ["mediabox-net"],
+      networks: serviceNetworks,
       environment: buildTelegramEnv(config),
       restart: "unless-stopped",
       depends_on: ["mcp-server"],
@@ -268,7 +292,7 @@ export function generateDockerCompose(config: DeployConfig): string {
   services.qbittorrent = {
     image: "lscr.io/linuxserver/qbittorrent:latest",
     container_name: "qbittorrent",
-    networks: ["mediabox-net"],
+    networks: serviceNetworks,
     ports: [port("8085:8085", bindLocal), "6881:6881", "6881:6881/udp"],
     environment: [...lsEnv(config), "WEBUI_PORT=8085"],
     volumes: ["./config/qbittorrent:/config", "./downloads:/downloads"],
@@ -278,7 +302,7 @@ export function generateDockerCompose(config: DeployConfig): string {
   services.flaresolverr = {
     image: "ghcr.io/flaresolverr/flaresolverr:latest",
     container_name: "flaresolverr",
-    networks: ["mediabox-net"],
+    networks: serviceNetworks,
     ports: [port("8191:8191", bindLocal)],
     environment: ["LOG_LEVEL=info", "TZ=${TZ:-UTC}"],
     restart: "unless-stopped",
@@ -287,7 +311,7 @@ export function generateDockerCompose(config: DeployConfig): string {
   services.prowlarr = {
     image: "lscr.io/linuxserver/prowlarr:latest",
     container_name: "prowlarr",
-    networks: ["mediabox-net"],
+    networks: serviceNetworks,
     ports: [port("9696:9696", bindLocal)],
     environment: lsEnv(config),
     volumes: ["./config/prowlarr:/config"],
@@ -297,7 +321,7 @@ export function generateDockerCompose(config: DeployConfig): string {
   services.radarr = {
     image: "lscr.io/linuxserver/radarr:latest",
     container_name: "radarr",
-    networks: ["mediabox-net"],
+    networks: serviceNetworks,
     ports: [port("7878:7878", bindLocal)],
     environment: lsEnv(config),
     volumes: [`./config/radarr:/config`, `${movRef}:/movies`, "./downloads:/downloads"],
@@ -308,7 +332,7 @@ export function generateDockerCompose(config: DeployConfig): string {
   services.sonarr = {
     image: "lscr.io/linuxserver/sonarr:latest",
     container_name: "sonarr",
-    networks: ["mediabox-net"],
+    networks: serviceNetworks,
     ports: [port("8989:8989", bindLocal)],
     environment: lsEnv(config),
     volumes: [
@@ -326,7 +350,7 @@ export function generateDockerCompose(config: DeployConfig): string {
     services.bazarr = {
       image: "lscr.io/linuxserver/bazarr:latest",
       container_name: "bazarr",
-      networks: ["mediabox-net"],
+      networks: serviceNetworks,
       ports: [port("6767:6767", bindLocal)],
       environment: lsEnv(config),
       volumes: [`./config/bazarr:/config`, `${movRef}:/movies`, `${tvRef}:/tv`],
@@ -339,7 +363,7 @@ export function generateDockerCompose(config: DeployConfig): string {
     services.caddy = {
       image: "caddy:2-alpine",
       container_name: "caddy",
-      networks: ["mediabox-net"],
+      networks: serviceNetworks,
       ports: ["80:80", "443:443", "443:443/udp"],
       volumes: [
         "./config/caddy/Caddyfile:/etc/caddy/Caddyfile:ro",
@@ -352,11 +376,11 @@ export function generateDockerCompose(config: DeployConfig): string {
   }
 
   // ── Cloudflare Tunnel (tunnel mode) ──────────────────────────────────
-  if (deployment.mode === "tunnel") {
+  if (deployment.mode === "tunnel" && privacy !== "offline-library") {
     services.cloudflared = {
       image: "cloudflare/cloudflared:latest",
       container_name: "cloudflared",
-      networks: ["mediabox-net"],
+      networks: serviceNetworks,
       command: "tunnel --no-autoupdate run",
       environment: ["TUNNEL_TOKEN=${CLOUDFLARE_TUNNEL_TOKEN}"],
       restart: "unless-stopped",
@@ -370,7 +394,7 @@ export function generateDockerCompose(config: DeployConfig): string {
       image: "ollama/ollama:latest",
       container_name: "mediabox-inference",
       profiles: ["inference-cuda"],
-      networks: ["mediabox-net"],
+      networks: inferenceNetworks,
       ports: [port("11434:11434", bindLocal)],
       environment: [
         "OLLAMA_NO_CLOUD=1",
@@ -400,7 +424,7 @@ export function generateDockerCompose(config: DeployConfig): string {
       image: "ollama/ollama:rocm",
       container_name: "mediabox-inference",
       profiles: ["inference-rocm"],
-      networks: ["mediabox-net"],
+      networks: inferenceNetworks,
       ports: [port("11434:11434", bindLocal)],
       devices: ["/dev/kfd", "/dev/dri"],
       group_add: ["video", "render"],
@@ -419,7 +443,7 @@ export function generateDockerCompose(config: DeployConfig): string {
       image: "ghcr.io/ggml-org/llama.cpp:server-vulkan",
       container_name: "mediabox-inference",
       profiles: ["inference-vulkan"],
-      networks: ["mediabox-net"],
+      networks: inferenceNetworks,
       ports: [port("8080:8080", bindLocal)],
       devices: ["/dev/dri"],
       // llama.cpp needs the model, the context size and --jinja for tool calling:
@@ -440,7 +464,7 @@ export function generateDockerCompose(config: DeployConfig): string {
       image: "ollama/ollama:latest",
       container_name: "mediabox-inference",
       profiles: ["inference-cpu"],
-      networks: ["mediabox-net"],
+      networks: inferenceNetworks,
       ports: [port("11434:11434", bindLocal)],
       environment: [
         "OLLAMA_NO_CLOUD=1",
@@ -454,8 +478,25 @@ export function generateDockerCompose(config: DeployConfig): string {
     };
   }
 
+  let composeNetworks: Record<string, any>;
+  if (!isStrictPrivacy) {
+    composeNetworks = { "mediabox-net": { driver: "bridge" } };
+  } else if (privacy === "offline-library") {
+    composeNetworks = {
+      "mediabox-inference-net": { driver: "bridge", internal: true },
+      "mediabox-services-net": { driver: "bridge", internal: true },
+    };
+  } else {
+    // local-agent-online-media
+    composeNetworks = {
+      "mediabox-inference-net": { driver: "bridge", internal: true },
+      "mediabox-services-net": { driver: "bridge", internal: true },
+      "mediabox-external-net": { driver: "bridge" },
+    };
+  }
+
   const compose = {
-    networks: { "mediabox-net": { driver: "bridge" } },
+    networks: composeNetworks,
     services,
   };
 

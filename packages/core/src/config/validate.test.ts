@@ -87,3 +87,49 @@ describe("local inference config alignment with the endpoint policy (LOC-06)", (
     expect(errors.join(" ")).toContain("must use http");
   });
 });
+
+describe("PrivacyProfile validation (§3.1)", () => {
+  it("accepts valid privacy profiles", () => {
+    const cfg1 = baseConfig();
+    cfg1.deployment.privacyProfile = "offline-library";
+    cfg1.telegram = undefined;
+    cfg1.ai = { kind: "local", runtime: "ollama", baseUrl: "http://127.0.0.1:11434", model: "qwen2.5:7b" };
+    expect(validateDeployConfig(cfg1)).toEqual([]);
+
+    const cfg2 = baseConfig();
+    cfg2.deployment.privacyProfile = "local-agent-online-media";
+    cfg2.ai = { kind: "local", runtime: "ollama", baseUrl: "http://127.0.0.1:11434", model: "qwen2.5:7b" };
+    expect(validateDeployConfig(cfg2)).toEqual([]);
+  });
+
+  it("rejects unknown privacy profile", () => {
+    const cfg = baseConfig();
+    cfg.deployment.privacyProfile = "invalid-profile" as any;
+    expect(validateDeployConfig(cfg)).toContain(
+      "deployment.privacyProfile 'invalid-profile' is not a valid privacy profile",
+    );
+  });
+
+  it("in offline-library: rejects cloud LLM provider and telegram bot", () => {
+    const cfg = baseConfig();
+    cfg.deployment.privacyProfile = "offline-library";
+    cfg.telegram = {
+      botToken: "tok",
+      llm: { kind: "openrouter", apiKey: "k", model: "m" },
+      allowedUserIds: [],
+    };
+    const errors = validateDeployConfig(cfg);
+    expect(errors).toContain("deployment.privacyProfile=offline-library requires telegram to be disabled");
+    expect(errors).toContain("deployment.privacyProfile=offline-library forbids cloud LLM provider 'openrouter'");
+  });
+
+  it("in local-agent-online-media: rejects cloud LLM provider for agent", () => {
+    const cfg = baseConfig();
+    cfg.deployment.privacyProfile = "local-agent-online-media";
+    cfg.ai = { kind: "openrouter", apiKey: "k", model: "m" };
+    const errors = validateDeployConfig(cfg);
+    expect(errors).toContain(
+      "deployment.privacyProfile=local-agent-online-media forbids cloud LLM provider 'openrouter' for agent inference",
+    );
+  });
+});

@@ -197,6 +197,55 @@ export interface ChatInfo {
   endpointPolicy?: 'loopback-only' | 'lan-allowlist';
   /** Diagnostic note, e.g. a context mismatch or a failed probe. */
   warning?: string;
+  /** Observable privacy profile (§3.1 / NET-01..06). Unverified when unconfigured. */
+  privacyProfile?: PrivacyProfile | 'unverified';
+}
+
+// ── Privacy & Verifiable Deployment Profiles (P10 / §3.1) ───────────────────
+
+export type PrivacyProfile = 'offline-library' | 'local-agent-online-media';
+
+export type ArtifactType = 'image' | 'model' | 'binary';
+
+export interface ArtifactPlatformDigests {
+  platformDigest: string;
+  multiarchIndex?: string;
+  weightsDigest?: string;
+  tokenizerDigest?: string;
+  templateDigest?: string;
+}
+
+export interface ArtifactManifest {
+  schemaVersion: 1;
+  id: string;
+  type: ArtifactType;
+  sourceUri: string;
+  sha256: string;
+  sizeBytes: number;
+  platform: string;
+  architecture: string;
+  license: string;
+  resolvedAt: string;
+  digests: ArtifactPlatformDigests;
+  quantization?: string;
+}
+
+export type RuntimeLifecycleState =
+  | 'not_provisioned'
+  | 'stopped'
+  | 'starting'
+  | 'ready'
+  | 'unavailable'
+  | 'error';
+
+export interface RuntimeResourceLimits {
+  reservedCpuCores: number;
+  reservedRamBytes: number;
+  reservedVramBytes?: number;
+  maxContextTokens: number;
+  maxActiveConversations: number;
+  maxLoadedModels: number;
+  maxParallelInferences: number;
 }
 
 /** One model of the catalog evaluated against the detected hardware (§3.4 / LOC-09). */
@@ -275,6 +324,7 @@ export interface DeploymentConfig {
   tunnelToken?:      string;
   localBuild:        boolean;
   imageTag:          string;
+  privacyProfile?:   PrivacyProfile;
 }
 
 export interface SystemConfig {

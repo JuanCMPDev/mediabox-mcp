@@ -82,3 +82,9 @@ export {
   requiredMemoryBytes,
   RUNTIME_OVERHEAD_FACTOR,
 } from "./models/catalog.js";
+
+// Artifacts & Provisioning (§3.2 / P10)
+export * from "./artifacts/manifest.js";
+
+// Runtime Lifecycle & Resource Admission (§3.2, §3.3 / P10)
+export * from "./runtime/lifecycle.js";

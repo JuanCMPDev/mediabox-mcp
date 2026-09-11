@@ -22,6 +22,7 @@
     "test:filesystem": "vitest run packages/mcp-server/src/storage/storage.test.ts",
     "test:media-recovery": "vitest run packages/mcp-server/src/storage/media-jobs.test.ts",
     "test:agent-replay": "vitest run packages/chat-core/src/agent",
+    "test:local-egress": "node --test tests/local-egress/*.test.mjs",
     "smoke:media-ffmpeg": "node scripts/ci/smoke-media-ffmpeg.mjs",
     "smoke:node-bun": "node scripts/ci/smoke-node-bun.mjs",
     "smoke:desktop": "npm run smoke:execa -w @mediabox/desktop && npm run smoke:execa-compiled -w @mediabox/desktop",

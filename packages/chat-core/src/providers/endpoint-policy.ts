@@ -128,6 +128,10 @@ export async function validateInferenceEndpoint(
     throw new AgentError('ERR_ENDPOINT_POLICY', `Malformed inference endpoint URL: '${urlStr}'`);
   }
 
+  if (url.username || url.password) {
+    throw new AgentError('ERR_ENDPOINT_POLICY', 'Inference endpoint must not contain embedded credentials');
+  }
+
   if (url.protocol === 'https:') {
     // Connecting to a pinned IP and validating a certificate for a hostname are
     // mutually exclusive without fingerprint pinning, which lands with P10.

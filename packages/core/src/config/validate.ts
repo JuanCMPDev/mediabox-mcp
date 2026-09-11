@@ -21,6 +21,24 @@ export function validateDeployConfig(config: DeployConfig): string[] {
     if (!d.tunnelToken) errors.push("deployment.tunnelToken is required for mode=tunnel");
   }
   if (!d.imageTag) errors.push("deployment.imageTag is required");
+  if (d.privacyProfile !== undefined) {
+    if (d.privacyProfile !== "offline-library" && d.privacyProfile !== "local-agent-online-media") {
+      errors.push(`deployment.privacyProfile '${d.privacyProfile}' is not a valid privacy profile`);
+    } else if (d.privacyProfile === "offline-library") {
+      if (config.telegram) {
+        errors.push("deployment.privacyProfile=offline-library requires telegram to be disabled");
+      }
+      const llmProvider = (config.ai ?? config.telegram?.llm)?.kind;
+      if (llmProvider === "openrouter" || llmProvider === "google") {
+        errors.push(`deployment.privacyProfile=offline-library forbids cloud LLM provider '${llmProvider}'`);
+      }
+    } else if (d.privacyProfile === "local-agent-online-media") {
+      const llmProvider = config.ai?.kind;
+      if (llmProvider === "openrouter" || llmProvider === "google") {
+        errors.push(`deployment.privacyProfile=local-agent-online-media forbids cloud LLM provider '${llmProvider}' for agent inference`);
+      }
+    }
+  }
 
   // System
   if (!config.system.timezone) errors.push("system.timezone is required");

@@ -258,3 +258,72 @@ describe("local inference reachability inside the compose network (§3.2 / B4)",
     expect(yaml).toContain("OLLAMA_NO_CLOUD=1");
   });
 });
+
+describe("PrivacyProfile network isolation in docker-compose (§3.1 / NET-01, NET-06)", () => {
+  it("offline-library uses internal-only networks, isolates mcp-server and inference, and omits telegram", () => {
+    const cfg = baseConfig();
+    cfg.deployment.privacyProfile = "offline-library";
+    cfg.telegram = {
+      botToken: "tok",
+      llm: { kind: "local", runtime: "ollama", baseUrl: "http://127.0.0.1:11434", model: "qwen2.5:7b" },
+      allowedUserIds: [],
+    };
+    cfg.ai = { kind: "local", runtime: "ollama", baseUrl: "http://127.0.0.1:11434", model: "qwen2.5:7b" };
+
+    const parsed = parse(generateDockerCompose(cfg)) as any;
+
+    // Internal only networks
+    expect(parsed.networks["mediabox-inference-net"]).toEqual({ driver: "bridge", internal: true });
+    expect(parsed.networks["mediabox-services-net"]).toEqual({ driver: "bridge", internal: true });
+    expect(parsed.networks["mediabox-external-net"]).toBeUndefined();
+
+    // mcp-server on internal networks only
+    expect(parsed.services["mcp-server"].networks).toEqual([
+      "mediabox-inference-net",
+      "mediabox-services-net",
+    ]);
+    expect(parsed.services["mcp-server"].environment).toContain("PRIVACY_PROFILE=offline-library");
+
+    // mcp-server has NO docker socket mounted
+    const volumes = parsed.services["mcp-server"].volumes.join(" ");
+    expect(volumes).not.toContain("docker.sock");
+
+    // Telegram bot is disabled/omitted in offline-library
+    expect(parsed.services["telegram-bot"]).toBeUndefined();
+
+    // Inference services on internal inference network only
+    expect(parsed.services["inference-cuda"].networks).toEqual(["mediabox-inference-net"]);
+  });
+
+  it("local-agent-online-media keeps mcp-server and inference internal, but gives media services external egress", () => {
+    const cfg = baseConfig();
+    cfg.deployment.privacyProfile = "local-agent-online-media";
+    cfg.ai = { kind: "local", runtime: "ollama", baseUrl: "http://127.0.0.1:11434", model: "qwen2.5:7b" };
+
+    const parsed = parse(generateDockerCompose(cfg)) as any;
+
+    // Both internal networks and external network
+    expect(parsed.networks["mediabox-inference-net"]).toEqual({ driver: "bridge", internal: true });
+    expect(parsed.networks["mediabox-services-net"]).toEqual({ driver: "bridge", internal: true });
+    expect(parsed.networks["mediabox-external-net"]).toEqual({ driver: "bridge" });
+
+    // mcp-server is NEVER connected to mediabox-external-net
+    expect(parsed.services["mcp-server"].networks).toEqual([
+      "mediabox-inference-net",
+      "mediabox-services-net",
+    ]);
+
+    // Inference is NEVER connected to mediabox-external-net
+    expect(parsed.services["inference-cuda"].networks).toEqual(["mediabox-inference-net"]);
+
+    // Downloaders are connected to both services and external
+    expect(parsed.services.qbittorrent.networks).toEqual([
+      "mediabox-services-net",
+      "mediabox-external-net",
+    ]);
+    expect(parsed.services.pyload.networks).toEqual([
+      "mediabox-services-net",
+      "mediabox-external-net",
+    ]);
+  });
+});

@@ -8,7 +8,8 @@
  * ──────────────────────────────────────────────────────────────────────── */
 import { resolveProvider } from "@mediabox/chat-core";
 import type { StreamProvider } from "@mediabox/chat-core";
-import type { ChatInfo } from "@mediabox/contracts";
+import type { ChatInfo, PrivacyProfile } from "@mediabox/contracts";
+import { sanitizeChatInfo } from "../helpers/diagnostics-sanitizer.js";
 
 let _provider: StreamProvider | null = null;
 let _initError: string | null = null;
@@ -99,16 +100,18 @@ export function resetChatProviderForTesting(): void {
 export function chatProviderInfo(): ChatInfo | null {
   try {
     const p = getChatProvider();
+    const privacy = (process.env.PRIVACY_PROFILE as PrivacyProfile) || "unverified";
     if (!isLocal(p)) {
-      return {
+      return sanitizeChatInfo({
         provider: p.providerName,
         model: p.model,
         mode: "cloud",
-      };
+        privacyProfile: privacy,
+      });
     }
 
     const d = p.diagnostics;
-    return {
+    return sanitizeChatInfo({
       provider: p.providerName,
       model: p.model,
       mode: "local",
@@ -122,8 +125,9 @@ export function chatProviderInfo(): ChatInfo | null {
       agentCompatible: undefined,
       endpoint: redactEndpoint(d.baseUrl),
       endpointPolicy: process.env.INFERENCE_ALLOW_LAN === "true" ? "lan-allowlist" : "loopback-only",
+      privacyProfile: privacy,
       warning: d.contextWarning ?? _diagnosticWarning,
-    };
+    });
   } catch {
     return null;
   }
