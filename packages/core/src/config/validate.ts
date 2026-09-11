@@ -47,10 +47,38 @@ export function validateDeployConfig(config: DeployConfig): string[] {
     errors.push("mcp.agentApiKey must differ from mcp.internalApiKey (Blueprint §4.1 / B02)");
   }
 
+  // AI / LLM Provider validation
+  const llm = config.ai ?? config.telegram?.llm;
+  if (llm?.kind === "local") {
+    if (!llm.runtime) errors.push("ai.runtime is required for local provider");
+    if (!llm.baseUrl) errors.push("ai.baseUrl is required for local provider");
+    if (!llm.model) errors.push("ai.model is required for local provider");
+    if (llm.baseUrl) {
+      try {
+        const parsed = new URL(llm.baseUrl);
+        const hostname = parsed.hostname.toLowerCase();
+        const isLoopback = hostname === "localhost" || hostname === "127.0.0.1" || hostname === "::1" || hostname === "[::1]";
+        if (!isLoopback && !llm.allowLan) {
+          errors.push("local provider baseUrl must be loopback (or allowLan must be enabled)");
+        } else if (!isLoopback && llm.allowLan) {
+          const isPrivateIpv4 = /^(?:10\.\d{1,3}\.\d{1,3}\.\d{1,3}|192\.168\.\d{1,3}\.\d{1,3}|172\.(?:1[6-9]|2\d|3[0-1])\.\d{1,3}\.\d{1,3})$/.test(hostname);
+          const isLocalName = hostname.endsWith(".local") || hostname.endsWith(".lan") || hostname === "host.docker.internal";
+          if (!isPrivateIpv4 && !isLocalName) {
+            errors.push("local provider baseUrl cannot point to a public internet address");
+          }
+        }
+      } catch {
+        errors.push("local provider baseUrl is not a valid URL");
+      }
+    }
+  }
+
   // Telegram (only if enabled)
   if (config.telegram) {
     if (!config.telegram.botToken) errors.push("telegram.botToken is required when telegram is enabled");
-    if (!config.telegram.llm.apiKey) errors.push("telegram.llm.apiKey is required when telegram is enabled");
+    if (config.telegram.llm.kind !== "local" && !config.telegram.llm.apiKey) {
+      errors.push("telegram.llm.apiKey is required when telegram is enabled");
+    }
     if (config.telegram.llm.kind === "openrouter" && !config.telegram.llm.model) {
       errors.push("telegram.llm.model is required for openrouter provider");
     }

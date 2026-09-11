@@ -17,7 +17,16 @@ function buildTelegramEnv(config: DeployConfig): string[] {
   ];
 
   const llm = config.telegram?.llm;
-  if (llm?.kind === "google") {
+  if (llm?.kind === "local") {
+    env.push(
+      "LLM_PROVIDER=local",
+      `LOCAL_LLM_RUNTIME=\${LOCAL_LLM_RUNTIME:-${llm.runtime}}`,
+      `LOCAL_LLM_BASE_URL=\${LOCAL_LLM_BASE_URL:-${llm.baseUrl}}`,
+      `LOCAL_LLM_MODEL=\${LOCAL_LLM_MODEL:-${llm.model}}`,
+    );
+    if (llm.apiKey) env.push("LOCAL_LLM_API_KEY=${LOCAL_LLM_API_KEY}");
+    if (llm.contextTokens) env.push(`LOCAL_LLM_CONTEXT_TOKENS=\${LOCAL_LLM_CONTEXT_TOKENS:-${llm.contextTokens}}`);
+  } else if (llm?.kind === "google") {
     env.push("GOOGLE_AI_API_KEY=${GOOGLE_AI_API_KEY}", "LLM_PROVIDER=google");
     if (llm.model) env.push("LLM_MODEL=${LLM_MODEL}");
   } else {
@@ -126,6 +135,17 @@ export function generateDockerCompose(config: DeployConfig): string {
       "QBIT_URL=http://qbittorrent:8085",
       "QBIT_USER=admin",
       "QBIT_PASSWORD=${QBIT_PASSWORD}",
+      "LLM_PROVIDER=${LLM_PROVIDER:-}",
+      "OPENROUTER_API_KEY=${OPENROUTER_API_KEY:-}",
+      "GOOGLE_AI_API_KEY=${GOOGLE_AI_API_KEY:-}",
+      "LLM_MODEL=${LLM_MODEL:-}",
+      "LOCAL_LLM_RUNTIME=${LOCAL_LLM_RUNTIME:-}",
+      "LOCAL_LLM_BASE_URL=${LOCAL_LLM_BASE_URL:-}",
+      "LOCAL_LLM_MODEL=${LOCAL_LLM_MODEL:-}",
+      "LOCAL_LLM_CONTEXT_TOKENS=${LOCAL_LLM_CONTEXT_TOKENS:-}",
+      "INFERENCE_BACKEND=${INFERENCE_BACKEND:-}",
+      "INFERENCE_ALLOW_LAN=${INFERENCE_ALLOW_LAN:-}",
+      "INFERENCE_ENDPOINT_HOSTS=${INFERENCE_ENDPOINT_HOSTS:-}",
     ],
     volumes: [
       `${movRef}:/data/movies`,
@@ -276,6 +296,86 @@ export function generateDockerCompose(config: DeployConfig): string {
       networks: ["mediabox-net"],
       command: "tunnel --no-autoupdate run",
       environment: ["TUNNEL_TOKEN=${CLOUDFLARE_TUNNEL_TOKEN}"],
+      restart: "unless-stopped",
+    };
+  }
+
+  // ── Local Inference Services (optional profiles) ───────────────────────
+  const effectiveLlm = config.ai ?? config.telegram?.llm;
+  if (effectiveLlm?.kind === "local") {
+    services["inference-cuda"] = {
+      image: "ollama/ollama:latest",
+      container_name: "mediabox-inference",
+      profiles: ["inference-cuda"],
+      networks: ["mediabox-net"],
+      ports: [port("11434:11434", bindLocal)],
+      environment: [
+        "OLLAMA_NO_CLOUD=1",
+        "OLLAMA_CONTEXT_LENGTH=${LOCAL_LLM_CONTEXT_TOKENS:-8192}",
+        "OLLAMA_KEEP_ALIVE=-1",
+        "OLLAMA_MAX_LOADED_MODELS=1",
+        "OLLAMA_NUM_PARALLEL=1",
+      ],
+      volumes: ["./config/ollama:/root/.ollama"],
+      deploy: {
+        resources: {
+          reservations: {
+            devices: [
+              {
+                driver: "nvidia",
+                count: "all",
+                capabilities: ["gpu"],
+              },
+            ],
+          },
+        },
+      },
+      restart: "unless-stopped",
+    };
+
+    services["inference-rocm"] = {
+      image: "ollama/ollama:rocm",
+      container_name: "mediabox-inference",
+      profiles: ["inference-rocm"],
+      networks: ["mediabox-net"],
+      ports: [port("11434:11434", bindLocal)],
+      devices: ["/dev/kfd", "/dev/dri"],
+      group_add: ["video", "render"],
+      environment: [
+        "OLLAMA_NO_CLOUD=1",
+        "OLLAMA_CONTEXT_LENGTH=${LOCAL_LLM_CONTEXT_TOKENS:-8192}",
+        "OLLAMA_KEEP_ALIVE=-1",
+        "OLLAMA_MAX_LOADED_MODELS=1",
+        "OLLAMA_NUM_PARALLEL=1",
+      ],
+      volumes: ["./config/ollama:/root/.ollama"],
+      restart: "unless-stopped",
+    };
+
+    services["inference-vulkan"] = {
+      image: "ghcr.io/ggml-org/llama.cpp:server-vulkan",
+      container_name: "mediabox-inference",
+      profiles: ["inference-vulkan"],
+      networks: ["mediabox-net"],
+      ports: [port("8080:8080", bindLocal)],
+      devices: ["/dev/dri"],
+      restart: "unless-stopped",
+    };
+
+    services["inference-cpu"] = {
+      image: "ollama/ollama:latest",
+      container_name: "mediabox-inference",
+      profiles: ["inference-cpu"],
+      networks: ["mediabox-net"],
+      ports: [port("11434:11434", bindLocal)],
+      environment: [
+        "OLLAMA_NO_CLOUD=1",
+        "OLLAMA_CONTEXT_LENGTH=${LOCAL_LLM_CONTEXT_TOKENS:-8192}",
+        "OLLAMA_KEEP_ALIVE=-1",
+        "OLLAMA_MAX_LOADED_MODELS=1",
+        "OLLAMA_NUM_PARALLEL=1",
+      ],
+      volumes: ["./config/ollama:/root/.ollama"],
       restart: "unless-stopped",
     };
   }

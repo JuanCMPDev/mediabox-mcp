@@ -2,7 +2,7 @@ import { useState, useRef, useCallback, useEffect } from 'react';
 import { streamChat }   from './chat-stream';
 import { api }          from './api';
 import type { ChatMessage, ToolCallRecord } from './types';
-import type { TypedSelection } from '@mediabox/contracts';
+import type { TypedSelection, ChatInfo } from '@mediabox/contracts';
 
 const STORAGE_KEY = 'mediabox:conversation-id';
 
@@ -13,6 +13,7 @@ interface ChatState {
    *  Per-turn tool history lives on each ChatMessage's `tools` array. */
   activeTool:     string | null;
   conversationId: string | null;
+  chatInfo:       ChatInfo | null;
 }
 
 export function useChat() {
@@ -21,6 +22,7 @@ export function useChat() {
     isStreaming:    false,
     activeTool:     null,
     conversationId: null,
+    chatInfo:       null,
   });
 
   /**
@@ -46,6 +48,10 @@ export function useChat() {
   useEffect(() => {
     if (initialized.current) return;
     initialized.current = true;
+
+    api.chatInfo()
+      .then(info => setState(s => ({ ...s, chatInfo: info })))
+      .catch(() => {});
 
     const savedId = localStorage.getItem(STORAGE_KEY);
     if (!savedId) return;
@@ -239,7 +245,7 @@ export function useChat() {
     if (cid) api.clearChat(cid).catch(() => {});
     conversationIdRef.current = null;
     localStorage.removeItem(STORAGE_KEY);
-    setState({ messages: [], isStreaming: false, activeTool: null, conversationId: null });
+    setState(s => ({ ...s, messages: [], isStreaming: false, activeTool: null, conversationId: null }));
   }, []);
 
   return { ...state, send, pickChoice, clear };

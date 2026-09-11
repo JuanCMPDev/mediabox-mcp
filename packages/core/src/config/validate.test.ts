@@ -21,4 +21,24 @@ describe("validateDeployConfig — agent credential (Blueprint §4.1 / B02)", ()
       "mcp.agentApiKey must differ from mcp.internalApiKey (Blueprint §4.1 / B02)",
     );
   });
+
+  it("validates local LLM provider configuration and rejects public endpoints", () => {
+    const cfg = baseConfig();
+    cfg.ai = {
+      kind: "local",
+      runtime: "ollama",
+      baseUrl: "https://api.openai.com/v1",
+      model: "qwen2.5:7b",
+    };
+    const errors = validateDeployConfig(cfg);
+    expect(errors).toContain("local provider baseUrl must be loopback (or allowLan must be enabled)");
+
+    // Valid loopback baseUrl passes
+    cfg.ai.baseUrl = "http://127.0.0.1:11434";
+    expect(validateDeployConfig(cfg)).toEqual([]);
+
+    // Missing runtime/model
+    cfg.ai.runtime = "" as any;
+    expect(validateDeployConfig(cfg)).toContain("ai.runtime is required for local provider");
+  });
 });

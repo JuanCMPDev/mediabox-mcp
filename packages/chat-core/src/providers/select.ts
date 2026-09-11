@@ -1,5 +1,6 @@
 import { OpenRouterProvider } from './openrouter.js';
 import { GeminiProvider }     from './gemini.js';
+import { LocalProvider }      from './local.js';
 import type { StreamProvider } from './types.js';
 
 interface ProviderEnv {
@@ -7,11 +8,15 @@ interface ProviderEnv {
   GOOGLE_AI_API_KEY?:  string;
   LLM_MODEL?:         string;
   LLM_PROVIDER?:      string;
+  LOCAL_BASE_URL?:    string;
+  LOCAL_RUNTIME?:     string;
+  LOCAL_ALLOW_LAN?:   string;
 }
 
 const DEFAULT_MODELS: Record<string, string> = {
   openrouter: 'openai/gpt-4o-mini',
   gemini:     'gemini-2.0-flash',
+  local:      'qwen2.5:7b',
 };
 
 // Canonicalize provider names. The wizard/generators write LLM_PROVIDER=google
@@ -22,6 +27,8 @@ const PROVIDER_ALIASES: Record<string, string> = {
   google:     'gemini',
   gemini:     'gemini',
   openrouter: 'openrouter',
+  local:      'local',
+  ollama:     'local',
 };
 
 function normalizeProviderName(raw: string | undefined): string | undefined {
@@ -36,9 +43,18 @@ export function resolveProvider(env: ProviderEnv): StreamProvider {
 
   // Explicit override (aliased) → auto-detect fallback
   const providerName = normalizeProviderName(env.LLM_PROVIDER)
-    ?? (googleKey ? 'gemini' : 'openrouter');
+    ?? (googleKey ? 'gemini' : (openrouterKey ? 'openrouter' : 'openrouter'));
 
   const model = env.LLM_MODEL ?? DEFAULT_MODELS[providerName] ?? DEFAULT_MODELS.openrouter;
+
+  if (providerName === 'local') {
+    return new LocalProvider({
+      baseUrl: env.LOCAL_BASE_URL,
+      model,
+      runtime: env.LOCAL_RUNTIME as any,
+      allowLan: env.LOCAL_ALLOW_LAN === '1',
+    });
+  }
 
   if (providerName === 'gemini') {
     if (!googleKey) throw new Error('GOOGLE_AI_API_KEY is required for provider=gemini');

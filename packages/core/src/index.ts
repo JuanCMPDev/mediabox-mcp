@@ -55,3 +55,24 @@ export * as arrAuth from "./services/arr-auth.js";
 
 // High-level orchestrator
 export { deployStack, type DeployStackOptions } from "./orchestrate.js";
+
+// Hardware & Local LLM Models (LOC-07, LOC-09)
+export * from "./hardware/types.js";
+export {
+  detectHardware,
+  clearHardwareCache,
+  parseWindowsGpus,
+  parseNvidiaSmiCsv,
+  parseRocmInfo,
+  parseLspci,
+  parseMacosDisplays,
+  parseCpuFlags,
+} from "./hardware/detect.js";
+export * from "./models/types.js";
+export {
+  MODEL_CATALOG,
+  getModelCatalog,
+  findModelProfile,
+  evaluateModelFit,
+  getRecommendedModels,
+} from "./models/catalog.js";

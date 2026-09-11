@@ -185,4 +185,29 @@ describe("generateDockerCompose — agent credential wiring (Blueprint §4.1 / B
     expect(env).toContain("MCP_AGENT_API_KEY=${AGENT_API_KEY}");
     expect(env.some((e) => e.includes("INTERNAL_API_KEY"))).toBe(false);
   });
+
+  it("emits inference services with profiles when provider is local", () => {
+    const cfg = baseConfig();
+    cfg.ai = {
+      kind: "local",
+      runtime: "ollama",
+      baseUrl: "http://127.0.0.1:11434",
+      model: "qwen2.5:7b",
+      contextTokens: 8192,
+      backend: "rocm",
+    };
+    const parsed = parse(generateDockerCompose(cfg)) as any;
+    expect(parsed.services).toHaveProperty("inference-cuda");
+    expect(parsed.services).toHaveProperty("inference-rocm");
+    expect(parsed.services).toHaveProperty("inference-vulkan");
+    expect(parsed.services).toHaveProperty("inference-cpu");
+
+    expect(parsed.services["inference-rocm"].profiles).toEqual(["inference-rocm"]);
+    expect(parsed.services["inference-rocm"].environment).toContain("OLLAMA_NO_CLOUD=1");
+    expect(parsed.services["inference-rocm"].environment).toContain("OLLAMA_CONTEXT_LENGTH=${LOCAL_LLM_CONTEXT_TOKENS:-8192}");
+    expect(parsed.services["inference-rocm"].devices).toEqual(["/dev/kfd", "/dev/dri"]);
+
+    expect(parsed.services["inference-cuda"].profiles).toEqual(["inference-cuda"]);
+    expect(parsed.services["inference-cuda"].deploy.resources.reservations.devices[0].driver).toBe("nvidia");
+  });
 });

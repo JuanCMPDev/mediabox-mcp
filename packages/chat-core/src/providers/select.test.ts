@@ -42,6 +42,15 @@ describe('resolveProvider', () => {
     );
   });
 
+  it('resolves local and ollama alias without needing api keys', () => {
+    const p1 = resolveProvider({ LLM_PROVIDER: 'local' });
+    expect(p1.providerName).toBe('local');
+    expect(p1.model).toBe('qwen2.5:7b');
+
+    const p2 = resolveProvider({ LLM_PROVIDER: 'ollama', LOCAL_MODEL: 'qwen2.5:14b' });
+    expect(p2.providerName).toBe('local');
+  });
+
   it('throws the openrouter error when openrouter is selected without a key', () => {
     expect(() => resolveProvider({ LLM_PROVIDER: 'openrouter' })).toThrowError(
       /OPENROUTER_API_KEY is required/,

@@ -210,11 +210,13 @@ setupRouter.get("/info", async (_req: Request, res: Response): Promise<void> => 
   const env = await readEnvMap();
   const has = (k: string) => Boolean((process.env[k] || env[k] || "").trim());
 
-  // ai provider — derive from which key is set (defaults to "none")
+  // ai provider — derive from explicit provider or which key/endpoint is set (defaults to "none")
+  const rawProvider = (process.env.LLM_PROVIDER || env.LLM_PROVIDER || "").toLowerCase().trim();
   const aiProvider: SetupInfo["ai"]["provider"] =
-    has("OPENROUTER_API_KEY") ? "openrouter"
+    rawProvider === "local" || rawProvider === "ollama" ? "local"
+    : has("OPENROUTER_API_KEY") ? "openrouter"
     : has("GOOGLE_AI_API_KEY") ? "google"
-    : "none";
+    : (has("LOCAL_LLM_BASE_URL") || has("LOCAL_BASE_URL") ? "local" : "none");
 
   const allowedIds = (process.env.ALLOWED_TELEGRAM_USERS || env.ALLOWED_TELEGRAM_USERS || "")
     .split(",")
@@ -277,8 +279,8 @@ setupRouter.get("/info", async (_req: Request, res: Response): Promise<void> => 
     },
     ai: {
       provider: aiProvider,
-      model:    env.LLM_MODEL?.trim() || null,
-      hasKey:   aiProvider !== "none" && has(aiProvider === "openrouter" ? "OPENROUTER_API_KEY" : "GOOGLE_AI_API_KEY"),
+      model:    (process.env.LLM_MODEL || env.LLM_MODEL || process.env.LOCAL_LLM_MODEL || env.LOCAL_LLM_MODEL)?.trim() || null,
+      hasKey:   aiProvider === "local" ? true : (aiProvider !== "none" && has(aiProvider === "openrouter" ? "OPENROUTER_API_KEY" : "GOOGLE_AI_API_KEY")),
     },
     telegram: {
       enabled:        has("TELEGRAM_BOT_TOKEN"),

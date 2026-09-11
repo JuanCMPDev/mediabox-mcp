@@ -61,7 +61,7 @@ chatRouter.post("/stream", async (req: Request, res: Response): Promise<void> =>
   } catch (err) {
     inFlightTurns.delete(conversationId);
     res.status(503).json({
-      error: "No LLM provider configured. Set OPENROUTER_API_KEY or GOOGLE_AI_API_KEY.",
+      error: "No LLM provider configured. Set OPENROUTER_API_KEY, GOOGLE_AI_API_KEY, or LLM_PROVIDER=local.",
     });
     return;
   }
@@ -123,7 +123,7 @@ chatRouter.get("/info", (_req: Request, res: Response): void => {
   const info = chatProviderInfo();
   if (!info) {
     res.status(503).json({
-      error: "No LLM provider configured. Set OPENROUTER_API_KEY or GOOGLE_AI_API_KEY in .env.",
+      error: "No LLM provider configured. Set OPENROUTER_API_KEY, GOOGLE_AI_API_KEY, or LLM_PROVIDER=local in .env.",
     });
     return;
   }

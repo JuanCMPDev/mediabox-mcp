@@ -110,6 +110,18 @@ export const EDITABLE_ENV_KEYS: Record<string, EditableEnvSpec> = {
   OPENROUTER_API_KEY:  { strategy: "restart", targets: ["sidecar", "telegram-bot"] },
   GOOGLE_AI_API_KEY:   { strategy: "restart", targets: ["sidecar", "telegram-bot"] },
   LLM_MODEL:           { strategy: "restart", targets: ["sidecar", "telegram-bot"] },
+  LOCAL_LLM_RUNTIME:        { strategy: "restart", targets: ["sidecar", "telegram-bot"] },
+  LOCAL_LLM_BASE_URL:       { strategy: "restart", targets: ["sidecar", "telegram-bot"] },
+  LOCAL_LLM_MODEL:          { strategy: "restart", targets: ["sidecar", "telegram-bot"] },
+  LOCAL_LLM_API_KEY:        { strategy: "restart", targets: ["sidecar", "telegram-bot"] },
+  LOCAL_LLM_CONTEXT_TOKENS: { strategy: "restart", targets: ["sidecar", "telegram-bot"] },
+  INFERENCE_BACKEND:        { strategy: "restart", targets: ["sidecar", "telegram-bot"] },
+  INFERENCE_ALLOW_LAN:      { strategy: "restart", targets: ["sidecar", "telegram-bot"] },
+  INFERENCE_ENDPOINT_HOSTS: { strategy: "restart", targets: ["sidecar", "telegram-bot"] },
+  INFERENCE_TLS_FINGERPRINT:{ strategy: "restart", targets: ["sidecar", "telegram-bot"] },
+  LOCAL_RUNTIME:            { strategy: "restart", targets: ["sidecar", "telegram-bot"] },
+  LOCAL_BASE_URL:           { strategy: "restart", targets: ["sidecar", "telegram-bot"] },
+  LOCAL_ALLOW_LAN:          { strategy: "restart", targets: ["sidecar", "telegram-bot"] },
 
   // ── Telegram bot config ───────────────────────────────────────────────────
   TELEGRAM_BOT_TOKEN:      { strategy: "restart", targets: ["telegram-bot"] },

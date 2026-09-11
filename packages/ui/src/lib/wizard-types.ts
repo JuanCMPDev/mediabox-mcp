@@ -11,7 +11,7 @@ import type { DeployConfig } from '@mediabox/contracts';
  * ──────────────────────────────────────────────────────────────────────── */
 
 export type DeploymentMode = 'local' | 'vps' | 'tunnel';
-export type AIProvider     = 'none' | 'openrouter' | 'google';
+export type AIProvider     = 'none' | 'openrouter' | 'google' | 'local';
 
 export interface WizardDraft {
   step: number;          // 0-7
@@ -49,9 +49,12 @@ export interface WizardDraft {
   };
 
   ai: {
-    provider: AIProvider;
-    apiKey:   string;
-    model:    string;             // optional for google, required for openrouter
+    provider:       AIProvider;
+    apiKey:         string;
+    model:          string;             // optional for google, required for openrouter
+    runtime?:       string;
+    baseUrl?:       string;
+    contextTokens?: number;
   };
 
   telegram: {
@@ -187,6 +190,15 @@ export function draftToDeployConfig(draft: WizardDraft): DeployConfig {
       kind:   'google',
       apiKey: draft.ai.apiKey,
       ...(draft.ai.model && { model: draft.ai.model }),
+    };
+  } else if (draft.ai.provider === 'local') {
+    config.ai = {
+      kind:          'local',
+      runtime:       (draft.ai.runtime as any) || 'ollama',
+      baseUrl:       draft.ai.baseUrl || 'http://127.0.0.1:11434',
+      model:         draft.ai.model || 'qwen2.5:7b',
+      contextTokens: draft.ai.contextTokens || 8192,
+      apiKey:        draft.ai.apiKey || undefined,
     };
   }
 

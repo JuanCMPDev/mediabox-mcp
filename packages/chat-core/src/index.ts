@@ -60,3 +60,5 @@ export { TurnGuards, type GuardConfig, DEFAULT_GUARDS } from './agent/guards.js'
 export { dispatchToolCall, validateToolCall } from './agent/dispatch.js';
 export { redactTrace, redactSecrets, type AgentTrace } from './agent/trace.js';
 export { heuristicPhase } from './tool-selector.js';
+export { FakeMcp, type LedgerEntry } from './agent/replay/fake-mcp.js';
+export { ScriptedProvider } from './agent/replay/scripted-provider.js';

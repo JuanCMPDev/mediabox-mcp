@@ -23,6 +23,7 @@
     "test:agent-replay": "vitest run packages/chat-core/src/agent",
     "smoke:media-ffmpeg": "node scripts/ci/smoke-media-ffmpeg.mjs",
     "smoke:node-bun": "node scripts/ci/smoke-node-bun.mjs",
+    "smoke:local-canary": "node scripts/ci/smoke-local-canary.mjs",
     "dev": "npm-run-all --parallel dev:mcp dev:ui",
     "dev:mcp": "npm run dev --workspace packages/mcp-server",
     "dev:ui": "npm run dev --workspace packages/ui",
