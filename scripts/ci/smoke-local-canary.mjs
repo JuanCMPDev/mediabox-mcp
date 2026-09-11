@@ -15,6 +15,9 @@ import {
   InMemoryWorkflowStore,
 } from "../../packages/chat-core/dist/index.js";
 import { LocalProvider } from "../../packages/chat-core/dist/providers/local.js";
+import { parseCanaryOptions, summarizeCanary } from "./local-canary-options.mjs";
+
+const options = parseCanaryOptions(process.argv.slice(2));
 
 console.log("=== Mediabox Local Canary Verification (LOC-01) ===");
 
@@ -55,24 +58,13 @@ const historyStore = new InMemoryHistoryStore();
 const workflowStore = new InMemoryWorkflowStore();
 const conversationId = "canary-conv-" + Date.now();
 
-// Probe if live Ollama is available
-let liveProvider = null;
-try {
-  const probeRes = await fetch("http://127.0.0.1:11434/api/version", {
-    signal: AbortSignal.timeout(1000),
-  });
-  if (probeRes.ok) {
-    const v = await probeRes.json();
-    console.log(`[canary] Live Ollama detected on 127.0.0.1:11434 (version ${v?.version || "unknown"})`);
-    liveProvider = new LocalProvider({
-      baseUrl: "http://127.0.0.1:11434",
-      model: process.env.LOCAL_LLM_MODEL || "qwen2.5:7b",
-      runtime: "ollama",
-    });
-  }
-} catch {
-  // Not available, run in laboratory scripted mode
-}
+// Real inference is mandatory unless --scripted was explicitly requested.
+// All network access goes through LocalProvider's endpoint policy; no probe or
+// runtime failure can silently substitute a scripted provider.
+const liveProvider = options.mode === "live" ? new LocalProvider({
+  baseUrl: options.baseUrl, model: options.model, runtime: options.runtime,
+  contextTokens: 8192, temperature: 0,
+}) : null;
 
 const scriptedProvider = new ScriptedProvider([
   // Turn 1: Search media
@@ -126,11 +118,12 @@ const provider = liveProvider ?? scriptedProvider;
 console.log(`[canary] Running canary with provider: ${provider.providerName} (${liveProvider ? "LIVE HOST" : "LABORATORY SCRIPTED"})`);
 
 let passedTurns = 0;
+let failed = false;
 
 // ── Turn 1 ──────────────────────────────────────────────────────────────────
 console.log("\n--- Canary Turn 1: Search media ---");
 const t1_start = Date.now();
-let t1_ttft = 0;
+let t1_ttft = null;
 let t1_tokens = 0;
 
 for await (const evt of AgentRuntime.streamTurn({
@@ -142,10 +135,9 @@ for await (const evt of AgentRuntime.streamTurn({
   workflowStore,
   locale: "es",
 })) {
-  if (evt.type === "token") {
-    if (!t1_ttft) t1_ttft = Date.now() - t1_start;
-    t1_tokens++;
-  }
+  if (evt.type === "error" || evt.type === "guard") failed = true;
+  if (evt.type === "token") t1_tokens++;
+  if (t1_ttft === null && (evt.type === "tool-start" || evt.type === "token" && evt.text?.trim())) t1_ttft = Date.now() - t1_start;
 }
 
 const t1_calls = fakeMcp.ledger.filter((l) => l.tool === "search_media" && l.args.query === "Inception");
@@ -159,7 +151,7 @@ if (t1_calls.length === 1) {
 // ── Turn 2 ──────────────────────────────────────────────────────────────────
 console.log("\n--- Canary Turn 2: Query releases ---");
 const t2_start = Date.now();
-let t2_ttft = 0;
+let t2_ttft = null;
 let t2_tokens = 0;
 
 for await (const evt of AgentRuntime.streamTurn({
@@ -171,10 +163,9 @@ for await (const evt of AgentRuntime.streamTurn({
   workflowStore,
   locale: "es",
 })) {
-  if (evt.type === "token") {
-    if (!t2_ttft) t2_ttft = Date.now() - t2_start;
-    t2_tokens++;
-  }
+  if (evt.type === "error" || evt.type === "guard") failed = true;
+  if (evt.type === "token") t2_tokens++;
+  if (t2_ttft === null && (evt.type === "tool-start" || evt.type === "token" && evt.text?.trim())) t2_ttft = Date.now() - t2_start;
 }
 
 const t2_calls = fakeMcp.ledger.filter((l) => l.tool === "find_releases" && l.args.mediaRef === "mref_canary012345");
@@ -188,7 +179,7 @@ if (t2_calls.length === 1) {
 // ── Turn 3 ──────────────────────────────────────────────────────────────────
 console.log("\n--- Canary Turn 3: Propose download ---");
 const t3_start = Date.now();
-let t3_ttft = 0;
+let t3_ttft = null;
 let t3_tokens = 0;
 
 for await (const evt of AgentRuntime.streamTurn({
@@ -200,10 +191,9 @@ for await (const evt of AgentRuntime.streamTurn({
   workflowStore,
   locale: "es",
 })) {
-  if (evt.type === "token") {
-    if (!t3_ttft) t3_ttft = Date.now() - t3_start;
-    t3_tokens++;
-  }
+  if (evt.type === "error" || evt.type === "guard") failed = true;
+  if (evt.type === "token") t3_tokens++;
+  if (t3_ttft === null && (evt.type === "tool-start" || evt.type === "token" && evt.text?.trim())) t3_ttft = Date.now() - t3_start;
 }
 
 const t3_calls = fakeMcp.ledger.filter((l) => l.tool === "propose_download" && l.args.releaseRef === "rref_canary012345");
@@ -216,41 +206,26 @@ if (t3_calls.length === 1) {
 
 // ── Report ──────────────────────────────────────────────────────────────────
 console.log("\n=== Canary Summary ===");
-console.log(`Compatibility Score: ${passedTurns}/3`);
-const isCompatible = passedTurns === 3;
-console.log(`Agent Compatible: ${isCompatible ? "YES (3/3)" : "NO"}`);
+console.log(`Flow Score: ${passedTurns}/3`);
 console.log(`Total ledger entries: ${fakeMcp.ledger.length}`);
 
-// The performance figures are part of the evidence: §3.1.4 only allows a model to be
-// marked `certified` once a canary AND a performance profile were measured on real
-// hardware, so the run prints what it measured, not just pass or fail.
+// Token events are text chunks, not tokenizer output tokens. Three timings are
+// preliminary observations, not a p95 benchmark or a certification profile.
 const measurements = [
-  { turn: 1, tool: "search_media", ttftMs: t1_ttft, tokens: t1_tokens },
-  { turn: 2, tool: "find_releases", ttftMs: t2_ttft, tokens: t2_tokens },
-  { turn: 3, tool: "propose_download", ttftMs: t3_ttft, tokens: t3_tokens },
+  { turn: 1, tool: "search_media", firstVisibleEventMs: t1_ttft, textChunks: t1_tokens },
+  { turn: 2, tool: "find_releases", firstVisibleEventMs: t2_ttft, textChunks: t2_tokens },
+  { turn: 3, tool: "propose_download", firstVisibleEventMs: t3_ttft, textChunks: t3_tokens },
 ];
-console.log("\n=== Performance profile (attach to the phase handoff) ===");
-for (const m of measurements) {
-  console.log(`Turn ${m.turn} (${m.tool}): TTFT ${m.ttftMs} ms, ${m.tokens} output tokens`);
-}
-const ttfts = measurements.map((m) => m.ttftMs).filter((v) => v > 0);
-if (ttfts.length > 0) {
-  console.log(`TTFT max: ${Math.max(...ttfts)} ms (7.3 threshold: p95 <= 8000 ms)`);
-}
-console.log(
-  JSON.stringify({
-    canary: "LOC-01",
-    score: `${passedTurns}/3`,
-    agentCompatible: isCompatible,
-    measurements,
-    observedAt: new Date().toISOString(),
-  })
-);
+const report = summarizeCanary({ ...options, passedTurns, ledger: fakeMcp.ledger,
+  unexpectedCalls: fakeMcp.unexpectedCalls, failed, measurements });
+console.log(JSON.stringify(report));
 
-if (!isCompatible) {
-  console.error("Canary FAILED: Model is marked text-only.");
+if (!report.passed) {
+  console.error("Canary FAILED or runtime unavailable; no compatibility evidence. No fallback was used.");
   process.exit(1);
 }
 
-console.log("✓ LOC-01 Canary verification PASSED.");
+console.log(options.mode === "live"
+  ? "✓ LOC-01 live canary PASSED. A performance benchmark is still required for certification."
+  : "✓ Scripted harness PASSED. Model compatibility and performance were not evaluated.");
 process.exit(0);

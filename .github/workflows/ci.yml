@@ -217,6 +217,12 @@ jobs:
       - name: Run Node and Bun SQLite runtime packaging smoke (G08)
         run: npm run smoke:node-bun
 
+      - name: Verify CI harness failure paths
+        run: npm run test:ci-harness
+
+      - name: Run desktop sidecar subprocess smoke under Node and compiled Bun (G08)
+        run: npm run smoke:desktop
+
   audit:
     name: Security Audit
     runs-on: ubuntu-latest

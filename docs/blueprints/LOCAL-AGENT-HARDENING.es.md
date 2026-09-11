@@ -292,6 +292,10 @@ Añadir `local` con configuración explícita. Validar disponibilidad del modelo
 
 ### P10 — Despliegue local y privacidad observables
 
+Contrato de implementación del lote P10–P11: [PR05-P10-P11-SPEC.es.md](handoffs/PR05-P10-P11-SPEC.es.md).
+Fija entradas, topologías, oráculos, corpus y procedencia de evidencia; sus entregables
+son trabajo pendiente hasta pasar G09/G10, no resultados medidos.
+
 **Entradas:** P09. **Archivos:** generadores/compose, sidecar/runtime management, perfiles de red, settings y diagnóstico saneado.
 
 Configurar `offline-library` y `local-agent-online-media`; predescarga de artefactos separada de ejecución. El runtime y agente no tienen acceso público innecesario. Imágenes/modelos identificados por digest; CPU/GPU/concurrencia explícitas. Actualizaciones, telemetría y Telegram desactivados en perfil estricto; no basta un toggle de UI. Desplegar credenciales con acceso mínimo; jamás un secreto en variables Vite incorporadas al bundle público.
