@@ -34,3 +34,19 @@ Documento de entrega y cierre correspondiente a la **Fase P05** del blueprint [L
 | **MED-02** | Reemplazo recuperable con backup antes de swap | Cumplido |
 | **MED-04** | Perfiles cerrados deterministas; cero comandos FFmpeg arbitrarios redactados por el LLM | Cumplido |
 | **MED-06** | Soporte de cancelación mediante `AbortSignal` durante la transcodificación | Cumplido |
+
+---
+
+## 3. Gates Evaluados
+
+| Gate | Check | Resultado |
+|---|---|---|
+| **G00** | `npm run ci:policy` | **PASS** |
+| **G01** | `npm run ci:typecheck && npm run ci:build && npm run ci:test` | **PASS** (513 tests pasando) |
+| **G05** | `npm run test:media-recovery && npm run smoke:media-ffmpeg` | **PASS** (11 tests en `media-jobs.test.ts` + smoke real FFmpeg/libx265) |
+
+---
+
+## Addendum QA (2026-09-10)
+
+La suite `packages/mcp-server/src/storage/media-jobs.test.ts` (11 tests) y el script de smoke real con binarios de sistema `scripts/ci/smoke-media-ffmpeg.mjs` (Gate G05) validan completamente los criterios MED-01..MED-06: perfiles cerrados, validación por pistas y duración, preservación del original en cuarentena antes de publicación, limpieza de staging y reintentos fail-closed.
