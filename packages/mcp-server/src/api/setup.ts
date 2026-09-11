@@ -24,6 +24,9 @@ import {
   deployStack,
   validateDeployConfig,
   DockerCliDeployer,
+  detectHardware,
+  evaluateCatalog,
+  getRecommendedModels,
   type DeployConfig,
 } from "@mediabox/core";
 import type {
@@ -280,7 +283,11 @@ setupRouter.get("/info", async (_req: Request, res: Response): Promise<void> => 
     ai: {
       provider: aiProvider,
       model:    (process.env.LLM_MODEL || env.LLM_MODEL || process.env.LOCAL_LLM_MODEL || env.LOCAL_LLM_MODEL)?.trim() || null,
-      hasKey:   aiProvider === "local" ? true : (aiProvider !== "none" && has(aiProvider === "openrouter" ? "OPENROUTER_API_KEY" : "GOOGLE_AI_API_KEY")),
+      // Local mode needs no key at all, so "hasKey" only describes cloud providers.
+      hasKey:   aiProvider === "local" ? false : (aiProvider !== "none" && has(aiProvider === "openrouter" ? "OPENROUTER_API_KEY" : "GOOGLE_AI_API_KEY")),
+      localRuntime: (process.env.LOCAL_LLM_RUNTIME || env.LOCAL_LLM_RUNTIME || "")?.trim() || null,
+      localBaseUrl: (process.env.LOCAL_LLM_BASE_URL || env.LOCAL_LLM_BASE_URL || "")?.trim() || null,
+      localContextTokens: Number(process.env.LOCAL_LLM_CONTEXT_TOKENS || env.LOCAL_LLM_CONTEXT_TOKENS || "") || null,
     },
     telegram: {
       enabled:        has("TELEGRAM_BOT_TOKEN"),
@@ -293,6 +300,44 @@ setupRouter.get("/info", async (_req: Request, res: Response): Promise<void> => 
   };
 
   res.json(info);
+});
+
+// ── GET /hardware ────────────────────────────────────────────────────────────
+// Hardware profile plus the model catalog evaluated against it (§3.3 / §3.4).
+// Owner-only, never on the startup path, and cached for 10 minutes by the detector.
+
+setupRouter.get("/hardware", async (req: Request, res: Response): Promise<void> => {
+  try {
+    const profile = await detectHardware({ force: req.query.force === "true" });
+    const evaluated = evaluateCatalog(profile);
+    const recommended = getRecommendedModels(profile);
+    res.json({
+      profile,
+      recommendedModelId: recommended[0]?.profile.id ?? null,
+      models: evaluated.map(({ profile: model, fit }) => ({
+        id: model.id,
+        family: model.family,
+        tier: model.tier,
+        quantization: model.quantization,
+        contextTokens: model.contextTokens,
+        toolCalling: model.toolCalling,
+        license: model.license,
+        licenseNote: model.licenseNote,
+        certified: model.certified,
+        runtimeModelName: model.runtimeModelName,
+        minimumBytes: model.minimum,
+        status: fit.status,
+        reason: fit.reason,
+        warnings: fit.warnings,
+        requiredBytes: fit.requiredBytes,
+      })),
+    });
+  } catch (err) {
+    res.status(500).json({
+      error: `Hardware detection failed: ${err instanceof Error ? err.message : String(err)}`,
+      code: "ERR_HARDWARE_PROBE",
+    });
+  }
 });
 
 // ── GET /env-raw ─────────────────────────────────────────────────────────────

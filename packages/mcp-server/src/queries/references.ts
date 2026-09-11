@@ -32,8 +32,17 @@ export interface ReferencePayload {
   expiresAt: number;
 }
 
-// In-memory store for short reference tokens (mref_<12 hex>, rref_<12 hex>)
+/**
+ * In-memory store for short reference tokens (mref_<12 hex>, rref_<12 hex>).
+ *
+ * Short refs replaced the signed 500-character tokens because those alone consumed
+ * most of an 8K context. The trade-off is deliberate and bounded: refs live only in
+ * this process, so a restart invalidates them and the user searches again — the same
+ * outcome as the TTL expiring. Consumers are in-process (chat and MCP tools).
+ */
 const SHORT_REF_STORE = new Map<string, ReferencePayload>();
+const SHORT_REF_SOFT_LIMIT = 2_000;
+const SHORT_REF_HARD_LIMIT = 5_000;
 
 function cleanupShortRefs(): void {
   const now = Date.now();
@@ -42,6 +51,21 @@ function cleanupShortRefs(): void {
       SHORT_REF_STORE.delete(key);
     }
   }
+  // Hard cap: if everything is still live, drop the oldest insertions. Map preserves
+  // insertion order, so this evicts the least recently minted references.
+  if (SHORT_REF_STORE.size > SHORT_REF_HARD_LIMIT) {
+    const excess = SHORT_REF_STORE.size - SHORT_REF_HARD_LIMIT;
+    let dropped = 0;
+    for (const key of SHORT_REF_STORE.keys()) {
+      SHORT_REF_STORE.delete(key);
+      if (++dropped >= excess) break;
+    }
+  }
+}
+
+/** Diagnostics only: how many short references are currently held. */
+export function shortReferenceCount(): number {
+  return SHORT_REF_STORE.size;
 }
 
 function signPayload(serialized: string): string {
@@ -49,7 +73,7 @@ function signPayload(serialized: string): string {
 }
 
 function encodeReference(payload: ReferencePayload): string {
-  if (SHORT_REF_STORE.size > 2000) {
+  if (SHORT_REF_STORE.size > SHORT_REF_SOFT_LIMIT) {
     cleanupShortRefs();
   }
   const prefix = payload.type === "media" ? "mref" : "rref";

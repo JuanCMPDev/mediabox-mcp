@@ -43,18 +43,48 @@ export type {
 } from './types.js';
 
 // Agent engine exports (P08)
-export { AgentRuntime, type AgentRuntimeOptions } from './agent/runtime.js';
+export {
+  AgentRuntime,
+  type AgentRuntimeOptions,
+  classifyIntent,
+  extractSubjects,
+  extractEntitledReferences,
+  collapseHistoryToolResults,
+  getDefaultWorkflowStore,
+} from './agent/runtime.js';
 export { AgentError } from './agent/errors.js';
 export {
   type WorkflowState,
   type WorkflowEvent,
   type WorkflowStore,
+  type TokenizerCalibration,
+  type CandidateRecord,
   InMemoryWorkflowStore,
   reduce,
   createInitialWorkflowState,
+  migrateWorkflowState,
+  groundPhase,
+  isValidMediaRef,
+  isValidReleaseRef,
+  WORKFLOW_SCHEMA_VERSION,
+  REFERENCE_TTL_MS,
 } from './agent/workflow.js';
-export { getPhaseTools, suggestPhase } from './agent/phases.js';
-export { prepareContext, compactToolResult, buildStateSummary, DEFAULT_BUDGET, type BudgetConfig } from './agent/budget.js';
+export { getPhaseTools, ALL_PHASES, FORBIDDEN_ACTIONS } from './agent/phases.js';
+export {
+  prepareContext,
+  compactToolResult,
+  digestToolResult,
+  wrapToolResult,
+  buildStateSummary,
+  budgetForContext,
+  DEFAULT_BUDGET,
+  SYSTEM_PROMPT_TOKEN_CAP,
+  TOOL_SCHEMA_TOKEN_CAP,
+  STATE_SUMMARY_TOKEN_CAP,
+  TOOL_RESULT_TOKEN_CAP,
+  type BudgetConfig,
+  type TokenEstimator,
+} from './agent/budget.js';
 export { TokenCounter } from './agent/tokenizer.js';
 export { TurnGuards, type GuardConfig, DEFAULT_GUARDS } from './agent/guards.js';
 export { dispatchToolCall, validateToolCall } from './agent/dispatch.js';

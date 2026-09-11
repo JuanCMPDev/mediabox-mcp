@@ -17,6 +17,8 @@ export class GeminiProvider implements StreamProvider {
     systemPrompt: string;
     messages:     ChatMessage[];
     tools:        VirtualToolDef[];
+    signal?:      AbortSignal;
+    maxTokens?:   number;
   }): AsyncGenerator<LLMStreamChunk> {
     const geminiHistory = buildGeminiHistory(opts.messages);
     const geminiTools   = toGeminiTools(opts.tools);
@@ -28,6 +30,8 @@ export class GeminiProvider implements StreamProvider {
         systemInstruction: opts.systemPrompt,
         tools:             geminiTools as any,
         temperature:       0.3,
+        ...(opts.maxTokens ? { maxOutputTokens: opts.maxTokens } : {}),
+        ...(opts.signal ? { abortSignal: opts.signal } : {}),
       },
     });
 
@@ -40,7 +44,22 @@ export class GeminiProvider implements StreamProvider {
     const functionCalls: Array<{ name: string; args: Record<string, unknown> }> = [];
     const seen = new Set<string>();
 
+    let usageReported = false;
+
     for await (const chunk of rawStream) {
+      if (opts.signal?.aborted) break;
+      const usage = (chunk as any).usageMetadata;
+      if (usage && !usageReported) {
+        usageReported = true;
+        yield {
+          type: 'usage',
+          usage: {
+            prompt_tokens: usage.promptTokenCount,
+            completion_tokens: usage.candidatesTokenCount,
+            total_tokens: usage.totalTokenCount,
+          },
+        };
+      }
       const parts = (chunk as any).candidates?.[0]?.content?.parts ?? [];
       for (const part of parts) {
         if (typeof part.text === 'string' && part.text) {
@@ -62,7 +81,8 @@ export class GeminiProvider implements StreamProvider {
 
     for (let i = 0; i < functionCalls.length; i++) {
       const fc = functionCalls[i];
-      yield { type: 'tool_call', id: `call_${Date.now()}_${i}`, name: fc.name, args: fc.args };
+      // Deterministic ids: a replay must produce identical decisions (§6.12).
+      yield { type: 'tool_call', id: `gemini_${i}`, name: fc.name, args: fc.args };
     }
 
     yield { type: 'done' };

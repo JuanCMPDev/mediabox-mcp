@@ -66,6 +66,19 @@ export function validateDeployConfig(config: DeployConfig): string[] {
           if (!isPrivateIpv4 && !isLocalName) {
             errors.push("local provider baseUrl cannot point to a public internet address");
           }
+          // The runtime policy refuses any non-loopback host that is not allow-listed,
+          // so a config that omits it would fail at the first turn (§3.5 / LOC-06).
+          const allowed = (llm.endpointHosts ?? []).map(h => h.trim().toLowerCase());
+          if (!allowed.includes(hostname)) {
+            errors.push(`ai.endpointHosts must include '${hostname}' when allowLan is enabled`);
+          }
+        }
+        if (parsed.protocol === "https:") {
+          // TLS fingerprint pinning is not implemented yet, and the provider refuses
+          // https, so accepting it here would produce a config that cannot run (§3.5).
+          errors.push("local provider baseUrl must use http: TLS pinning for inference endpoints is not implemented yet");
+        } else if (parsed.protocol !== "http:") {
+          errors.push(`local provider baseUrl protocol '${parsed.protocol}' is not supported`);
         }
       } catch {
         errors.push("local provider baseUrl is not a valid URL");

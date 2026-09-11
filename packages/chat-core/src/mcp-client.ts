@@ -80,6 +80,7 @@ async function callWithTimeout(
   client: Client,
   name: string,
   args: Record<string, unknown>,
+  signal?: AbortSignal,
 ): Promise<string> {
   let timer: ReturnType<typeof setTimeout> | undefined;
   const timeoutProm = new Promise<never>((_, reject) => {
@@ -89,7 +90,12 @@ async function callWithTimeout(
     );
   });
   try {
-    const result = await Promise.race([client.callTool({ name, arguments: args }), timeoutProm]);
+    // The signal reaches the MCP request itself, so cancelling a chat turn aborts the
+    // in-flight tool call instead of leaving it running (§2.9 / AGT-09).
+    const result = await Promise.race([
+      client.callTool({ name, arguments: args }, undefined, signal ? { signal } : undefined),
+      timeoutProm,
+    ]);
     return normalizeResult(name, result as unknown as ToolCallResultLike);
   } finally {
     if (timer) clearTimeout(timer);
@@ -100,7 +106,13 @@ async function callWithTimeout(
 export function createMcpCaller(client: Client): McpCallFn {
   const cache = new Map<string, { data: string; expires: number }>();
 
-  return async function callMCP(name: string, args: Record<string, unknown>): Promise<string> {
+  return async function callMCP(
+    name: string,
+    args: Record<string, unknown>,
+    opts?: { signal?: AbortSignal },
+  ): Promise<string> {
+    const signal = opts?.signal;
+    if (signal?.aborted) throw new Error(`Tool ${name} was cancelled before dispatch`);
     // Strip null/undefined keys (cleaner JSON for the server's zod schemas)
     const clean: Record<string, unknown> = {};
     for (const [k, v] of Object.entries(args ?? {})) {
@@ -109,7 +121,7 @@ export function createMcpCaller(client: Client): McpCallFn {
 
     if (isWriteCall(name)) {
       if (PROPOSAL_TOOLS.has(name)) cache.clear();
-      const text = await callWithTimeout(client, name, clean);
+      const text = await callWithTimeout(client, name, clean, signal);
       if (planChangedLibrary(name, text)) cache.clear();
       return text;
     }
@@ -119,11 +131,11 @@ export function createMcpCaller(client: Client): McpCallFn {
       const key = `${name}:${JSON.stringify(clean)}`;
       const hit = cache.get(key);
       if (hit && Date.now() < hit.expires) return hit.data;
-      const result = await callWithTimeout(client, name, clean);
+      const result = await callWithTimeout(client, name, clean, signal);
       if (!detectToolFailure(result)) cache.set(key, { data: result, expires: Date.now() + ttl });
       return result;
     }
 
-    return callWithTimeout(client, name, clean);
+    return callWithTimeout(client, name, clean, signal);
   };
 }

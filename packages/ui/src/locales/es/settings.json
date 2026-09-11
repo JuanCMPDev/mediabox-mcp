@@ -21,7 +21,22 @@
     "setLeaveBlank": "configurada — deja en blanco para mantener",
     "replaceWithNew": "•••• reemplazar con clave nueva",
     "model": "Modelo",
-    "updated": "Proveedor de IA actualizado"
+    "updated": "Proveedor de IA actualizado",
+    "local": "Local",
+    "localRuntime": "Runtime local",
+    "localEndpoint": "Endpoint",
+    "localContext": "Ventana de contexto (tokens)",
+    "diagnostics": "Diagnóstico de inferencia",
+    "diagnosticsUnavailable": "El runtime aún no responde: no hay diagnóstico disponible.",
+    "mode": "Modo",
+    "runtimeLabel": "Runtime",
+    "backend": "Backend",
+    "contextLabel": "Contexto",
+    "endpointLabel": "Endpoint",
+    "policyLabel": "Política de endpoint",
+    "canaryLabel": "Canario de tool calling",
+    "canaryUnknown": "sin medir en este hardware",
+    "canaryFailed": "falló: solo texto"
   },
   "telegram": {
     "title": "Bot de Telegram",
@@ -127,12 +142,12 @@
       "esHint": "Stub — las traducciones llegan en un PR posterior; las claves faltantes recurren al inglés."
     },
     "libraryRefresh": {
-      "label":   "Auto-actualizar biblioteca de Jellyfin",
-      "hint":    "Lanza un escaneo de la biblioteca de Jellyfin con cierta periodicidad mientras la app está abierta. \"Off\" deja al programador interno de Jellyfin a cargo.",
-      "off":     "Off",
-      "hourly":  "Cada hora",
+      "label": "Auto-actualizar biblioteca de Jellyfin",
+      "hint": "Lanza un escaneo de la biblioteca de Jellyfin con cierta periodicidad mientras la app está abierta. \"Off\" deja al programador interno de Jellyfin a cargo.",
+      "off": "Off",
+      "hourly": "Cada hora",
       "every6h": "Cada 6 h",
-      "daily":   "Diaria",
+      "daily": "Diaria",
       "updated": "Periodicidad de actualización guardada"
     }
   },

@@ -10,6 +10,9 @@ export interface InferenceTrace {
   completionTokens?: number;
   ttftMs?: number;
   durationMs: number;
+  /** Counter state applied to this inference (§2.4 / AGT-12). */
+  counterFactor?: number;
+  counterExtraMargin?: number;
 }
 
 export interface ToolCallTrace {
@@ -30,8 +33,10 @@ export interface AgentTrace {
   inferences: InferenceTrace[];
   toolCalls: ToolCallTrace[];
   guardDecisions: string[];
-  budgetUsed: { inputEstimated: number; outputReserve: number };
+  budgetUsed: { inputEstimated: number; outputReserve: number; inputBudget?: number };
   proposalKeys: string[];
+  /** Calibration notes emitted by the token counter during the turn. */
+  counterLogs?: string[];
   createdAt: string;
 }
 

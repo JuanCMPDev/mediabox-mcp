@@ -1,4 +1,5 @@
 # Cierre de Fase P09 — Proveedor Local y Perfiles Comprobables
+> **Estado verificado:** este cierre de fase es el registro de la entrega inicial. La auditoría de PR04 (2026-09-10) encontró defectos y afirmaciones sin respaldo; el estado autoritativo, la remediación y la evidencia de gates están en [PR04-QA-HANDOFF.es.md](PR04-QA-HANDOFF.es.md). La tabla de casos de esta página describe la entrega original; las afirmaciones sobre ids deterministas, mitigación de DNS rebinding, lista blanca de hosts, lectura de contexto del runtime y la certificación de `qwen2.5:7b` se corrigieron después.
 
 Documento de entrega y cierre correspondiente a la **Fase P09** del blueprint [LOCAL-AGENT-HARDENING.es.md](../LOCAL-AGENT-HARDENING.es.md) y de la especificación [PR04-P08-P09-SPEC.es.md](PR04-P08-P09-SPEC.es.md). Esta fase concluye junto con P08 el lote de entrega **PR04** (P08–P09).
 

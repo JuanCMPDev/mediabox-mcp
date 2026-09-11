@@ -11,7 +11,9 @@
             "type": "tool_call",
             "id": "call-1",
             "name": "server_info",
-            "args": { "action": "status" }
+            "args": {
+              "action": "status"
+            }
           }
         ],
         [
@@ -19,7 +21,9 @@
             "type": "tool_call",
             "id": "call-2",
             "name": "server_info",
-            "args": { "action": "status" }
+            "args": {
+              "action": "status"
+            }
           }
         ]
       ],
@@ -28,12 +32,36 @@
       },
       "expect": {
         "events": [
-          { "type": "tool-start", "name": "server_info" },
-          { "type": "tool-end", "name": "server_info", "ok": true },
-          { "type": "guard", "code": "ERR_LOOP_DETECTED" },
-          { "type": "done" }
+          {
+            "type": "tool-start",
+            "name": "server_info"
+          },
+          {
+            "type": "tool-end",
+            "name": "server_info",
+            "ok": true
+          },
+          {
+            "type": "tool-start",
+            "name": "server_info"
+          },
+          {
+            "type": "guard",
+            "code": "ERR_LOOP_DETECTED"
+          },
+          {
+            "type": "done"
+          }
         ],
-        "guardCode": "ERR_LOOP_DETECTED"
+        "guardCode": "ERR_LOOP_DETECTED",
+        "ledger": [
+          {
+            "tool": "server_status"
+          },
+          {
+            "tool": "server_status"
+          }
+        ]
       }
     }
   ]

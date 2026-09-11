@@ -64,6 +64,8 @@ export {
   parseWindowsGpus,
   parseNvidiaSmiCsv,
   parseRocmInfo,
+  parseRocmSmi,
+  parseVulkanSummary,
   parseLspci,
   parseMacosDisplays,
   parseCpuFlags,
@@ -74,5 +76,9 @@ export {
   getModelCatalog,
   findModelProfile,
   evaluateModelFit,
+  evaluateCatalog,
   getRecommendedModels,
+  kvCacheBytes,
+  requiredMemoryBytes,
+  RUNTIME_OVERHEAD_FACTOR,
 } from "./models/catalog.js";

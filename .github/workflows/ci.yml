@@ -168,6 +168,30 @@ jobs:
       - name: Verify Read-Only Queries & Envelopes (QRY-01..QRY-05)
         run: npm run test:queries
 
+  gate-agent-replay:
+    name: gate/agent-replay (G07)
+    needs: [gate-build-unit]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 22.19.0
+          cache: npm
+
+      - name: Install workspaces
+        run: npm ci
+
+      - name: Build workspaces
+        run: npm run ci:build
+
+      - name: Replay the agent acceptance scenarios (AGT-01..AGT-12)
+        run: npm run test:agent-replay
+
+      - name: Verify local provider and endpoint policy (LOC-02..LOC-08)
+        run: npm run test:local-provider
+
   gate-runtime-packaging:
     name: gate/runtime-packaging (G08)
     needs: [gate-build-unit]
@@ -272,6 +296,7 @@ jobs:
       - gate-filesystem-safety
       - gate-media-recovery
       - gate-query-contracts
+      - gate-agent-replay
       - gate-runtime-packaging
       - audit
       - docker-build

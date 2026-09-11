@@ -18,9 +18,19 @@ export const DEFAULT_GUARDS: GuardConfig = {
   toolTimeoutMs: 150_000,
 };
 
+/** Recursively key-sorted JSON so nested objects participate in the hash. */
+export function canonicalJson(value: unknown): string {
+  if (value === null || typeof value !== 'object') return JSON.stringify(value ?? null);
+  if (Array.isArray(value)) return `[${value.map(canonicalJson).join(',')}]`;
+  const entries = Object.entries(value as Record<string, unknown>)
+    .filter(([, v]) => v !== undefined)
+    .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
+    .map(([k, v]) => `${JSON.stringify(k)}:${canonicalJson(v)}`);
+  return `{${entries.join(',')}}`;
+}
+
 export function computeArgsHash(args: Record<string, unknown>): string {
-  const canonical = JSON.stringify(args, Object.keys(args).sort());
-  return createHash('sha256').update(canonical).digest('hex').slice(0, 16);
+  return createHash('sha256').update(canonicalJson(args ?? {})).digest('hex').slice(0, 16);
 }
 
 export function computeResultDigest(result: string): string {
@@ -34,10 +44,17 @@ export class TurnGuards {
   private startTime: number;
   private consecutiveEmptyOrStalledInferences = 0;
   private executedCalls: Array<{ tool: string; argsHash: string; resultDigest: string }> = [];
+  /** Human-readable guard decisions for the turn trace (§2.10). */
+  readonly decisions: string[] = [];
 
   constructor(config: Partial<GuardConfig> = {}, startTime = Date.now()) {
     this.config = { ...DEFAULT_GUARDS, ...config };
     this.startTime = startTime;
+  }
+
+  private deny(code: AgentError['code'], message: string): never {
+    this.decisions.push(`${code}: ${message}`);
+    throw new AgentError(code, message);
   }
 
   get stats(): { inferences: number; toolCalls: number; elapsedMs: number } {
@@ -48,19 +65,18 @@ export class TurnGuards {
     };
   }
 
+  /** Remaining wall clock for the turn, used to size tool timeouts. */
+  remainingMs(now = Date.now()): number {
+    return Math.max(0, this.config.turnTimeoutMs - (now - this.startTime));
+  }
+
   /** Checks whether another inference step is permitted before starting it. */
   checkInferenceAllowed(now = Date.now()): void {
     if (this.inferencesCount >= this.config.maxInferences) {
-      throw new AgentError(
-        'ERR_TURN_BUDGET',
-        `Turn reached maximum inference limit (${this.config.maxInferences})`,
-      );
+      this.deny('ERR_TURN_BUDGET', `Turn reached maximum inference limit (${this.config.maxInferences})`);
     }
     if (now - this.startTime > this.config.turnTimeoutMs) {
-      throw new AgentError(
-        'ERR_TOOL_TIMEOUT',
-        `Turn exceeded total timeout (${this.config.turnTimeoutMs}ms)`,
-      );
+      this.deny('ERR_TURN_BUDGET', `Turn exceeded total timeout (${this.config.turnTimeoutMs}ms)`);
     }
   }
 
@@ -71,10 +87,7 @@ export class TurnGuards {
     if (isStalled) {
       this.consecutiveEmptyOrStalledInferences++;
       if (this.consecutiveEmptyOrStalledInferences >= 2) {
-        throw new AgentError(
-          'ERR_LOOP_DETECTED',
-          'Loop detected: consecutive inferences with no progress or useful text',
-        );
+        this.deny('ERR_LOOP_DETECTED', 'Loop detected: consecutive inferences with no progress or useful text');
       }
     } else {
       this.consecutiveEmptyOrStalledInferences = 0;
@@ -82,12 +95,9 @@ export class TurnGuards {
   }
 
   /** Checks whether another tool call is permitted before executing it. */
-  checkToolCallAllowed(tool: string, argsHash: string): void {
+  checkToolCallAllowed(tool: string, _argsHash: string): void {
     if (this.toolCallsCount >= this.config.maxToolCalls) {
-      throw new AgentError(
-        'ERR_TURN_BUDGET',
-        `Turn reached maximum tool call limit (${this.config.maxToolCalls})`,
-      );
+      this.deny('ERR_TURN_BUDGET', `Turn reached maximum tool call limit (${this.config.maxToolCalls}) at '${tool}'`);
     }
   }
 
@@ -102,13 +112,13 @@ export class TurnGuards {
       c => c.tool === tool && c.argsHash === argsHash,
     );
 
+    this.executedCalls.push({ tool, argsHash, resultDigest });
+
     if (previousIdentical && previousIdentical.resultDigest === resultDigest) {
-      throw new AgentError(
+      this.deny(
         'ERR_LOOP_DETECTED',
         `Loop detected: tool '${tool}' was repeated with identical arguments and returned identical results`,
       );
     }
-
-    this.executedCalls.push({ tool, argsHash, resultDigest });
   }
 }

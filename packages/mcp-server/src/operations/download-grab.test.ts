@@ -213,3 +213,50 @@ describe("CAT-06: grab reconciliation by identity", () => {
     expect(exact).toMatchObject({ found: true, status: "downloading", queueId: 3 });
   });
 });
+
+describe("AGT-08: proposal idempotency through the planner and the store", () => {
+  it("a second proposal for the same release returns the existing plan", () => {
+    const store = new OperationStore(new NodeSqliteAdapter(":memory:"));
+
+    // Two independent searches mint two different opaque refs for the same release.
+    const first = createDownloadPlan({ releaseRef: releaseRef("guid_same"), scope, activeQueue: [] });
+    const second = createDownloadPlan({ releaseRef: releaseRef("guid_same"), scope, activeQueue: [] });
+
+    expect(first.plan.proposalKey).toBeDefined();
+    expect(second.plan.proposalKey).toBe(first.plan.proposalKey);
+    expect(second.plan.id).not.toBe(first.plan.id);
+
+    const rec1 = store.createPlan(first.plan, "awaiting_approval");
+    const rec2 = store.createPlan(second.plan, "awaiting_approval");
+
+    expect(rec2.plan.id).toBe(rec1.plan.id);
+    expect(store.listPlans({ status: "awaiting_approval" }).length).toBe(1);
+  });
+
+  it("a different release in the same conversation is a different proposal", () => {
+    const store = new OperationStore(new NodeSqliteAdapter(":memory:"));
+    const a = createDownloadPlan({ releaseRef: releaseRef("guid_a"), scope, activeQueue: [] });
+    const b = createDownloadPlan({ releaseRef: releaseRef("guid_b"), scope, activeQueue: [] });
+
+    expect(b.plan.proposalKey).not.toBe(a.plan.proposalKey);
+    store.createPlan(a.plan, "awaiting_approval");
+    store.createPlan(b.plan, "awaiting_approval");
+    expect(store.listPlans({ status: "awaiting_approval" }).length).toBe(2);
+  });
+
+  it("replacement is a different operation, so it is never deduplicated against a plain download", () => {
+    const store = new OperationStore(new NodeSqliteAdapter(":memory:"));
+    const plain = createDownloadPlan({ releaseRef: releaseRef("guid_rep"), scope, activeQueue: [] });
+    const replacement = createDownloadPlan({
+      releaseRef: releaseRef("guid_rep"),
+      replacement: true,
+      scope,
+      activeQueue: [{ service: "radarr", queueId: 7, title: "Movie.2024.720p", entityId: 42 }],
+    });
+
+    expect(replacement.plan.proposalKey).not.toBe(plain.plan.proposalKey);
+    store.createPlan(plain.plan, "awaiting_approval");
+    store.createPlan(replacement.plan, "awaiting_approval");
+    expect(store.listPlans({ status: "awaiting_approval" }).length).toBe(2);
+  });
+});

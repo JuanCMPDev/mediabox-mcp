@@ -327,8 +327,9 @@ export async function executeVirtualTool(
   name: string,
   args: Record<string, unknown>,
   mcpCall: McpCallFn,
+  opts: { signal?: AbortSignal } = {},
 ): Promise<string> {
   const resolved = resolveVirtualCall(name, args);
-  return mcpCall(resolved.tool, resolved.args);
+  return mcpCall(resolved.tool, resolved.args, opts.signal ? { signal: opts.signal } : undefined);
 }
 

@@ -197,6 +197,17 @@ export function useChat() {
             }));
             break;
 
+          case 'guard':
+            // A guard stop is not a crash: the engine refused to continue and the
+            // `done` event right after carries the localized explanation (§2.6).
+            setState(s => ({
+              ...s,
+              messages: s.messages.map(m =>
+                m.isStreaming ? { ...m, guardCode: evt.code } : m,
+              ),
+            }));
+            break;
+
           case 'error':
             setState(s => ({
               ...s,

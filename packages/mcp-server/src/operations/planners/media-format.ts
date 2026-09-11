@@ -1,6 +1,6 @@
 import * as path from "node:path";
 import type { OperationPlan, PlannedTarget, PlannedEffect } from "@mediabox/contracts";
-import { buildOperationPlan } from "../planner.js";
+import { buildOperationPlan, computeProposalKey } from "../planner.js";
 import { mapNamespace } from "../../storage/namespace-map.js";
 import { defaultRootFs } from "../../storage/rootfs.js";
 import { isInternalPath } from "../../storage/quarantine.js";
@@ -75,6 +75,12 @@ export async function createMediaFormatPlan(
     ownerId: options.scope.ownerId,
     conversationId: options.scope.conversationId,
     operation: "media_format_conversion",
+    proposalKey: computeProposalKey({
+      installationId: options.scope.installationId,
+      conversationId: options.scope.conversationId,
+      operation: "media_format_conversion",
+      subjects: [`${rootId}:${resolved.relativePath}`, profile.name],
+    }),
     targets,
     effects,
     preconditions: [

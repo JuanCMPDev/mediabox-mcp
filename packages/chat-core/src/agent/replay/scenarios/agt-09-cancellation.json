@@ -1,28 +1,63 @@
 {
   "id": "agt-09",
-  "title": "Turn cancellation stops tool execution and preserves state (AGT-09)",
+  "title": "Cancelling the turn aborts the in-flight tool and leaves plans alone (AGT-09)",
   "locale": "en",
+  "preservedPlans": [
+    {
+      "planId": "plan_keep_1",
+      "operation": "media_download",
+      "status": "awaiting_approval"
+    }
+  ],
   "turns": [
     {
-      "user": "Long running search",
+      "user": "search for Dark",
+      "mcpDelayMs": 200,
+      "cancelOnToolStart": "catalog",
       "provider": [
         [
           {
             "type": "tool_call",
             "id": "call-1",
             "name": "catalog",
-            "args": { "action": "search", "query": "Dark", "type": "series" }
+            "args": {
+              "action": "search",
+              "query": "Dark",
+              "type": "series"
+            }
+          }
+        ],
+        [
+          {
+            "type": "text",
+            "text": "Never reached: the turn was cancelled."
           }
         ]
       ],
       "mcp": {
-        "search_media": "{\"schemaVersion\":1,\"status\":\"ok\",\"data\":[]}"
+        "search_media": "{\"status\": \"ok\", \"data\": []}"
       },
       "expect": {
         "events": [
-          { "type": "tool-start", "name": "catalog" },
-          { "type": "tool-end", "name": "catalog", "ok": true }
-        ]
+          {
+            "type": "tool-start",
+            "name": "catalog"
+          },
+          {
+            "type": "error",
+            "code": "ERR_CANCELLED"
+          }
+        ],
+        "ledger": [
+          {
+            "tool": "search_media",
+            "args": {
+              "query": "Dark",
+              "type": "series"
+            }
+          }
+        ],
+        "inferences": 1
       }
     }
   ]

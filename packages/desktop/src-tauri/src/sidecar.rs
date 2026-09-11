@@ -117,6 +117,18 @@ pub async fn spawn(app: AppHandle) -> Result<(), Box<dyn std::error::Error + Sen
         "GOOGLE_AI_API_KEY",
         "TELEGRAM_BOT_TOKEN",
         "ALLOWED_TELEGRAM_USERS",
+        // Local inference (P09 / LOC-04). Without these the sidecar silently fell
+        // back to the ollama defaults, ignoring the runtime, endpoint and model the
+        // owner configured in the wizard.
+        "LOCAL_LLM_RUNTIME",
+        "LOCAL_LLM_BASE_URL",
+        "LOCAL_LLM_MODEL",
+        "LOCAL_LLM_API_KEY",
+        "LOCAL_LLM_CONTEXT_TOKENS",
+        "INFERENCE_BACKEND",
+        "INFERENCE_ALLOW_LAN",
+        "INFERENCE_ENDPOINT_HOSTS",
+        "INFERENCE_TLS_FINGERPRINT",
     ];
     let mut forwarded_count = 0;
     for key in FORWARDED {

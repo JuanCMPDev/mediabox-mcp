@@ -1,19 +1,37 @@
 {
   "id": "agt-07",
-  "title": "Context overflow explicitly caught and rejected before provider call (AGT-07)",
+  "title": "Context overflow is rejected before the provider is called (AGT-07)",
   "locale": "en",
   "turns": [
     {
-      "user": "This turn will be provided with an overwhelming context to test budget limits",
+      "user": "Summarise everything you know about my library in detail",
+      "budget": {
+        "contextTokens": 1000,
+        "outputReserve": 600,
+        "safetyMargin": 200,
+        "inputBudget": 200
+      },
       "provider": [
         [
-          { "type": "text", "text": "Should never reach provider if budget overflows." }
+          {
+            "type": "text",
+            "text": "Should never reach the provider."
+          }
         ]
       ],
       "expect": {
         "events": [
-          { "type": "done" }
-        ]
+          {
+            "type": "guard",
+            "code": "ERR_CONTEXT_OVERFLOW"
+          },
+          {
+            "type": "done"
+          }
+        ],
+        "guardCode": "ERR_CONTEXT_OVERFLOW",
+        "ledger": [],
+        "inferences": 0
       }
     }
   ]

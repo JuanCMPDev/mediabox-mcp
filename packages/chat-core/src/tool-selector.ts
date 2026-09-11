@@ -13,6 +13,9 @@ export function heuristicPhase(userMessage: string, history: ChatMessage[] = [])
   if (/\b(maintenance|mantenimiento|cleanup|clean|limpi\w*|cache|temp|tmp|orphan|orphans|huerfano|huerfanos|job|jobs)\b/.test(text)) {
     return 'maintain';
   }
+  if (/\bplan_[0-9a-z-]+/.test(text) || /\b(status|estado|progreso|progress)\b[^.]{0,24}\b(plan|operacion|operation|descarga|download)\b/.test(text)) {
+    return 'monitor';
+  }
   if (/\brref_[0-9a-fA-Za-z_-]+/.test(text)) {
     return 'propose';
   }

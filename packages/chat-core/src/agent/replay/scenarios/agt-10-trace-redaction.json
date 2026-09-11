@@ -1,31 +1,52 @@
 {
   "id": "agt-10",
-  "title": "Turn trace enforces complete secret redaction and reference truncation (AGT-10)",
+  "title": "The turn trace carries no secrets, no payloads and no full references (AGT-10)",
   "locale": "en",
   "turns": [
     {
-      "user": "Auth Bearer secret-token-xyz with key sk-1234567890abcdef",
+      "user": "use Bearer super-secret-token-xyz and key sk-or-v1-abcdef0123456789 to find Dark",
       "provider": [
         [
           {
             "type": "tool_call",
             "id": "call-1",
             "name": "catalog",
-            "args": { "action": "search", "query": "Dark", "type": "series" }
+            "args": {
+              "action": "search",
+              "query": "Dark",
+              "type": "series"
+            }
           }
         ],
         [
-          { "type": "text", "text": "Results found with reference mref_1234567890ab." }
+          {
+            "type": "text",
+            "text": "Found Dark."
+          }
         ]
       ],
       "mcp": {
-        "search_media": "{\"schemaVersion\":1,\"status\":\"ok\",\"data\":[{\"id\":\"s1\",\"title\":\"Dark\",\"mediaRef\":\"mref_1234567890ab\"}]}"
+        "search_media": "{\"schemaVersion\": 1, \"status\": \"ok\", \"data\": [{\"id\": \"s1\", \"title\": \"Dark\", \"mediaRef\": \"mref_1234567890ab\", \"overview\": \"Winden is a small German town with a secret cave system.\"}]}"
       },
       "expect": {
         "events": [
-          { "type": "tool-start", "name": "catalog" },
-          { "type": "tool-end", "name": "catalog", "ok": true },
-          { "type": "done" }
+          {
+            "type": "tool-end",
+            "name": "catalog",
+            "ok": true
+          },
+          {
+            "type": "done"
+          }
+        ],
+        "ledger": [
+          {
+            "tool": "search_media",
+            "args": {
+              "query": "Dark",
+              "type": "series"
+            }
+          }
         ]
       }
     }

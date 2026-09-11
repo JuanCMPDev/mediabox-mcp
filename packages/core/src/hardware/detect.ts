@@ -6,16 +6,21 @@ import type {
   GpuInfo,
   GpuVendor,
   GpuBackend,
+  CpuInfo,
+  VulkanInfo,
   HardwareProbeOptions,
   DetectedRuntime,
   OsKind,
   ArchKind,
 } from "./types.js";
-import type { LocalRuntimeKind } from "@mediabox/contracts";
+import type { LocalRuntimeKind, InferenceBackend } from "@mediabox/contracts";
 
 let cachedProfile: HardwareProfile | null = null;
 let cachedAt = 0;
 const CACHE_TTL_MS = 10 * 60 * 1000; // 10 minutes (LOC-07 / Spec 233)
+
+/** Values INFERENCE_BACKEND accepts; anything else is reported and ignored (§3.3). */
+const VALID_BACKENDS = new Set<InferenceBackend>(["cuda", "rocm", "vulkan", "sycl", "metal", "cpu"]);
 
 // ── Pure parsers (testable without host execution) ──────────────────────────
 
@@ -137,23 +142,94 @@ export function parseNvidiaSmiCsv(csv: string): GpuInfo[] {
   return gpus;
 }
 
+/**
+ * `rocminfo` lists every HSA agent, and the CPU agents come first: taking the first
+ * "Marketing Name" reports the CPU as the GPU. Only agents whose `Device Type` is
+ * GPU are considered, and their VRAM comes from that agent's own memory pools.
+ */
 export function parseRocmInfo(text: string): GpuInfo[] {
   const gpus: GpuInfo[] = [];
-  const nameMatch = text.match(/Marketing Name:\s*(.+)$/m) ?? text.match(/Product Name:\s*(.+)$/m);
-  const name = nameMatch ? nameMatch[1].trim() : "AMD Radeon GPU (ROCm)";
-  const vramMatch = text.match(/VRAM Total Memory:\s*(\d+)/i) ?? text.match(/Size:\s*(\d+)\s*KB/i);
-  let vramBytes: number | undefined;
-  if (vramMatch) {
-    const val = parseInt(vramMatch[1], 10);
-    vramBytes = text.toLowerCase().includes("kb") ? val * 1024 : val;
+  // Agent blocks start at "Agent N" / "*** Agent N ***"
+  const blocks = text.split(/^\*+\s*Agent\s+\d+\s*\*+\s*$/im).slice(1);
+  const candidates = blocks.length > 0 ? blocks : [text];
+
+  for (const block of candidates) {
+    if (!/Device\s+Type:\s*GPU/i.test(block)) continue;
+
+    const nameMatch =
+      block.match(/Marketing Name:\s*(.+)$/m) ??
+      block.match(/Product Name:\s*(.+)$/m) ??
+      block.match(/Name:\s*(gfx\w+)\s*$/m);
+    const name = nameMatch ? nameMatch[1].trim() : "AMD Radeon GPU (ROCm)";
+
+    let vramBytes: number | undefined;
+    const explicit = block.match(/VRAM Total Memory:\s*([\d,]+)\s*(KB|MB|GB)?/i);
+    if (explicit) {
+      const value = parseInt(explicit[1].replace(/,/g, ""), 10);
+      const unit = (explicit[2] ?? "KB").toUpperCase();
+      vramBytes = unit === "GB" ? value * 1024 ** 3 : unit === "MB" ? value * 1024 ** 2 : value * 1024;
+    } else {
+      // Largest COARSE GRAINED pool of this agent, in KB as rocminfo prints it.
+      let maxKb = 0;
+      const poolRe = /Size:\s*([\d,]+)\(0x[0-9a-f]+\)\s*KB/gi;
+      let m: RegExpExecArray | null;
+      while ((m = poolRe.exec(block)) !== null) {
+        const kb = parseInt(m[1].replace(/,/g, ""), 10);
+        if (kb > maxKb) maxKb = kb;
+      }
+      if (maxKb > 0) vramBytes = maxKb * 1024;
+    }
+
+    const gfx = block.match(/Name:\s*(gfx\w+)/);
+    gpus.push({
+      vendor: "amd",
+      name: gfx && !nameMatch ? `AMD ${gfx[1]}` : name,
+      vramBytes,
+      driver: gfx ? gfx[1] : undefined,
+      backends: ["rocm", "vulkan"],
+    });
   }
-  gpus.push({
-    vendor: "amd",
-    name,
-    vramBytes,
-    backends: ["rocm", "vulkan"],
-  });
+
   return gpus;
+}
+
+/** `rocm-smi --showproductname --showmeminfo vram` output (§3.3). */
+export function parseRocmSmi(text: string): GpuInfo[] {
+  const gpus: GpuInfo[] = [];
+  const names = new Map<number, string>();
+  const vram = new Map<number, number>();
+
+  for (const line of text.split("\n")) {
+    // Card Series is the marketing name; Card Model is a PCI id and only a fallback.
+    const seriesMatch = line.match(/GPU\[(\d+)\]\s*:\s*Card Series:\s*(.+)$/i);
+    if (seriesMatch) {
+      names.set(parseInt(seriesMatch[1], 10), seriesMatch[2].trim());
+      continue;
+    }
+    const modelMatch = line.match(/GPU\[(\d+)\]\s*:\s*Card Model:\s*(.+)$/i);
+    if (modelMatch) {
+      const index = parseInt(modelMatch[1], 10);
+      if (!names.has(index)) names.set(index, modelMatch[2].trim());
+      continue;
+    }
+    const vramMatch = line.match(/GPU\[(\d+)\]\s*:\s*VRAM Total Memory \(B\)\s*:\s*(\d+)/i);
+    if (vramMatch) vram.set(parseInt(vramMatch[1], 10), parseInt(vramMatch[2], 10));
+  }
+
+  for (const [index, name] of [...names.entries()].sort((a, b) => a[0] - b[0])) {
+    gpus.push({ vendor: "amd", name, vramBytes: vram.get(index), backends: ["rocm", "vulkan"] });
+  }
+  return gpus;
+}
+
+/** `vulkaninfo --summary` device list. Absence of the tool is not an error (§3.3). */
+export function parseVulkanSummary(text: string): string[] {
+  const devices: string[] = [];
+  for (const line of text.split("\n")) {
+    const match = line.match(/deviceName\s*=\s*(.+)$/);
+    if (match) devices.push(match[1].trim());
+  }
+  return devices;
 }
 
 export function parseLspci(text: string): GpuInfo[] {
@@ -161,19 +237,22 @@ export function parseLspci(text: string): GpuInfo[] {
   const lines = text.trim().split("\n");
   for (const line of lines) {
     if (!/(?:VGA compatible controller|3D controller|Display controller)/i.test(line)) continue;
+    // Classify on the device description only. Matching the whole line made every
+    // "VGA compatible controller" an AMD card, because "compatible" contains "ati".
+    const description = line.replace(/^[0-9a-f:.]+\s+[^:]+:\s+/i, "").trim();
     let vendor: GpuVendor = "other";
     const backends: GpuBackend[] = ["vulkan"];
-    if (/nvidia/i.test(line)) {
+    if (/\bnvidia\b/i.test(description)) {
       vendor = "nvidia";
       backends.unshift("cuda");
-    } else if (/amd|ati|radeon/i.test(line)) {
+    } else if (/\b(amd|ati|radeon)\b/i.test(description)) {
       vendor = "amd";
       backends.unshift("rocm");
-    } else if (/intel/i.test(line)) {
+    } else if (/\bintel\b/i.test(description)) {
       vendor = "intel";
       backends.unshift("sycl");
     }
-    const name = line.replace(/^[0-9a-f:.]+\s+[^:]+:\s+/i, "").trim();
+    const name = description;
     gpus.push({
       vendor,
       name,
@@ -248,15 +327,25 @@ async function probeLinuxGpus(probeErrors: string[], timeoutMs: number): Promise
     // nvidia-smi absent or failed, continue
   }
 
-  // 2. Try rocminfo / rocm-smi
+  // 2. Try rocminfo, then rocm-smi for the product name and VRAM
+  let rocmGpus: GpuInfo[] = [];
   try {
     const res = await execa("rocminfo", [], { timeout: timeoutMs });
-    if (res.stdout.trim()) {
-      return parseRocmInfo(res.stdout);
-    }
+    if (res.stdout.trim()) rocmGpus = parseRocmInfo(res.stdout);
   } catch {
     // rocminfo absent, continue
   }
+  try {
+    const res = await execa("rocm-smi", ["--showproductname", "--showmeminfo", "vram"], { timeout: timeoutMs });
+    const smi = parseRocmSmi(res.stdout);
+    if (smi.length > 0) {
+      // rocm-smi knows the marketing name and exact VRAM; merge it over rocminfo.
+      rocmGpus = smi.map((gpu, i) => ({ ...rocmGpus[i], ...gpu, vramBytes: gpu.vramBytes ?? rocmGpus[i]?.vramBytes }));
+    }
+  } catch {
+    // rocm-smi absent, keep what rocminfo gave us
+  }
+  if (rocmGpus.length > 0) return rocmGpus;
 
   // 3. Fallback to lspci
   try {
@@ -269,6 +358,58 @@ async function probeLinuxGpus(probeErrors: string[], timeoutMs: number): Promise
   }
 
   return [];
+}
+
+async function probeVulkan(timeoutMs: number): Promise<VulkanInfo> {
+  try {
+    const res = await execa("vulkaninfo", ["--summary"], { timeout: timeoutMs });
+    const devices = parseVulkanSummary(res.stdout);
+    return { available: devices.length > 0, devices };
+  } catch {
+    // vulkaninfo is optional: its absence is not an error (§3.3)
+    return { available: false, devices: [] };
+  }
+}
+
+async function probeCpuFlags(osKind: OsKind, arch: ArchKind, timeoutMs: number): Promise<{ flags: string[]; source: CpuInfo["flagsSource"] }> {
+  if (osKind === "linux") {
+    try {
+      const cpuinfo = fs.readFileSync("/proc/cpuinfo", "utf8");
+      return { flags: parseCpuFlags(cpuinfo), source: "proc-cpuinfo" };
+    } catch {
+      /* fall through */
+    }
+  }
+
+  if (osKind === "macos") {
+    try {
+      const res = await execa("sysctl", ["-n", "machdep.cpu.features", "machdep.cpu.leaf7_features"], { timeout: timeoutMs });
+      const text = res.stdout.toLowerCase();
+      const flags: string[] = [];
+      if (text.includes("avx2")) flags.push("avx2");
+      if (/avx512/.test(text)) flags.push("avx512");
+      if (arch === "arm64") flags.push("neon");
+      if (flags.length > 0) return { flags, source: "sysctl" };
+    } catch {
+      /* fall through */
+    }
+  }
+
+  // NEON is architectural on ARMv8, so it can be asserted; AVX2 cannot.
+  if (arch === "arm64") return { flags: ["neon"], source: "arch-guarantee" };
+  return { flags: [], source: "unprobed" };
+}
+
+function pickRecommendedBackend(osKind: OsKind, gpus: GpuInfo[], vulkan: VulkanInfo): InferenceBackend {
+  const has = (backend: GpuBackend) => gpus.some(g => g.backends.includes(backend));
+  if (has("cuda")) return "cuda";
+  if (osKind === "macos" && has("metal")) return "metal";
+  // ROCm is only recommended where the runtime can actually use it (Linux); elsewhere
+  // Vulkan is the honest recommendation for AMD (§6.6).
+  if (osKind === "linux" && has("rocm")) return "rocm";
+  if (vulkan.available || has("vulkan")) return "vulkan";
+  if (has("sycl")) return "sycl";
+  return "cpu";
 }
 
 async function probeMacosGpus(probeErrors: string[], timeoutMs: number): Promise<GpuInfo[]> {
@@ -340,25 +481,13 @@ export async function detectHardware(options: HardwareProbeOptions = {}): Promis
 
   // 1. CPU & RAM
   const cpus = os.cpus();
-  let flags: string[] = [];
-  if (osKind === "linux") {
-    try {
-      const cpuinfo = fs.readFileSync("/proc/cpuinfo", "utf8");
-      flags = parseCpuFlags(cpuinfo);
-    } catch {
-      // ignore
-    }
-  } else if (arch === "x64") {
-    // Standard modern x64 assumption if flags unprobed
-    flags = ["avx2"];
-  } else if (arch === "arm64") {
-    flags = ["neon"];
-  }
+  const { flags, source: flagsSource } = await probeCpuFlags(osKind, arch, timeoutMs);
 
-  const cpu = {
+  const cpu: CpuInfo = {
     model: cpus[0]?.model || "Unknown CPU",
     cores: cpus.length,
     flags,
+    flagsSource,
   };
   const ramBytes = os.totalmem();
 
@@ -398,15 +527,36 @@ export async function detectHardware(options: HardwareProbeOptions = {}): Promis
   // 4. Runtimes on loopback
   const detectedRuntimes = await probeLoopbackRuntimes(timeoutMs);
 
-  // 5. Backend override (INFERENCE_BACKEND env or options)
-  const overrideBackend = options.overrideBackend || (process.env.INFERENCE_BACKEND as any);
-  if (overrideBackend && overrideBackend !== "auto") {
-    for (const gpu of gpus) {
-      if (!gpu.backends.includes(overrideBackend)) {
-        gpu.backends.unshift(overrideBackend);
+  // 5. Vulkan availability (optional tool; absence is not an error)
+  const vulkan = await probeVulkan(Math.min(timeoutMs, 3000));
+
+  // 6. Backend override (INFERENCE_BACKEND env or options), validated
+  const rawOverride = options.overrideBackend ?? (process.env.INFERENCE_BACKEND as InferenceBackend | undefined);
+  let requestedBackend: InferenceBackend | undefined;
+  if (rawOverride && rawOverride !== "auto") {
+    if (VALID_BACKENDS.has(rawOverride)) {
+      requestedBackend = rawOverride;
+      // A forced GPU backend is moved to the front of every GPU that supports it;
+      // it is never invented for hardware that does not report it.
+      if (rawOverride !== "cpu") {
+        for (const gpu of gpus) {
+          const idx = gpu.backends.indexOf(rawOverride as GpuBackend);
+          if (idx > 0) {
+            gpu.backends.splice(idx, 1);
+            gpu.backends.unshift(rawOverride as GpuBackend);
+          } else if (idx === -1) {
+            probeErrors.push(
+              `INFERENCE_BACKEND=${rawOverride} was requested but GPU '${gpu.name}' does not report that backend`,
+            );
+          }
+        }
       }
+    } else {
+      probeErrors.push(`INFERENCE_BACKEND='${rawOverride}' is not a valid backend and was ignored`);
     }
   }
+
+  const recommendedBackend = requestedBackend ?? pickRecommendedBackend(osKind, gpus, vulkan);
 
   const profile: HardwareProfile = {
     os: osKind,
@@ -420,7 +570,10 @@ export async function detectHardware(options: HardwareProbeOptions = {}): Promis
       kfd,
       dri,
     },
+    vulkan,
     detectedRuntimes,
+    requestedBackend,
+    recommendedBackend,
     observedAt: new Date().toISOString(),
     probeErrors,
   };

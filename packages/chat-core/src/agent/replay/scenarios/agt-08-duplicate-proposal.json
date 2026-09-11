@@ -1,6 +1,6 @@
 {
   "id": "agt-08",
-  "title": "Proposal idempotency returns existing plan without duplicate creation (AGT-08)",
+  "title": "A repeated proposal yields the existing plan, never a second one (AGT-08)",
   "locale": "en",
   "turns": [
     {
@@ -24,19 +24,43 @@
           }
         ],
         [
-          { "type": "text", "text": "Proposed plan_dup_1." }
+          {
+            "type": "text",
+            "text": "Proposed plan_dup_1."
+          }
         ]
       ],
       "mcp": {
-        "propose_download": "{\"planId\":\"plan_dup_1\",\"operation\":\"media_download\",\"status\":\"awaiting_approval\",\"proposalKey\":\"key_dup_1\"}"
+        "propose_download": "{\"planId\": \"plan_dup_1\", \"operation\": \"media_download\", \"status\": \"awaiting_approval\", \"manifestHash\": \"h\", \"proposalKey\": \"key_dup_1\"}"
       },
       "expect": {
         "events": [
-          { "type": "tool-start", "name": "catalog" },
-          { "type": "tool-end", "name": "catalog", "ok": true },
-          { "type": "done" }
+          {
+            "type": "tool-end",
+            "name": "catalog",
+            "ok": true
+          },
+          {
+            "type": "done"
+          }
         ],
-        "state": { "phase": "monitor" }
+        "ledger": [
+          {
+            "tool": "propose_download"
+          }
+        ],
+        "state": {
+          "phase": "monitor",
+          "proposals": [
+            {
+              "planId": "plan_dup_1",
+              "operation": "media_download",
+              "status": "awaiting_approval",
+              "manifestHash": "h",
+              "proposalKey": "key_dup_1"
+            }
+          ]
+        }
       }
     },
     {
@@ -60,19 +84,38 @@
           }
         ],
         [
-          { "type": "text", "text": "Existing plan_dup_1 returned idempotently." }
+          {
+            "type": "text",
+            "text": "The same plan_dup_1 is already awaiting approval."
+          }
         ]
       ],
       "mcp": {
-        "propose_download": "{\"planId\":\"plan_dup_1\",\"operation\":\"media_download\",\"status\":\"awaiting_approval\",\"proposalKey\":\"key_dup_1\"}"
+        "propose_download": "{\"planId\": \"plan_dup_1\", \"operation\": \"media_download\", \"status\": \"awaiting_approval\", \"manifestHash\": \"h\", \"proposalKey\": \"key_dup_1\"}"
       },
       "expect": {
         "events": [
-          { "type": "tool-start", "name": "catalog" },
-          { "type": "tool-end", "name": "catalog", "ok": true },
-          { "type": "done" }
+          {
+            "type": "tool-end",
+            "name": "catalog",
+            "ok": true
+          },
+          {
+            "type": "done"
+          }
         ],
-        "state": { "phase": "monitor" }
+        "state": {
+          "phase": "monitor",
+          "proposals": [
+            {
+              "planId": "plan_dup_1",
+              "operation": "media_download",
+              "status": "awaiting_approval",
+              "manifestHash": "h",
+              "proposalKey": "key_dup_1"
+            }
+          ]
+        }
       }
     }
   ]

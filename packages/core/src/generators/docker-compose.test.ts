@@ -211,3 +211,50 @@ describe("generateDockerCompose — agent credential wiring (Blueprint §4.1 / B
     expect(parsed.services["inference-cuda"].deploy.resources.reservations.devices[0].driver).toBe("nvidia");
   });
 });
+
+describe("local inference reachability inside the compose network (§3.2 / B4)", () => {
+  const localConfig: any = {
+    ...baseConfig(),
+    ai: {
+      kind: "local",
+      runtime: "ollama",
+      baseUrl: "http://127.0.0.1:11434",
+      model: "qwen2.5:7b",
+      contextTokens: 8192,
+      backend: "rocm",
+    },
+  };
+
+  it("rewrites a loopback endpoint to the inference service and allow-lists it", () => {
+    const yaml = generateDockerCompose(localConfig);
+    expect(yaml).toContain("LOCAL_LLM_BASE_URL=${LOCAL_LLM_BASE_URL_CONTAINER:-http://mediabox-inference:11434}");
+    expect(yaml).toContain("INFERENCE_ALLOW_LAN=${INFERENCE_ALLOW_LAN:-true}");
+    expect(yaml).toContain("INFERENCE_ENDPOINT_HOSTS=${INFERENCE_ENDPOINT_HOSTS:-mediabox-inference}");
+  });
+
+  it("leaves a non-loopback endpoint exactly as configured", () => {
+    const yaml = generateDockerCompose({
+      ...localConfig,
+      ai: { ...localConfig.ai, baseUrl: "http://inference.lan:11434", allowLan: true, endpointHosts: ["inference.lan"] },
+    });
+    expect(yaml).toContain("LOCAL_LLM_BASE_URL=${LOCAL_LLM_BASE_URL_CONTAINER:-http://inference.lan:11434}");
+    expect(yaml).toContain("INFERENCE_ENDPOINT_HOSTS=${INFERENCE_ENDPOINT_HOSTS:-inference.lan}");
+  });
+
+  it("gives the vulkan profile a model, a context size and a tools template", () => {
+    const yaml = generateDockerCompose(localConfig);
+    expect(yaml).toContain("inference-vulkan");
+    expect(yaml).toContain("--jinja");
+    expect(yaml).toContain("--ctx-size");
+    expect(yaml).toMatch(/-hf/);
+  });
+
+  it("keeps one inference profile per backend, each with its own device requirements", () => {
+    const yaml = generateDockerCompose(localConfig);
+    for (const profile of ["inference-cuda", "inference-rocm", "inference-vulkan", "inference-cpu"]) {
+      expect(yaml).toContain(profile);
+    }
+    expect(yaml).toContain("/dev/kfd");
+    expect(yaml).toContain("OLLAMA_NO_CLOUD=1");
+  });
+});

@@ -52,4 +52,6 @@ export interface ChatMessage {
     prompt?: string;
     items:   import('@mediabox/contracts').ChatChoiceItem[];
   };
+  /** Set when a turn guard stopped the turn (loop, budget, context) — §2.6. */
+  guardCode?: string;
 }

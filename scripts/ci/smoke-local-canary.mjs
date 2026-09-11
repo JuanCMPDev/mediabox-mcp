@@ -221,6 +221,32 @@ const isCompatible = passedTurns === 3;
 console.log(`Agent Compatible: ${isCompatible ? "YES (3/3)" : "NO"}`);
 console.log(`Total ledger entries: ${fakeMcp.ledger.length}`);
 
+// The performance figures are part of the evidence: §3.1.4 only allows a model to be
+// marked `certified` once a canary AND a performance profile were measured on real
+// hardware, so the run prints what it measured, not just pass or fail.
+const measurements = [
+  { turn: 1, tool: "search_media", ttftMs: t1_ttft, tokens: t1_tokens },
+  { turn: 2, tool: "find_releases", ttftMs: t2_ttft, tokens: t2_tokens },
+  { turn: 3, tool: "propose_download", ttftMs: t3_ttft, tokens: t3_tokens },
+];
+console.log("\n=== Performance profile (attach to the phase handoff) ===");
+for (const m of measurements) {
+  console.log(`Turn ${m.turn} (${m.tool}): TTFT ${m.ttftMs} ms, ${m.tokens} output tokens`);
+}
+const ttfts = measurements.map((m) => m.ttftMs).filter((v) => v > 0);
+if (ttfts.length > 0) {
+  console.log(`TTFT max: ${Math.max(...ttfts)} ms (7.3 threshold: p95 <= 8000 ms)`);
+}
+console.log(
+  JSON.stringify({
+    canary: "LOC-01",
+    score: `${passedTurns}/3`,
+    agentCompatible: isCompatible,
+    measurements,
+    observedAt: new Date().toISOString(),
+  })
+);
+
 if (!isCompatible) {
   console.error("Canary FAILED: Model is marked text-only.");
   process.exit(1);

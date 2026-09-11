@@ -1,5 +1,5 @@
 import type { OperationPlan, PlannedTarget, PlannedEffect } from "@mediabox/contracts";
-import { buildOperationPlan } from "../planner.js";
+import { buildOperationPlan, computeProposalKey } from "../planner.js";
 import { verifyReleaseRef, verifyMediaRef } from "../../queries/references.js";
 import type { PlanScope } from "../../security/context.js";
 
@@ -147,11 +147,19 @@ export function createDownloadPlan(input: CreateDownloadPlanInput): { plan: Oper
     });
   }
 
+  const operation = isReplacement ? "media_download_replacement" : "media_download";
+
   const plan = buildOperationPlan({
     installationId: scope.installationId,
     ownerId: scope.ownerId,
     conversationId: scope.conversationId,
-    operation: isReplacement ? "media_download_replacement" : "media_download",
+    operation,
+    proposalKey: computeProposalKey({
+      installationId: scope.installationId,
+      conversationId: scope.conversationId,
+      operation,
+      subjects: [releasePayload.id],
+    }),
     targets,
     effects,
     preconditions: [

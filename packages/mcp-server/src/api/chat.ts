@@ -13,9 +13,10 @@ import { randomUUID } from "crypto";
 import { streamChat }       from "@mediabox/chat-core";
 import type { ChatEvent, ChatStreamRequest } from "@mediabox/contracts";
 import { getLoopbackCaller }  from "../chat/loopback-client.js";
-import { getChatProvider, chatProviderInfo } from "../chat/provider.js";
+import { getChatProvider, chatProviderInfo, ensureChatProviderReady } from "../chat/provider.js";
 import { chatHistory }      from "../chat/store.js";
 import { isValidTypedSelection, formatTypedSelection } from "../chat/selection.js";
+import { isOwner } from "../auth.js";
 
 import { defaultWorkflowStore } from "../operations/default-store.js";
 
@@ -58,6 +59,9 @@ chatRouter.post("/stream", async (req: Request, res: Response): Promise<void> =>
   let provider;
   try {
     provider = getChatProvider();
+    // Reads the runtime's real context window once, so the agent budget is
+    // min(profile, runtime) from the very first turn (LOC-05).
+    await ensureChatProviderReady();
   } catch (err) {
     inFlightTurns.delete(conversationId);
     res.status(503).json({
@@ -104,7 +108,8 @@ chatRouter.post("/stream", async (req: Request, res: Response): Promise<void> =>
     })) {
       if (closed) break;
       emit(evt);
-      if (evt.type === "done" || evt.type === "error" || evt.type === "guard") break;
+      // A guard is followed by its own `done`, so only these two end the stream.
+      if (evt.type === "done" || evt.type === "error") break;
     }
   } catch (err) {
     emit({
@@ -144,6 +149,12 @@ chatRouter.get("/:id/history", (req: Request, res: Response): void => {
 // Exposes the latest redacted turn trace for diagnostic/verification (§2.10 / AGT-10).
 
 chatRouter.get("/:id/trace", (req: Request, res: Response): void => {
+  // Diagnostics are owner-only: a delegated agent session must not read traces (§2.10).
+  if (req.principal && !isOwner(req.principal)) {
+    res.status(403).json({ error: "Traces are available to the owner only", code: "ERR_FORBIDDEN" });
+    return;
+  }
+
   const id = String(req.params.id);
   const trace = conversationTraces.get(id);
   if (!trace) {

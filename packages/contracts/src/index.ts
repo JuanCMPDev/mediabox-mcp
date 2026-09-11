@@ -184,8 +184,58 @@ export interface ChatInfo {
   mode:     'local' | 'cloud';
   runtime?: string;
   backend?: string;
+  /** Effective context window: min(profile, runtime) (LOC-05). */
   contextTokens?: number;
+  /** What the profile asked for, before clipping. */
+  configuredContextTokens?: number;
+  /** What the runtime reported, when it exposes it. */
+  runtimeContextTokens?: number;
+  /** Set only by the lab canary; undefined means "not measured yet" (LOC-01). */
   agentCompatible?: boolean;
+  /** Endpoint host and port only, never a credential (LOC-10). */
+  endpoint?: string;
+  endpointPolicy?: 'loopback-only' | 'lan-allowlist';
+  /** Diagnostic note, e.g. a context mismatch or a failed probe. */
+  warning?: string;
+}
+
+/** One model of the catalog evaluated against the detected hardware (§3.4 / LOC-09). */
+export interface HardwareModelOption {
+  id: string;
+  family: string;
+  tier: 'T0-cpu' | 'T1-6gb' | 'T2-12gb' | 'T3-24gb';
+  quantization: string;
+  contextTokens: number;
+  toolCalling: 'native' | 'hermes-xml' | 'none';
+  license: string;
+  licenseNote?: string;
+  certified: boolean;
+  runtimeModelName: Record<string, string | undefined>;
+  minimumBytes: { vramBytes?: number; ramBytes: number };
+  status: 'recommended' | 'supported' | 'exceeds_memory';
+  reason?: string;
+  warnings: string[];
+  requiredBytes?: { weights: number; kvCache: number; total: number };
+}
+
+/** Returned by GET /api/setup/hardware — owner-only diagnostics (§3.3). */
+export interface HardwareReport {
+  profile: {
+    os: 'linux' | 'windows' | 'macos';
+    arch: 'x64' | 'arm64';
+    cpu: { model: string; cores: number; flags: string[]; flagsSource: string };
+    ramBytes: number;
+    gpus: Array<{ vendor: string; name: string; vramBytes?: number; driver?: string; backends: string[] }>;
+    container: { runtime: 'docker' | 'none'; nvidiaToolkit: boolean; kfd: boolean; dri: boolean };
+    vulkan: { available: boolean; devices: string[] };
+    detectedRuntimes: Array<{ kind: string; baseUrl: string; version?: string }>;
+    requestedBackend?: string;
+    recommendedBackend: string;
+    observedAt: string;
+    probeErrors: string[];
+  };
+  recommendedModelId: string | null;
+  models: HardwareModelOption[];
 }
 
 /** Simplified entry returned by GET /api/chat/:id/history — display-only. */
@@ -389,6 +439,10 @@ export interface SetupInfo {
     provider: 'none' | 'openrouter' | 'google' | 'local';
     model:    string | null;
     hasKey:   boolean;
+    /** Local inference configuration as written in .env (§3.6 / LOC-04). */
+    localRuntime?:       string | null;
+    localBaseUrl?:       string | null;
+    localContextTokens?: number | null;
   };
   telegram: {
     enabled:        boolean;

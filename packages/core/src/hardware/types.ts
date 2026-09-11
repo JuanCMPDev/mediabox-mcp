@@ -17,6 +17,11 @@ export interface CpuInfo {
   model: string;
   cores: number;
   flags: string[]; // avx2, avx512, neon, etc.
+  /**
+   * Where the flags came from. `unprobed` means the platform has no cheap way to
+   * read them, so the list is empty rather than assumed (§3.3).
+   */
+  flagsSource: "proc-cpuinfo" | "sysctl" | "arch-guarantee" | "unprobed";
 }
 
 export interface ContainerInfo {
@@ -32,6 +37,12 @@ export interface DetectedRuntime {
   version?: string;
 }
 
+export interface VulkanInfo {
+  available: boolean;
+  /** Device names reported by `vulkaninfo --summary`, when it exists. */
+  devices: string[];
+}
+
 export interface HardwareProfile {
   os: OsKind;
   arch: ArchKind;
@@ -39,7 +50,12 @@ export interface HardwareProfile {
   ramBytes: number;
   gpus: GpuInfo[];
   container: ContainerInfo;
+  vulkan: VulkanInfo;
   detectedRuntimes: DetectedRuntime[];
+  /** Backend the owner forced with INFERENCE_BACKEND, after validation. */
+  requestedBackend?: InferenceBackend;
+  /** Backend the profile recommends for this hardware. */
+  recommendedBackend: InferenceBackend;
   observedAt: string;
   probeErrors: string[];
 }

@@ -1,33 +1,148 @@
 {
   "id": "agt-11",
-  "title": "Phase tool catalog constraint <= 4 virtual tools + present_choices (AGT-11)",
+  "title": "No phase ever exposes more than four virtual tools or an out-of-phase action (AGT-11)",
   "locale": "en",
   "turns": [
     {
-      "user": "Overview status",
+      "user": "how is the server doing?",
       "provider": [
         [
           {
             "type": "tool_call",
-            "id": "call-1",
+            "id": "c1",
             "name": "server_info",
-            "args": { "action": "status" }
+            "args": {
+              "action": "status"
+            }
           }
         ],
         [
-          { "type": "text", "text": "Server online." }
+          {
+            "type": "text",
+            "text": "The server is online."
+          }
         ]
       ],
       "mcp": {
         "server_status": "{\"status\":\"healthy\"}"
       },
       "expect": {
-        "events": [
-          { "type": "tool-start", "name": "server_info" },
-          { "type": "tool-end", "name": "server_info", "ok": true },
-          { "type": "done" }
+        "state": {
+          "phase": "orient"
+        },
+        "forbiddenActions": [
+          "propose_download",
+          "propose_delete",
+          "propose",
+          "cleanup",
+          "releases"
+        ]
+      }
+    },
+    {
+      "user": "busca la serie Dark para descargarla",
+      "provider": [
+        [
+          {
+            "type": "tool_call",
+            "id": "c2",
+            "name": "catalog",
+            "args": {
+              "action": "search",
+              "query": "Dark",
+              "type": "series"
+            }
+          }
         ],
-        "state": { "phase": "orient" }
+        [
+          {
+            "type": "text",
+            "text": "Found Dark."
+          }
+        ]
+      ],
+      "mcp": {
+        "search_media": "{\"status\": \"ok\", \"data\": [{\"id\": \"s1\", \"title\": \"Dark\", \"mediaRef\": \"mref_001122334455\"}]}"
+      },
+      "expect": {
+        "state": {
+          "phase": "select"
+        },
+        "forbiddenActions": [
+          "propose_download",
+          "propose_delete",
+          "propose",
+          "cleanup"
+        ]
+      }
+    },
+    {
+      "user": "muestrame las versiones disponibles",
+      "provider": [
+        [
+          {
+            "type": "tool_call",
+            "id": "c3",
+            "name": "catalog",
+            "args": {
+              "action": "releases",
+              "mediaRef": "mref_001122334455"
+            }
+          }
+        ],
+        [
+          {
+            "type": "text",
+            "text": "These are the releases."
+          }
+        ]
+      ],
+      "mcp": {
+        "find_releases": "{\"status\": \"ok\", \"data\": [{\"id\": \"rel1\", \"title\": \"Dark S01\", \"releaseRef\": \"rref_aabbccddeeff\"}]}"
+      },
+      "expect": {
+        "state": {
+          "phase": "propose"
+        },
+        "forbiddenActions": [
+          "cleanup",
+          "check_jobs",
+          "approve"
+        ]
+      }
+    },
+    {
+      "user": "limpia los archivos huerfanos y temporales",
+      "provider": [
+        [
+          {
+            "type": "tool_call",
+            "id": "c4",
+            "name": "maintenance",
+            "args": {
+              "action": "check_jobs"
+            }
+          }
+        ],
+        [
+          {
+            "type": "text",
+            "text": "No cleanup jobs are running."
+          }
+        ]
+      ],
+      "mcp": {
+        "check_jobs": "{\"status\": \"ok\", \"data\": []}"
+      },
+      "expect": {
+        "state": {
+          "phase": "maintain"
+        },
+        "forbiddenActions": [
+          "propose_download",
+          "propose_delete",
+          "propose"
+        ]
       }
     }
   ]

@@ -16,10 +16,16 @@ export type LLMStreamChunk =
 export interface StreamProvider {
   readonly providerName: 'openrouter' | 'gemini' | 'local';
   readonly model:        string;
+  /** Effective context window in tokens when the provider knows it (local runtimes report it). */
+  readonly contextTokens?: number;
 
   stream(opts: {
     systemPrompt: string;
     messages:     ChatMessage[];
     tools:        VirtualToolDef[];
+    /** Turn cancellation: aborts the HTTP stream at the transport level (§2.9 / AGT-09). */
+    signal?:      AbortSignal;
+    /** Upper bound for generated tokens; the engine passes its output reserve (§3.6). */
+    maxTokens?:   number;
   }): AsyncGenerator<LLMStreamChunk>;
 }

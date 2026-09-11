@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslation, Trans } from 'react-i18next';
 import {
   ExternalLink, RefreshCw, FolderOpen, Folder, Eye, EyeOff,
@@ -126,6 +126,9 @@ function AIProviderSection({ info }: { info: SetupInfo }) {
   const [provider, setProvider] = useState(info.ai.provider);
   const [apiKey, setApiKey]     = useState('');
   const [model, setModel]       = useState(info.ai.model ?? '');
+  const [runtime, setRuntime]   = useState(info.ai.localRuntime ?? 'ollama');
+  const [baseUrl, setBaseUrl]   = useState(info.ai.localBaseUrl ?? 'http://127.0.0.1:11434');
+  const [contextTokens, setContextTokens] = useState(String(info.ai.localContextTokens ?? 8192));
   const [saving, setSaving]     = useState(false);
   const { toast } = useToast();
   const qc = useQueryClient();
@@ -134,7 +137,12 @@ function AIProviderSection({ info }: { info: SetupInfo }) {
   const dirty =
     provider !== info.ai.provider
     || apiKey.trim().length > 0
-    || (model !== (info.ai.model ?? ''));
+    || (model !== (info.ai.model ?? ''))
+    || (provider === 'local' && (
+      runtime !== (info.ai.localRuntime ?? 'ollama')
+      || baseUrl !== (info.ai.localBaseUrl ?? 'http://127.0.0.1:11434')
+      || contextTokens !== String(info.ai.localContextTokens ?? 8192)
+    ));
 
   async function save() {
     setSaving(true);
@@ -149,6 +157,14 @@ function AIProviderSection({ info }: { info: SetupInfo }) {
       } else if (provider === 'google' && apiKey.trim()) {
         updates.GOOGLE_AI_API_KEY  = apiKey.trim();
         updates.OPENROUTER_API_KEY = '';
+      } else if (provider === 'local') {
+        // Local mode never carries a cloud key, and the model lives in
+        // LOCAL_LLM_MODEL so LLM_MODEL cannot shadow it (§3.6 / INV-LOCAL).
+        updates.LLM_MODEL = '';
+        updates.LOCAL_LLM_RUNTIME = runtime;
+        updates.LOCAL_LLM_BASE_URL = baseUrl.trim();
+        updates.LOCAL_LLM_MODEL = model.trim();
+        updates.LOCAL_LLM_CONTEXT_TOKENS = String(Number(contextTokens) || 8192);
       } else if (provider === 'none') {
         updates.OPENROUTER_API_KEY = '';
         updates.GOOGLE_AI_API_KEY  = '';
@@ -179,13 +195,45 @@ function AIProviderSection({ info }: { info: SetupInfo }) {
           onChange={v => setProvider(v as typeof provider)}
           options={[
             { value: 'none',       label: t('ai.noAi') },
+            { value: 'local',      label: t('ai.local', 'Local') },
             { value: 'openrouter', label: t('ai.openRouter') },
             { value: 'google',     label: t('ai.googleAi') },
           ]}
         />
       </div>
 
-      {provider !== 'none' && (
+      {provider === 'local' && (
+        <>
+          <div className={styles.formField}>
+            <label className={styles.label}>{t('ai.localRuntime', 'Local runtime')}</label>
+            <SegmentedControl
+              value={runtime}
+              onChange={setRuntime}
+              options={[
+                { value: 'ollama',   label: 'Ollama' },
+                { value: 'lmstudio', label: 'LM Studio' },
+                { value: 'llamacpp', label: 'llama.cpp' },
+                { value: 'vllm',     label: 'vLLM' },
+              ]}
+            />
+          </div>
+          <div className={styles.formField}>
+            <label className={styles.label}>{t('ai.localEndpoint', 'Endpoint')}</label>
+            <GlassInput value={baseUrl} onChange={setBaseUrl} placeholder="http://127.0.0.1:11434" />
+          </div>
+          <div className={styles.formField}>
+            <label className={styles.label}>{t('ai.model')}</label>
+            <GlassInput value={model} onChange={setModel} placeholder="qwen2.5:7b" />
+          </div>
+          <div className={styles.formField}>
+            <label className={styles.label}>{t('ai.localContext', 'Context window (tokens)')}</label>
+            <GlassInput value={contextTokens} onChange={setContextTokens} placeholder="8192" />
+          </div>
+          <LocalInferenceDiagnostics />
+        </>
+      )}
+
+      {provider !== 'none' && provider !== 'local' && (
         <>
           <div className={styles.formField}>
             <label className={styles.label}>
@@ -219,6 +267,53 @@ function AIProviderSection({ info }: { info: SetupInfo }) {
 
       <SaveBar dirty={dirty} saving={saving} onSave={save} />
     </Section>
+  );
+}
+
+/**
+ * Local inference diagnostics (§3.7 / LOC-10). Everything here comes from
+ * GET /api/chat/info, which is redacted server-side: no key ever reaches the UI.
+ */
+function LocalInferenceDiagnostics() {
+  const { t } = useTranslation('settings');
+  const { data, isLoading, error } = useQuery({
+    queryKey: ['chat-info'],
+    queryFn: () => api.chatInfo(),
+    retry: false,
+    staleTime: 15_000,
+  });
+
+  if (isLoading) return <Skeleton style={{ width: '100%', height: 72 }} />;
+  if (error || !data) {
+    return (
+      <p className={styles.labelHint}>
+        {t('ai.diagnosticsUnavailable', 'The runtime has not answered yet: no diagnostics available.')}
+      </p>
+    );
+  }
+
+  const contextLabel = data.runtimeContextTokens && data.configuredContextTokens
+    ? `${data.contextTokens} (configured ${data.configuredContextTokens}, runtime ${data.runtimeContextTokens})`
+    : String(data.contextTokens ?? '—');
+
+  return (
+    <div className={styles.formField}>
+      <label className={styles.label}>{t('ai.diagnostics', 'Inference diagnostics')}</label>
+      <Row k={t('ai.mode', 'Mode')} v={data.mode} />
+      <Row k={t('ai.runtimeLabel', 'Runtime')} v={data.runtime ?? '—'} />
+      <Row k={t('ai.backend', 'Backend')} v={data.backend ?? '—'} />
+      <Row k={t('ai.model')} v={data.model} mono />
+      <Row k={t('ai.contextLabel', 'Context')} v={contextLabel} />
+      <Row k={t('ai.endpointLabel', 'Endpoint')} v={data.endpoint ?? '—'} mono />
+      <Row k={t('ai.policyLabel', 'Endpoint policy')} v={data.endpointPolicy ?? '—'} />
+      <Row
+        k={t('ai.canaryLabel', 'Tool-calling canary')}
+        v={data.agentCompatible === undefined
+          ? t('ai.canaryUnknown', 'not measured on this hardware yet')
+          : data.agentCompatible ? '3/3' : t('ai.canaryFailed', 'failed: text only')}
+      />
+      {data.warning && <p className={styles.labelHint}>{data.warning}</p>}
+    </div>
   );
 }
 

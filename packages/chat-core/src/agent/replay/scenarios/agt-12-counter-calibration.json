@@ -1,19 +1,64 @@
 {
   "id": "agt-12",
-  "title": "Token counter calibration against real usage with safety margin (AGT-12)",
+  "title": "The token counter calibrates against real usage and the margin persists (AGT-12)",
   "locale": "en",
   "turns": [
     {
-      "user": "Short query",
+      "user": "cuantas peliculas tengo?",
       "provider": [
         [
-          { "type": "text", "text": "Hello there.", "usage": { "prompt_tokens": 800, "completion_tokens": 10 } }
+          {
+            "type": "text",
+            "text": "You have 412 movies in the library.",
+            "usage": {
+              "prompt_tokens": 4000,
+              "completion_tokens": 12
+            }
+          }
         ]
       ],
       "expect": {
         "events": [
-          { "type": "done" }
+          {
+            "type": "done"
+          }
+        ],
+        "state": {
+          "calibration": {
+            "factor": 3.5,
+            "extraMargin": 0.15,
+            "consecutiveDeviations": 1
+          }
+        }
+      }
+    },
+    {
+      "user": "y series?",
+      "provider": [
+        [
+          {
+            "type": "text",
+            "text": "And 87 series.",
+            "usage": {
+              "prompt_tokens": 4200,
+              "completion_tokens": 8
+            }
+          }
         ]
+      ],
+      "expect": {
+        "events": [
+          {
+            "type": "done"
+          }
+        ],
+        "state": {
+          "calibration": {
+            "factor": 1.5,
+            "extraMargin": 0.15,
+            "consecutiveDeviations": 0
+          }
+        }
       }
     }
   ]

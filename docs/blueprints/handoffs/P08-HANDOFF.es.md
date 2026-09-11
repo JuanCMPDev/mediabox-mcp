@@ -1,4 +1,5 @@
 # Cierre de Fase P08 — Motor de Agente con Contexto y Estado Controlados
+> **Estado verificado:** este cierre de fase es el registro de la entrega inicial. La auditoría de PR04 (2026-09-10) encontró defectos y afirmaciones sin respaldo; el estado autoritativo, la remediación y la evidencia de gates están en [PR04-QA-HANDOFF.es.md](PR04-QA-HANDOFF.es.md). La tabla de casos de esta página describe la entrega original; seis escenarios no ejercitaban lo que su ID promete y dos defectos de la ruta real (compactación de resultados y persistencia antes de un evento terminal) se corrigieron después.
 
 Documento de entrega y cierre correspondiente a la **Fase P08** del blueprint [LOCAL-AGENT-HARDENING.es.md](../LOCAL-AGENT-HARDENING.es.md) y de la especificación [PR04-P08-P09-SPEC.es.md](PR04-P08-P09-SPEC.es.md). Esta fase conforma junto con P09 el lote de entrega **PR04** (P08–P09).
 
