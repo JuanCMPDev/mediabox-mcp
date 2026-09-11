@@ -11,7 +11,11 @@ import { assertMutationAllowed } from "../helpers/containment.js";
 import { MEDIA_PATH } from "../config.js";
 import { defaultOperationStore } from "../operations/default-store.js";
 import { createDeletePlan } from "../operations/planners/delete.js";
-export function registerLibraryTools(server: McpServer): void {
+import { createToolEnvelope } from "../queries/envelope.js";
+import { runEnvelopeTool } from "../queries/tool-result.js";
+import { defaultToolContext, resolvePlanScope, type McpToolContext } from "../security/context.js";
+export function registerLibraryTools(server: McpServer, context: McpToolContext = defaultToolContext()): void {
+  const scope = resolvePlanScope(context);
   // 5. MANAGE LIBRARY
   server.registerTool("manage_library", {
     description: "Create a library, trigger scan, or refresh metadata for an item",
@@ -124,23 +128,23 @@ export function registerLibraryTools(server: McpServer): void {
     inputSchema: {
       paths: z.array(z.string()).describe("Paths to delete (e.g. 'tv/Show', 'downloads/file.mkv')"),
     },
-  }, async ({ paths }) => {
-    const plan = await createDeletePlan({
-      logicalPaths: paths,
-      // Default to "local" owner since MCP doesn't carry user session out of the box right now
-      ownerId: "local",
-      conversationId: "local",
-    });
-    
-    defaultOperationStore.createPlan(plan);
-    
-    return textResult({
-      message: `Proposed cleanup plan ${plan.id}. Please ask the user to review and approve the plan. Use operation_status tool with planId '${plan.id}' to check its progress.`,
-      planId: plan.id,
-      operation: plan.operation,
-      expiresAt: plan.expiresAt,
-    });
-  });
+  }, async ({ paths }) =>
+    runEnvelopeTool(async () => {
+      const { plan, summary } = await createDeletePlan({ logicalPaths: paths, scope });
+      defaultOperationStore.createPlan(plan, "awaiting_approval");
+      return createToolEnvelope({
+        data: {
+          planId: plan.id,
+          operation: plan.operation,
+          status: "awaiting_approval",
+          manifestHash: plan.manifestHash,
+          expiresAt: plan.expiresAt,
+          summary: { ...summary, note: "Quarantine keeps the bytes on the same volume; reclaimableBytes is 0 until an owner-approved purge." },
+          message: `Plan ${plan.id} awaits owner approval in the Mediabox app. Use operation_status to follow it; do not report anything as deleted until it reports succeeded.`,
+        },
+      });
+    })
+  );
 
   // 7. RENAME EPISODES
   server.registerTool("rename_episodes", {

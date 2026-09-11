@@ -68,8 +68,8 @@ export function registerJellyfinTools(server: McpServer): void {
     return textResult(log.Items.map((e: any) => ({ type: e.Type, name: e.Name, date: e.Date?.slice(0, 16), user: e.UserName })));
   });
 
-  // 3. SEARCH MEDIA
-  server.registerTool("search_media", {
+  // 3. JELLYFIN SEARCH
+  server.registerTool("jellyfin_search", {
     description: "Search or list content in the Jellyfin library. Omit query to list all items of a type. Supports pagination.",
     inputSchema: {
       query: z.string().optional().describe("Search term. Omit to list all."),

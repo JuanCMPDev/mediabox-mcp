@@ -17,6 +17,8 @@ import { createOperationsRouter } from "./api/operations.js";
 import { defaultOperationStore } from "./operations/default-store.js";
 import { OperationExecutor } from "./operations/executor.js";
 import { registerStepHandlers } from "./operations/handlers.js";
+import { createToolContext } from "./security/context.js";
+import { defaultQueryCache } from "./queries/cache.js";
 import { VERSION } from "./version.js";
 
 // Initialise i18next so request handlers can call `req.t()` from the very
@@ -26,6 +28,10 @@ await initI18n();
 // Start the global background operation executor
 export const globalOperationExecutor = new OperationExecutor(defaultOperationStore);
 registerStepHandlers(globalOperationExecutor);
+// Verified effects invalidate cached read models (Blueprint 4.4 / QRY-05).
+globalOperationExecutor.onPlanFinalized((record) => {
+  defaultQueryCache.invalidateTags(["catalog", "library", "storage", "downloads"], record.plan.installationId);
+});
 globalOperationExecutor.start();
 
 interface TransportSessionBinding {
@@ -130,9 +136,13 @@ export function createApp() {
 
       transport = binding.transport;
     } else if (!sid && req.method === "POST" && isInitializeRequest(req.body)) {
+      // Every MCP session gets a server bound to the authenticated principal;
+      // the transport session id becomes the conversation scope for proposals.
+      const toolContext = createToolContext(caller);
       transport = new StreamableHTTPServerTransport({
         sessionIdGenerator: () => crypto.randomUUID(),
         onsessioninitialized: (s) => {
+          toolContext.conversationId = s;
           transports.set(s, {
             transport,
             principalId: caller.id,
@@ -145,7 +155,7 @@ export function createApp() {
         const s = transport.sessionId;
         if (s) transports.delete(s);
       };
-      await createMcpServer().connect(transport);
+      await createMcpServer(toolContext).connect(transport);
     } else {
       res.status(400).json({ jsonrpc: "2.0", error: { code: -32000, message: "No valid session" }, id: null });
       return;
