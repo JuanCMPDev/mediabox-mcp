@@ -1,0 +1,124 @@
+{
+  "id": "agt-06",
+  "title": "Reset clears state and transcript while plans survive; a model switch changes nothing (AGT-06)",
+  "locale": "en",
+  "preservedPlans": [
+    {
+      "planId": "plan_existing_1",
+      "operation": "media_download",
+      "status": "awaiting_approval"
+    }
+  ],
+  "resetBeforeTurn": 1,
+  "initialState": {
+    "phase": "select",
+    "references": {
+      "mediaRef": "mref_1234567890ab"
+    },
+    "proposals": [
+      {
+        "planId": "plan_existing_1",
+        "operation": "media_download",
+        "status": "awaiting_approval",
+        "manifestHash": "h1",
+        "proposalKey": "k1"
+      }
+    ],
+    "turn": 3
+  },
+  "turns": [
+    {
+      "user": "tell me more about it",
+      "providerModel": "qwen2.5:7b",
+      "provider": [
+        [
+          {
+            "type": "tool_call",
+            "id": "call-1",
+            "name": "catalog",
+            "args": {
+              "action": "details",
+              "mediaRef": "mref_1234567890ab"
+            }
+          }
+        ],
+        [
+          {
+            "type": "text",
+            "text": "Here are the details."
+          }
+        ]
+      ],
+      "mcp": {
+        "media_details": "{\"schemaVersion\": 1, \"status\": \"ok\", \"data\": {\"id\": \"m1\", \"title\": \"Dark\", \"mediaRef\": \"mref_1234567890ab\"}}"
+      },
+      "expect": {
+        "events": [
+          {
+            "type": "tool-end",
+            "name": "catalog",
+            "ok": true
+          },
+          {
+            "type": "done"
+          }
+        ],
+        "state": {
+          "phase": "select"
+        }
+      }
+    },
+    {
+      "user": "what is the status of plan_existing_1?",
+      "providerModel": "gemma-3-12b",
+      "provider": [
+        [
+          {
+            "type": "tool_call",
+            "id": "call-2",
+            "name": "operations",
+            "args": {
+              "action": "status",
+              "planId": "plan_existing_1"
+            }
+          }
+        ],
+        [
+          {
+            "type": "text",
+            "text": "It is still awaiting approval."
+          }
+        ]
+      ],
+      "mcp": {
+        "operation_status": "{\"status\": \"ok\", \"data\": {\"planId\": \"plan_existing_1\", \"status\": \"awaiting_approval\", \"operation\": \"media_download\"}}"
+      },
+      "expect": {
+        "events": [
+          {
+            "type": "tool-end",
+            "name": "operations",
+            "ok": true
+          },
+          {
+            "type": "done"
+          }
+        ],
+        "ledger": [
+          {
+            "tool": "operation_status",
+            "args": {
+              "planId": "plan_existing_1"
+            }
+          }
+        ],
+        "state": {
+          "references": {},
+          "selections": [],
+          "candidates": [],
+          "proposals": []
+        }
+      }
+    }
+  ]
+}

@@ -20,6 +20,7 @@ import {
   createMcpCaller,
   resolveProvider,
   InMemoryHistoryStore,
+  InMemoryWorkflowStore,
 } from "@mediabox/chat-core";
 import type { McpCallFn } from "@mediabox/chat-core";
 import { VERSION } from "./version.js";
@@ -46,14 +47,30 @@ const CONVERSATION_TTL = 2 * 60 * 60 * 1000; // 2 h
 // =============================================================================
 // CORE — provider + history store (live for the bot's lifetime)
 // =============================================================================
+// Local inference variables must reach the bot too, or it silently runs on the
+// ollama defaults while the owner configured LM Studio or another model (LOC-04).
 const provider = resolveProvider({
   OPENROUTER_API_KEY: process.env.OPENROUTER_API_KEY,
   GOOGLE_AI_API_KEY:  process.env.GOOGLE_AI_API_KEY,
   LLM_MODEL:          process.env.LLM_MODEL,
   LLM_PROVIDER:       process.env.LLM_PROVIDER,
+  LOCAL_LLM_BASE_URL:       process.env.LOCAL_LLM_BASE_URL,
+  LOCAL_LLM_MODEL:          process.env.LOCAL_LLM_MODEL,
+  LOCAL_LLM_RUNTIME:        process.env.LOCAL_LLM_RUNTIME,
+  LOCAL_LLM_API_KEY:        process.env.LOCAL_LLM_API_KEY,
+  LOCAL_LLM_CONTEXT_TOKENS: process.env.LOCAL_LLM_CONTEXT_TOKENS,
+  INFERENCE_ALLOW_LAN:      process.env.INFERENCE_ALLOW_LAN,
+  INFERENCE_ENDPOINT_HOSTS: process.env.INFERENCE_ENDPOINT_HOSTS,
+  LOCAL_BASE_URL:     process.env.LOCAL_BASE_URL,
+  LOCAL_MODEL:        process.env.LOCAL_MODEL,
+  LOCAL_RUNTIME:      process.env.LOCAL_RUNTIME,
+  LOCAL_ALLOW_LAN:    process.env.LOCAL_ALLOW_LAN,
 });
 
 const historyStore = new InMemoryHistoryStore(CONVERSATION_TTL);
+// The bot keeps its own workflow store so /clear can actually reset the agent state;
+// with the runtime's module-level default it was unreachable (INV-PARITY / AGT-06).
+const workflowStore = new InMemoryWorkflowStore();
 
 // =============================================================================
 // MCP CLIENT — connect to the mcp-server over HTTP with retry
@@ -131,6 +148,8 @@ async function handleMessage(chatId: number, userMessage: string): Promise<strin
       provider,
       mcpCall:        mcpCall!,
       historyStore,
+      workflowStore,
+      locale:         process.env.MEDIABOX_LOCALE === "en" ? "en" : "es",
     });
   } catch (err) {
     return formatError(err as Error);
@@ -172,6 +191,8 @@ bot.command("start", (ctx) =>
 
 bot.command("clear", (ctx) => {
   historyStore.delete(`tg:${ctx.chat.id}`);
+  // Reset clears transcript and workflow state; persisted plans are untouched (AGT-06).
+  workflowStore.delete(`tg:${ctx.chat.id}`);
   ctx.reply("Conversación reiniciada.");
 });
 

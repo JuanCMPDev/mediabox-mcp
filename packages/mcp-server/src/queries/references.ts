@@ -32,11 +32,59 @@ export interface ReferencePayload {
   expiresAt: number;
 }
 
+/**
+ * In-memory store for short reference tokens (mref_<12 hex>, rref_<12 hex>).
+ *
+ * Short refs replaced the signed 500-character tokens because those alone consumed
+ * most of an 8K context. The trade-off is deliberate and bounded: refs live only in
+ * this process, so a restart invalidates them and the user searches again — the same
+ * outcome as the TTL expiring. Consumers are in-process (chat and MCP tools).
+ */
+const SHORT_REF_STORE = new Map<string, ReferencePayload>();
+const SHORT_REF_SOFT_LIMIT = 2_000;
+const SHORT_REF_HARD_LIMIT = 5_000;
+
+function cleanupShortRefs(): void {
+  const now = Date.now();
+  for (const [key, payload] of SHORT_REF_STORE.entries()) {
+    if (now > payload.expiresAt) {
+      SHORT_REF_STORE.delete(key);
+    }
+  }
+  // Hard cap: if everything is still live, drop the oldest insertions. Map preserves
+  // insertion order, so this evicts the least recently minted references.
+  if (SHORT_REF_STORE.size > SHORT_REF_HARD_LIMIT) {
+    const excess = SHORT_REF_STORE.size - SHORT_REF_HARD_LIMIT;
+    let dropped = 0;
+    for (const key of SHORT_REF_STORE.keys()) {
+      SHORT_REF_STORE.delete(key);
+      if (++dropped >= excess) break;
+    }
+  }
+}
+
+/** Diagnostics only: how many short references are currently held. */
+export function shortReferenceCount(): number {
+  return SHORT_REF_STORE.size;
+}
+
 function signPayload(serialized: string): string {
   return createHmac("sha256", REFERENCE_SECRET).update(serialized).digest("hex");
 }
 
 function encodeReference(payload: ReferencePayload): string {
+  if (SHORT_REF_STORE.size > SHORT_REF_SOFT_LIMIT) {
+    cleanupShortRefs();
+  }
+  const prefix = payload.type === "media" ? "mref" : "rref";
+  const shortId = randomBytes(6).toString("hex");
+  const token = `${prefix}_${shortId}`;
+  SHORT_REF_STORE.set(token, payload);
+  return token;
+}
+
+/** Legacy helper to encode full signed payload (for testing backward compatibility). */
+export function encodeLegacySignedReference(payload: ReferencePayload): string {
   const jsonStr = JSON.stringify(payload);
   const sig = signPayload(jsonStr);
   const base = Buffer.from(jsonStr, "utf8").toString("base64url");
@@ -61,6 +109,44 @@ export function verifyReference(
     );
   }
 
+  // 1. Check if token is short reference format: mref_<12hex> or rref_<12hex>
+  const shortMatch = /^[mr]ref_[0-9a-f]{12}$/.test(refString);
+  if (shortMatch) {
+    const payload = SHORT_REF_STORE.get(refString);
+    if (!payload) {
+      throw new ReferenceValidationError("Reference has expired", "ERR_EXPIRED_REFERENCE");
+    }
+
+    if (payload.type !== expectedType) {
+      throw new ReferenceValidationError(
+        `Reference payload type mismatch: expected ${expectedType}, found ${payload.type}`,
+        "ERR_REFERENCE_WRONG_TYPE"
+      );
+    }
+
+    if (Date.now() > payload.expiresAt) {
+      SHORT_REF_STORE.delete(refString);
+      throw new ReferenceValidationError("Reference has expired", "ERR_EXPIRED_REFERENCE");
+    }
+
+    if (payload.installationId !== context.installationId) {
+      throw new ReferenceValidationError(
+        `Reference installation mismatch: expected ${context.installationId}`,
+        "ERR_REFERENCE_MISMATCH"
+      );
+    }
+
+    if (payload.ownerId !== context.ownerId) {
+      throw new ReferenceValidationError(
+        `Reference owner mismatch: expected ${context.ownerId}`,
+        "ERR_REFERENCE_MISMATCH"
+      );
+    }
+
+    return payload;
+  }
+
+  // 2. Legacy fallback: signed base64url payload with HMAC
   const stripped = refString.slice(expectedPrefix.length);
   const parts = stripped.split(".");
   if (parts.length !== 2) {

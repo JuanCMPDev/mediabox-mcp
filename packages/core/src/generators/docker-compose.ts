@@ -5,6 +5,59 @@ import { ensureRelative } from "../utils/paths.js";
 const GHCR_MCP_IMAGE_BASE = "ghcr.io/juancmpdev/mediabox-mcp";
 const GHCR_TELEGRAM_IMAGE_BASE = "ghcr.io/juancmpdev/mediabox-telegram";
 
+/** Service name and DNS host of the inference container inside the compose network. */
+const INFERENCE_SERVICE_HOST = "mediabox-inference";
+
+/**
+ * A loopback endpoint is unreachable from inside a container: 127.0.0.1 there is the
+ * container itself. When compose runs the runtime, the other services must address it
+ * by its service name, which resolves to a private bridge IP and therefore also needs
+ * the LAN allow-list entry (§3.5 / §6.7).
+ */
+export function resolveContainerInferenceUrl(baseUrl: string): { url: string; rewritten: boolean } {
+  try {
+    const parsed = new URL(baseUrl);
+    const isLoopback = /^(127\.|localhost$|\[?::1\]?$)/i.test(parsed.hostname);
+    if (!isLoopback) return { url: baseUrl, rewritten: false };
+    parsed.hostname = INFERENCE_SERVICE_HOST;
+    return { url: parsed.toString().replace(/\/$/, ""), rewritten: true };
+  } catch {
+    return { url: baseUrl, rewritten: false };
+  }
+}
+
+/**
+ * Endpoint variables for services that run inside the compose network. The
+ * loopback value an owner writes in .env belongs to the host, so containers get
+ * the service name plus the allow-list entry its private IP requires.
+ */
+function buildContainerInferenceEnv(config: DeployConfig): string[] {
+  const llm = config.ai ?? config.telegram?.llm;
+  if (llm?.kind !== "local") {
+    return [
+      "LOCAL_LLM_BASE_URL=${LOCAL_LLM_BASE_URL:-}",
+      "INFERENCE_ALLOW_LAN=${INFERENCE_ALLOW_LAN:-}",
+      "INFERENCE_ENDPOINT_HOSTS=${INFERENCE_ENDPOINT_HOSTS:-}",
+    ];
+  }
+
+  const endpoint = resolveContainerInferenceUrl(llm.baseUrl);
+  if (!endpoint.rewritten) {
+    return [
+      `LOCAL_LLM_BASE_URL=\${LOCAL_LLM_BASE_URL_CONTAINER:-${endpoint.url}}`,
+      `INFERENCE_ALLOW_LAN=\${INFERENCE_ALLOW_LAN:-${llm.allowLan ? "true" : ""}}`,
+      `INFERENCE_ENDPOINT_HOSTS=\${INFERENCE_ENDPOINT_HOSTS:-${(llm.endpointHosts ?? []).join(",")}}`,
+    ];
+  }
+
+  const hosts = [INFERENCE_SERVICE_HOST, ...(llm.endpointHosts ?? [])].join(",");
+  return [
+    `LOCAL_LLM_BASE_URL=\${LOCAL_LLM_BASE_URL_CONTAINER:-${endpoint.url}}`,
+    "INFERENCE_ALLOW_LAN=${INFERENCE_ALLOW_LAN:-true}",
+    `INFERENCE_ENDPOINT_HOSTS=\${INFERENCE_ENDPOINT_HOSTS:-${hosts}}`,
+  ];
+}
+
 /** Environment array for the Telegram bot — varies by LLM provider */
 function buildTelegramEnv(config: DeployConfig): string[] {
   const env = [
@@ -17,7 +70,25 @@ function buildTelegramEnv(config: DeployConfig): string[] {
   ];
 
   const llm = config.telegram?.llm;
-  if (llm?.kind === "google") {
+  if (llm?.kind === "local") {
+    const endpoint = resolveContainerInferenceUrl(llm.baseUrl);
+    env.push(
+      "LLM_PROVIDER=local",
+      `LOCAL_LLM_RUNTIME=\${LOCAL_LLM_RUNTIME:-${llm.runtime}}`,
+      `LOCAL_LLM_BASE_URL=\${LOCAL_LLM_BASE_URL:-${endpoint.url}}`,
+      `LOCAL_LLM_MODEL=\${LOCAL_LLM_MODEL:-${llm.model}}`,
+    );
+    if (llm.apiKey) env.push("LOCAL_LLM_API_KEY=${LOCAL_LLM_API_KEY}");
+    if (llm.contextTokens) env.push(`LOCAL_LLM_CONTEXT_TOKENS=\${LOCAL_LLM_CONTEXT_TOKENS:-${llm.contextTokens}}`);
+    if (endpoint.rewritten) {
+      // The bridge address is private, so the policy needs it allow-listed explicitly.
+      env.push(
+        `INFERENCE_ALLOW_LAN=\${INFERENCE_ALLOW_LAN:-true}`,
+        `INFERENCE_ENDPOINT_HOSTS=\${INFERENCE_ENDPOINT_HOSTS:-${INFERENCE_SERVICE_HOST}}`,
+      );
+    }
+    if (llm.backend) env.push(`INFERENCE_BACKEND=\${INFERENCE_BACKEND:-${llm.backend}}`);
+  } else if (llm?.kind === "google") {
     env.push("GOOGLE_AI_API_KEY=${GOOGLE_AI_API_KEY}", "LLM_PROVIDER=google");
     if (llm.model) env.push("LLM_MODEL=${LLM_MODEL}");
   } else {
@@ -126,6 +197,18 @@ export function generateDockerCompose(config: DeployConfig): string {
       "QBIT_URL=http://qbittorrent:8085",
       "QBIT_USER=admin",
       "QBIT_PASSWORD=${QBIT_PASSWORD}",
+      "LLM_PROVIDER=${LLM_PROVIDER:-}",
+      "OPENROUTER_API_KEY=${OPENROUTER_API_KEY:-}",
+      "GOOGLE_AI_API_KEY=${GOOGLE_AI_API_KEY:-}",
+      "LLM_MODEL=${LLM_MODEL:-}",
+      "LOCAL_LLM_RUNTIME=${LOCAL_LLM_RUNTIME:-}",
+      "LOCAL_LLM_MODEL=${LOCAL_LLM_MODEL:-}",
+      "LOCAL_LLM_CONTEXT_TOKENS=${LOCAL_LLM_CONTEXT_TOKENS:-}",
+      "LOCAL_LLM_API_KEY=${LOCAL_LLM_API_KEY:-}",
+      "INFERENCE_BACKEND=${INFERENCE_BACKEND:-}",
+      // Inside the network the runtime is reachable by service name, never by
+      // loopback; LOCAL_LLM_BASE_URL_CONTAINER overrides it for a host runtime.
+      ...buildContainerInferenceEnv(config),
     ],
     volumes: [
       `${movRef}:/data/movies`,
@@ -276,6 +359,97 @@ export function generateDockerCompose(config: DeployConfig): string {
       networks: ["mediabox-net"],
       command: "tunnel --no-autoupdate run",
       environment: ["TUNNEL_TOKEN=${CLOUDFLARE_TUNNEL_TOKEN}"],
+      restart: "unless-stopped",
+    };
+  }
+
+  // ── Local Inference Services (optional profiles) ───────────────────────
+  const effectiveLlm = config.ai ?? config.telegram?.llm;
+  if (effectiveLlm?.kind === "local") {
+    services["inference-cuda"] = {
+      image: "ollama/ollama:latest",
+      container_name: "mediabox-inference",
+      profiles: ["inference-cuda"],
+      networks: ["mediabox-net"],
+      ports: [port("11434:11434", bindLocal)],
+      environment: [
+        "OLLAMA_NO_CLOUD=1",
+        "OLLAMA_CONTEXT_LENGTH=${LOCAL_LLM_CONTEXT_TOKENS:-8192}",
+        "OLLAMA_KEEP_ALIVE=-1",
+        "OLLAMA_MAX_LOADED_MODELS=1",
+        "OLLAMA_NUM_PARALLEL=1",
+      ],
+      volumes: ["./config/ollama:/root/.ollama"],
+      deploy: {
+        resources: {
+          reservations: {
+            devices: [
+              {
+                driver: "nvidia",
+                count: "all",
+                capabilities: ["gpu"],
+              },
+            ],
+          },
+        },
+      },
+      restart: "unless-stopped",
+    };
+
+    services["inference-rocm"] = {
+      image: "ollama/ollama:rocm",
+      container_name: "mediabox-inference",
+      profiles: ["inference-rocm"],
+      networks: ["mediabox-net"],
+      ports: [port("11434:11434", bindLocal)],
+      devices: ["/dev/kfd", "/dev/dri"],
+      group_add: ["video", "render"],
+      environment: [
+        "OLLAMA_NO_CLOUD=1",
+        "OLLAMA_CONTEXT_LENGTH=${LOCAL_LLM_CONTEXT_TOKENS:-8192}",
+        "OLLAMA_KEEP_ALIVE=-1",
+        "OLLAMA_MAX_LOADED_MODELS=1",
+        "OLLAMA_NUM_PARALLEL=1",
+      ],
+      volumes: ["./config/ollama:/root/.ollama"],
+      restart: "unless-stopped",
+    };
+
+    services["inference-vulkan"] = {
+      image: "ghcr.io/ggml-org/llama.cpp:server-vulkan",
+      container_name: "mediabox-inference",
+      profiles: ["inference-vulkan"],
+      networks: ["mediabox-net"],
+      ports: [port("8080:8080", bindLocal)],
+      devices: ["/dev/dri"],
+      // llama.cpp needs the model, the context size and --jinja for tool calling:
+      // without a tools template it returns <tool_call> as plain text (§6.2).
+      command: [
+        "--host", "0.0.0.0",
+        "--port", "8080",
+        "-hf", "${LOCAL_LLM_HF_REPO:-Qwen/Qwen2.5-7B-Instruct-GGUF:Q4_K_M}",
+        "--ctx-size", "${LOCAL_LLM_CONTEXT_TOKENS:-8192}",
+        "--jinja",
+        "--parallel", "1",
+      ],
+      volumes: ["./config/llamacpp:/root/.cache/llama.cpp"],
+      restart: "unless-stopped",
+    };
+
+    services["inference-cpu"] = {
+      image: "ollama/ollama:latest",
+      container_name: "mediabox-inference",
+      profiles: ["inference-cpu"],
+      networks: ["mediabox-net"],
+      ports: [port("11434:11434", bindLocal)],
+      environment: [
+        "OLLAMA_NO_CLOUD=1",
+        "OLLAMA_CONTEXT_LENGTH=${LOCAL_LLM_CONTEXT_TOKENS:-8192}",
+        "OLLAMA_KEEP_ALIVE=-1",
+        "OLLAMA_MAX_LOADED_MODELS=1",
+        "OLLAMA_NUM_PARALLEL=1",
+      ],
+      volumes: ["./config/ollama:/root/.ollama"],
       restart: "unless-stopped",
     };
   }

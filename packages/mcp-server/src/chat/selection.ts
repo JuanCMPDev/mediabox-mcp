@@ -9,7 +9,7 @@ import type { TypedSelection } from "@mediabox/contracts";
  */
 
 const SELECTION_TYPES: ReadonlySet<string> = new Set(["select_candidate", "select_release", "propose_download"]);
-const REF_PATTERN = /^(mref|rref)_[A-Za-z0-9_-]{1,4096}\.[0-9a-f]{64}$/;
+const REF_PATTERN = /^(?:mref|rref)_(?:[0-9a-f]{8,32}|[A-Za-z0-9_-]{1,4096}\.[0-9a-f]{64})$/;
 const MAX_LABEL_CHARS = 200;
 
 export function isValidTypedSelection(input: unknown): input is TypedSelection {

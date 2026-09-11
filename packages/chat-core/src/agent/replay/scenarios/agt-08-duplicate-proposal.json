@@ -1,0 +1,122 @@
+{
+  "id": "agt-08",
+  "title": "A repeated proposal yields the existing plan, never a second one (AGT-08)",
+  "locale": "en",
+  "turns": [
+    {
+      "selection": {
+        "type": "select_release",
+        "value": "Propose download",
+        "releaseRef": "rref_dup12345678",
+        "mediaRef": "mref_dup12345678"
+      },
+      "provider": [
+        [
+          {
+            "type": "tool_call",
+            "id": "call-1",
+            "name": "catalog",
+            "args": {
+              "action": "propose_download",
+              "releaseRef": "rref_dup12345678",
+              "mediaRef": "mref_dup12345678"
+            }
+          }
+        ],
+        [
+          {
+            "type": "text",
+            "text": "Proposed plan_dup_1."
+          }
+        ]
+      ],
+      "mcp": {
+        "propose_download": "{\"planId\": \"plan_dup_1\", \"operation\": \"media_download\", \"status\": \"awaiting_approval\", \"manifestHash\": \"h\", \"proposalKey\": \"key_dup_1\"}"
+      },
+      "expect": {
+        "events": [
+          {
+            "type": "tool-end",
+            "name": "catalog",
+            "ok": true
+          },
+          {
+            "type": "done"
+          }
+        ],
+        "ledger": [
+          {
+            "tool": "propose_download"
+          }
+        ],
+        "state": {
+          "phase": "monitor",
+          "proposals": [
+            {
+              "planId": "plan_dup_1",
+              "operation": "media_download",
+              "status": "awaiting_approval",
+              "manifestHash": "h",
+              "proposalKey": "key_dup_1"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "selection": {
+        "type": "select_release",
+        "value": "Propose download again",
+        "releaseRef": "rref_dup12345678",
+        "mediaRef": "mref_dup12345678"
+      },
+      "provider": [
+        [
+          {
+            "type": "tool_call",
+            "id": "call-2",
+            "name": "catalog",
+            "args": {
+              "action": "propose_download",
+              "releaseRef": "rref_dup12345678",
+              "mediaRef": "mref_dup12345678"
+            }
+          }
+        ],
+        [
+          {
+            "type": "text",
+            "text": "The same plan_dup_1 is already awaiting approval."
+          }
+        ]
+      ],
+      "mcp": {
+        "propose_download": "{\"planId\": \"plan_dup_1\", \"operation\": \"media_download\", \"status\": \"awaiting_approval\", \"manifestHash\": \"h\", \"proposalKey\": \"key_dup_1\"}"
+      },
+      "expect": {
+        "events": [
+          {
+            "type": "tool-end",
+            "name": "catalog",
+            "ok": true
+          },
+          {
+            "type": "done"
+          }
+        ],
+        "state": {
+          "phase": "monitor",
+          "proposals": [
+            {
+              "planId": "plan_dup_1",
+              "operation": "media_download",
+              "status": "awaiting_approval",
+              "manifestHash": "h",
+              "proposalKey": "key_dup_1"
+            }
+          ]
+        }
+      }
+    }
+  ]
+}

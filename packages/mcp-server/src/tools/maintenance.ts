@@ -45,17 +45,23 @@ export function registerMaintenanceTools(server: McpServer, context: McpToolCont
   }, async ({ path: logicalPath, action, profileName }) =>
     runEnvelopeTool(async () => {
       const { plan, summary } = await createMediaFormatPlan({ logicalPath, action, profileName, scope });
-      defaultOperationStore.createPlan(plan, "awaiting_approval");
+      const record = defaultOperationStore.createPlan(plan, "awaiting_approval");
+      const effective = record.plan;
+      const duplicate = effective.id !== plan.id;
       return createToolEnvelope({
         data: {
-          planId: plan.id,
-          operation: plan.operation,
-          status: "awaiting_approval",
-          manifestHash: plan.manifestHash,
-          expiresAt: plan.expiresAt,
+          planId: effective.id,
+          operation: effective.operation,
+          status: record.status,
+          manifestHash: effective.manifestHash,
+          expiresAt: effective.expiresAt,
+          proposalKey: effective.proposalKey,
+          duplicate,
           summary,
           availableProfiles: listProfiles(),
-          message: `Plan ${plan.id} awaits owner approval in the Mediabox app. Use operation_status to follow it.`,
+          message: duplicate
+            ? `Plan ${effective.id} for this file and profile is already awaiting owner approval; no second plan was created.`
+            : `Plan ${effective.id} awaits owner approval in the Mediabox app. Use operation_status to follow it.`,
         },
       });
     })

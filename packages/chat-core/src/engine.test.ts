@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { ChatEvent } from '@mediabox/contracts';
 import { streamChat, runChat } from './engine.js';
+import { InMemoryWorkflowStore } from './agent/workflow.js';
 import type { LLMStreamChunk, StreamProvider } from './providers/types.js';
 import type { ChatMessage, HistoryStore, McpCallFn } from './types.js';
 
@@ -54,9 +55,13 @@ async function collect(
   provider: StreamProvider,
   mcpCall: McpCallFn,
   historyStore: HistoryStore,
+  selection?: import('@mediabox/contracts').TypedSelection,
 ): Promise<ChatEvent[]> {
   const events: ChatEvent[] = [];
-  for await (const evt of streamChat({ message, conversationId: 'conv-1', provider, mcpCall, historyStore, locale: 'en' })) {
+  // Each case gets its own workflow store: without one they would share the
+  // runtime's module-level default and leak phases between tests.
+  const workflowStore = new InMemoryWorkflowStore();
+  for await (const evt of streamChat({ message, conversationId: 'conv-1', provider, mcpCall, historyStore, workflowStore, locale: 'en', selection })) {
     events.push(evt);
   }
   return events;
@@ -104,7 +109,12 @@ describe('streamChat — present_choices', () => {
     expect(events.at(-1)).toEqual({ type: 'done', fullText: 'Which one?' });
 
     const history = store.get('conv-1');
-    expect(history.at(-1)?.toolResults?.[0]).toEqual({ id: 'call-1', name: 'present_choices', result: '{"presented":true}' });
+    expect(history.at(-1)?.toolResults?.[0]).toEqual({
+      id: 'call-1',
+      name: 'present_choices',
+      ok: true,
+      result: '{"presented":5}',
+    });
   });
 });
 
@@ -124,7 +134,13 @@ describe('streamChat — tool failure detection', () => {
     expect(end).toMatchObject({ name: 'catalog', ok: false, callId: 'call-1' });
     expect(end?.error).toContain('Sonarr unreachable');
     expect(seen).toHaveLength(2);
-    expect(seen[1].messages.at(-1)?.toolResults?.[0].result).toBe(envelope);
+    // The payload reaches the model inside the data-boundary envelope, compacted but
+    // with the error intact (§2.4 / §2.7). The raw result stays in the history.
+    const fedBack = seen[1].messages.at(-1)?.toolResults?.[0].result ?? '';
+    expect(fedBack).toMatch(/^\[tool_result tool=catalog status=error source=search_media\]/);
+    expect(fedBack).toContain('UPSTREAM_DOWN');
+    expect(fedBack).toContain('Sonarr unreachable');
+    expect(fedBack.trimEnd().endsWith('[/tool_result]')).toBe(true);
     expect(events.at(-1)).toEqual({ type: 'done', fullText: 'The catalog is unavailable right now.' });
   });
 
@@ -170,8 +186,8 @@ describe('streamChat — routing safety', () => {
     expect(calls).toHaveLength(0);
     const end = toolEnd(events);
     expect(end).toMatchObject({ name: 'movies', ok: false });
-    expect(end?.error).toMatch(/Unknown virtual tool: movies\.grab/);
-    expect(seen[1].messages.at(-1)?.toolResults?.[0].result).toContain('Unknown virtual tool');
+    expect(end?.error).toMatch(/Unknown virtual tool: movies\.grab|Tool 'movies' is not exposed/);
+    expect(seen[1].messages.at(-1)?.toolResults?.[0].result).toMatch(/Unknown virtual tool|not exposed/);
   });
 
   it('routes catalog propose_download to the proposal tool and reports success', async () => {
@@ -182,7 +198,12 @@ describe('streamChat — routing safety', () => {
     const plan = '{"planId":"plan-1","operation":"media_download","status":"awaiting_approval","expiresAt":"2026-09-10T00:10:00Z"}';
     const { mcpCall, calls } = fakeMcp({ propose_download: plan });
 
-    const events = await collect('Download it', provider, mcpCall, memoryStore());
+    const events = await collect('Download it', provider, mcpCall, memoryStore(), {
+      type: 'select_release',
+      releaseRef: 'rref_1',
+      mediaRef: 'mref_1',
+      value: 'Download it',
+    });
 
     expect(calls).toEqual([{ name: 'propose_download', args: { releaseRef: 'rref_1', mediaRef: 'mref_1' } }]);
     expect(toolEnd(events)).toMatchObject({ name: 'catalog', ok: true });

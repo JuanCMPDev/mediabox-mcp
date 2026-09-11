@@ -49,18 +49,32 @@
     "providers": {
       "none": "No AI",
       "openrouter": "OpenRouter",
-      "google": "Google AI"
+      "google": "Google AI",
+      "local": "Local (private)"
     },
     "hints": {
-      "none": "Skip the AI assistant for now. Local Ollama support is coming in phase 4.",
+      "none": "Skip the AI assistant for now; you can enable it later from Settings.",
       "openrouter": "One key, access to Claude, GPT-4, and more. Get one at openrouter.ai/keys.",
       "google": "Gemini via Google AI Studio. Cheapest option for prototyping.",
       "openrouterModel": "Recommended: <1>openai/gpt-4o</1> or <3>google/gemini-2.5-flash</3>.",
-      "googleModel": "Recommended: <1>gemini-2.5-flash</1>. Leave blank to use the SDK default."
+      "googleModel": "Recommended: <1>gemini-2.5-flash</1>. Leave blank to use the SDK default.",
+      "local": "Inference on your own hardware: private, with no cloud key and no external call.",
+      "localModel": "Recommended: <1>qwen2.5:7b</1> (8K context) or <3>qwen2.5:3b</3> on a CPU-only host."
     },
     "apiKeyLabel": "API key",
     "modelLabel": "Model",
-    "googleModelLabel": "Model (optional)"
+    "googleModelLabel": "Model (optional)",
+    "localRuntimeLabel": "Local runtime",
+    "localBaseUrlLabel": "Local endpoint URL",
+    "localContextLabel": "Context window (tokens)",
+    "localHint": "Mediabox never installs a GPU driver: it talks to a runtime you already have (Ollama, LM Studio, llama.cpp, vLLM) over its OpenAI-compatible API.",
+    "detecting": "Detecting hardware and local runtimes…",
+    "detectionFailed": "Hardware could not be detected; configure the runtime by hand.",
+    "detected": "Detected hardware",
+    "noGpu": "no GPU detected, CPU inference",
+    "runtimeFound": "Runtime found:",
+    "runtimeMissing": "No local runtime is answering: install Ollama or LM Studio, then start it.",
+    "notRecommended": "Does not fit this hardware:"
   },
   "paths": {
     "intro": "Absolute paths recommended on Linux; relative paths resolve against the stack folder. Folders are created on first deploy if they don't exist.",
@@ -195,12 +209,12 @@
       "error": "Deploy failed"
     },
     "kinds": {
-      "start":    "start",
+      "start": "start",
       "progress": "progress",
-      "success":  "success",
-      "warn":     "warn",
-      "error":    "error",
-      "log":      "log"
+      "success": "success",
+      "warn": "warn",
+      "error": "error",
+      "log": "log"
     },
     "summary": {
       "total": "Total: {{seconds}}s",

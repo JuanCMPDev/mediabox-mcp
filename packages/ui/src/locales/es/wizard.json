@@ -49,18 +49,32 @@
     "providers": {
       "none": "Sin IA",
       "openrouter": "OpenRouter",
-      "google": "Google AI"
+      "google": "Google AI",
+      "local": "Local (privado)"
     },
     "hints": {
-      "none": "Omite el asistente de IA por ahora. El soporte local de Ollama llegará en la fase 4.",
+      "none": "Omite el asistente de IA por ahora; puedes activarlo más tarde desde Configuración.",
       "openrouter": "Una clave, acceso a Claude, GPT-4 y más. Consigue una en openrouter.ai/keys.",
       "google": "Gemini vía Google AI Studio. Opción más barata para prototipar.",
       "openrouterModel": "Recomendado: <1>openai/gpt-4o</1> o <3>google/gemini-2.5-flash</3>.",
-      "googleModel": "Recomendado: <1>gemini-2.5-flash</1>. Déjalo en blanco para usar el predeterminado del SDK."
+      "googleModel": "Recomendado: <1>gemini-2.5-flash</1>. Déjalo en blanco para usar el predeterminado del SDK.",
+      "local": "Inferencia en tu propio hardware: privada, sin clave cloud y sin llamadas externas.",
+      "localModel": "Recomendado: <1>qwen2.5:7b</1> (contexto 8K) o <3>qwen2.5:3b</3> en un equipo sin GPU."
     },
     "apiKeyLabel": "Clave de API",
     "modelLabel": "Modelo",
-    "googleModelLabel": "Modelo (opcional)"
+    "googleModelLabel": "Modelo (opcional)",
+    "localRuntimeLabel": "Runtime local",
+    "localBaseUrlLabel": "URL del endpoint local",
+    "localContextLabel": "Ventana de contexto (tokens)",
+    "localHint": "Mediabox no instala controladores de GPU: habla con un runtime que ya tengas (Ollama, LM Studio, llama.cpp, vLLM) por su API compatible con OpenAI.",
+    "detecting": "Detectando hardware y runtimes locales…",
+    "detectionFailed": "No se pudo detectar el hardware; configura el runtime a mano.",
+    "detected": "Hardware detectado",
+    "noGpu": "sin GPU detectada, inferencia en CPU",
+    "runtimeFound": "Runtime encontrado:",
+    "runtimeMissing": "Ningún runtime local responde: instala Ollama o LM Studio y arráncalo.",
+    "notRecommended": "No cabe en este hardware:"
   },
   "paths": {
     "intro": "Rutas absolutas recomendadas en Linux; rutas relativas se resuelven contra la carpeta del stack. Las carpetas se crean en el primer despliegue si no existen.",
@@ -195,12 +209,12 @@
       "error": "Despliegue fallido"
     },
     "kinds": {
-      "start":    "inicio",
+      "start": "inicio",
       "progress": "progreso",
-      "success":  "éxito",
-      "warn":     "aviso",
-      "error":    "error",
-      "log":      "log"
+      "success": "éxito",
+      "warn": "aviso",
+      "error": "error",
+      "log": "log"
     },
     "summary": {
       "total": "Total: {{seconds}}s",

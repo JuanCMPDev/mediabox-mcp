@@ -201,18 +201,26 @@ export function registerCatalogTools(server: McpServer, context: McpToolContext 
         }
 
         const { plan, summary } = createDownloadPlan({ releaseRef, mediaRef, replacement, scope, activeQueue: queue });
-        defaultOperationStore.createPlan(plan, "awaiting_approval");
+        // Idempotent: the store returns the plan already awaiting approval for the
+        // same proposal key instead of creating a second one (§2.8 / AGT-08).
+        const record = defaultOperationStore.createPlan(plan, "awaiting_approval");
+        const effective = record.plan;
+        const duplicate = effective.id !== plan.id;
 
         return createToolEnvelope({
           data: {
-            planId: plan.id,
-            operation: plan.operation,
-            status: "awaiting_approval",
-            manifestHash: plan.manifestHash,
-            expiresAt: plan.expiresAt,
+            planId: effective.id,
+            operation: effective.operation,
+            status: record.status,
+            manifestHash: effective.manifestHash,
+            expiresAt: effective.expiresAt,
+            proposalKey: effective.proposalKey,
+            duplicate,
             summary,
-            effects: plan.effects.map((e) => ({ action: e.serviceAction, irreversibleLoss: e.irreversibleLoss })),
-            message: "Plan awaiting owner approval in the Mediabox app. Do not claim the download started; check operation_status for progress.",
+            effects: effective.effects.map((e) => ({ action: e.serviceAction, irreversibleLoss: e.irreversibleLoss })),
+            message: duplicate
+              ? `Plan ${effective.id} for this release is already awaiting your approval in the Mediabox app; no second plan was created.`
+              : "Plan awaiting owner approval in the Mediabox app. Do not claim the download started; check operation_status for progress.",
           },
           sources: [source],
         });

@@ -1,6 +1,6 @@
 import type { DatabaseAdapter } from "./sqlite/contract.js";
 
-export const CURRENT_SCHEMA_VERSION = 1;
+export const CURRENT_SCHEMA_VERSION = 2;
 
 export function initializeOperationsSchema(db: DatabaseAdapter): void {
   // Enforce foreign keys
@@ -36,7 +36,8 @@ export function initializeOperationsSchema(db: DatabaseAdapter): void {
           current_step INTEGER DEFAULT 0,
           total_steps INTEGER DEFAULT 0,
           lease_owner TEXT,
-          lease_expires_at INTEGER
+          lease_expires_at INTEGER,
+          proposal_key TEXT
         );
 
         CREATE INDEX IF NOT EXISTS idx_operation_plans_status ON operation_plans(status);
@@ -63,7 +64,41 @@ export function initializeOperationsSchema(db: DatabaseAdapter): void {
           expires_at INTEGER NOT NULL
         );
 
-        PRAGMA user_version = 1;
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_operation_plans_proposal_active
+          ON operation_plans(proposal_key)
+          WHERE status IN ('planned', 'awaiting_approval');
+
+        CREATE TABLE IF NOT EXISTS agent_workflows (
+          conversation_id TEXT PRIMARY KEY,
+          principal_id TEXT NOT NULL,
+          installation_id TEXT NOT NULL,
+          state_json TEXT NOT NULL,
+          schema_version INTEGER NOT NULL,
+          updated_at TEXT NOT NULL
+        );
+
+        PRAGMA user_version = 2;
+      `);
+    });
+  } else if (currentVersion < 2) {
+    db.transaction(() => {
+      db.exec(`
+        ALTER TABLE operation_plans ADD COLUMN proposal_key TEXT;
+
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_operation_plans_proposal_active
+          ON operation_plans(proposal_key)
+          WHERE status IN ('planned', 'awaiting_approval');
+
+        CREATE TABLE IF NOT EXISTS agent_workflows (
+          conversation_id TEXT PRIMARY KEY,
+          principal_id TEXT NOT NULL,
+          installation_id TEXT NOT NULL,
+          state_json TEXT NOT NULL,
+          schema_version INTEGER NOT NULL,
+          updated_at TEXT NOT NULL
+        );
+
+        PRAGMA user_version = 2;
       `);
     });
   }

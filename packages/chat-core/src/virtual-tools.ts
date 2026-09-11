@@ -1,19 +1,18 @@
 /* ─── Virtual tools presented to the LLM ─────────────────────────────────────
- * Each virtual tool wraps one or more real MCP tools under a single action-based
- * interface, keeping the LLM's tool surface small, semantically clear, and strictly
- * proposal-based for mutations.
+ * High-level action-based virtual tools wrapping real MCP tools. Descriptions
+ * are concise to respect the per-phase schema budget of <= 1200 tokens.
  * ──────────────────────────────────────────────────────────────────────── */
 import type { VirtualToolDef } from './types.js';
 
 export const VIRTUAL_TOOLS: Record<string, VirtualToolDef> = {
   server_info: {
     name: 'server_info',
-    description: "Server status and activity log. action:'status' for full overview (disk, libraries, sessions, users). action:'activity' for recent playback history.",
+    description: 'Server status and playback activity. status=overview, activity=recent history.',
     parameters: {
       type: 'object',
       properties: {
-        action: { type: 'string', enum: ['status', 'activity'], description: 'status=full overview, activity=who watched what' },
-        limit:  { type: 'number', description: 'Entries for activity log (default 15)' },
+        action: { type: 'string', enum: ['status', 'activity'] },
+        limit:  { type: 'number', description: 'Activity entries limit' },
       },
       required: ['action'],
     },
@@ -21,17 +20,17 @@ export const VIRTUAL_TOOLS: Record<string, VirtualToolDef> = {
 
   media_query: {
     name: 'media_query',
-    description: "Search or list Jellyfin content, or get details of a specific item. action:'search' to find/list media (omit query to list all, use page/pageSize to paginate). action:'details' for seasons/episodes of a series (use seasonNumber to filter one season, page/pageSize to paginate episodes).",
+    description: 'Search or list Jellyfin library content, seasons, and episodes.',
     parameters: {
       type: 'object',
       properties: {
         action:       { type: 'string', enum: ['search', 'details'] },
-        query:        { type: 'string', description: 'Search term (omit to list all)' },
+        query:        { type: 'string', description: 'Search title' },
         type:         { type: 'string', enum: ['Movie', 'Series', 'Episode', 'Audio'] },
-        showId:       { type: 'string', description: 'Jellyfin item ID (for details)' },
-        seasonNumber: { type: 'number', description: 'Filter details to this season only (recommended for large series)' },
-        page:         { type: 'number', description: 'Page number for pagination (default 1)' },
-        pageSize:     { type: 'number', description: 'Items per page for pagination (default 50)' },
+        showId:       { type: 'string', description: 'Jellyfin item ID' },
+        seasonNumber: { type: 'number', description: 'Season filter' },
+        page:         { type: 'number' },
+        pageSize:     { type: 'number' },
       },
       required: ['action'],
     },
@@ -39,24 +38,24 @@ export const VIRTUAL_TOOLS: Record<string, VirtualToolDef> = {
 
   catalog: {
     name: 'catalog',
-    description: "Unified media catalog and releases across Arr services. action:'search'=search unified catalog. action:'details'=get item details by mediaRef. action:'releases'=find releases by mediaRef. action:'propose_download'=propose downloading a release by releaseRef (and optional mediaRef / replacement).",
+    description: 'Unified media catalog and releases. search=find, details=item info, releases=find releases, propose_download=propose download.',
     parameters: {
       type: 'object',
       properties: {
         action:         { type: 'string', enum: ['search', 'details', 'releases', 'propose_download'] },
-        query:          { type: 'string', description: 'Search query' },
-        type:           { type: 'string', description: 'media type filter (movie, series, etc.)' },
-        year:           { type: 'number', description: 'Release year' },
-        cursor:         { type: 'string', description: 'Opaque pagination cursor' },
+        query:          { type: 'string' },
+        type:           { type: 'string', description: 'movie or series' },
+        year:           { type: 'number' },
+        cursor:         { type: 'string' },
         page:           { type: 'number' },
         pageSize:       { type: 'number' },
-        mediaRef:       { type: 'string', description: 'Opaque media reference token' },
-        releaseRef:     { type: 'string', description: 'Opaque release reference token' },
-        replacement:    { type: 'boolean', description: 'Whether this replaces an existing media file' },
-        resolution:     { type: 'string', description: 'Resolution preference (e.g. 1080p)' },
-        audioLanguage:  { type: 'string', description: 'Preferred audio language code (e.g. es)' },
-        strictLanguage: { type: 'boolean', description: 'Require strict audio language match' },
-        minSeeders:     { type: 'number', description: 'Minimum seeder threshold' },
+        mediaRef:       { type: 'string', description: 'Opaque media token' },
+        releaseRef:     { type: 'string', description: 'Opaque release token' },
+        replacement:    { type: 'boolean' },
+        resolution:     { type: 'string' },
+        audioLanguage:  { type: 'string' },
+        strictLanguage: { type: 'boolean' },
+        minSeeders:     { type: 'number' },
       },
       required: ['action'],
     },
@@ -64,19 +63,19 @@ export const VIRTUAL_TOOLS: Record<string, VirtualToolDef> = {
 
   library_ops: {
     name: 'library_ops',
-    description: "Manage files and libraries safely. scan=refresh Jellyfin. list=browse files. refresh=refresh metadata by itemId. rename=preview standardized episode names (dryRun is pinned to true). propose_delete=propose deleting files/directories via an approved plan.",
+    description: 'Manage files and libraries. scan=refresh, list=browse, refresh=metadata, rename=preview names, propose_delete=propose deletion.',
     parameters: {
       type: 'object',
       properties: {
         action:             { type: 'string', enum: ['scan', 'list', 'refresh', 'rename', 'propose_delete'] },
-        path:               { type: 'string', description: "File path. 'downloads/' prefix for download folder" },
-        paths:              { description: 'Path or array of paths to propose for cleanup/deletion' },
+        path:               { type: 'string', description: 'File path' },
+        paths:              { description: 'Path or array of paths to propose for deletion' },
         showPath:           { type: 'string' },
         showName:           { type: 'string' },
         seasonNumber:       { type: 'number' },
         startEpisodeNumber: { type: 'number' },
         dryRun:             { type: 'boolean' },
-        itemId:             { type: 'string', description: 'For metadata refresh' },
+        itemId:             { type: 'string' },
       },
       required: ['action'],
     },
@@ -84,19 +83,19 @@ export const VIRTUAL_TOOLS: Record<string, VirtualToolDef> = {
 
   series: {
     name: 'series',
-    description: "Inspect TV series via Sonarr. action:'search'=find by name. action:'status'=view series/episodes/calendar/missing/queue/history. action:'releases'=find torrents for a series/episode.",
+    description: 'Inspect TV series via Sonarr. search=find, status=details/queue/history, releases=find releases.',
     parameters: {
       type: 'object',
       properties: {
         action:        { type: 'string', enum: ['search', 'status', 'releases'] },
         query:         { type: 'string' },
         view:          { type: 'string', enum: ['series', 'episodes', 'calendar', 'missing', 'queue', 'history'] },
-        seriesId:      { type: 'number', description: 'Sonarr internal series id' },
+        seriesId:      { type: 'number' },
         seasonNumber:  { type: 'number' },
-        episodeNumber: { type: 'number', description: 'Episode number' },
-        page:          { type: 'number', description: 'Page number' },
-        pageSize:      { type: 'number', description: 'Items per page' },
-        episodeId:     { type: 'number', description: 'Sonarr internal episode id' },
+        episodeNumber: { type: 'number' },
+        page:          { type: 'number' },
+        pageSize:      { type: 'number' },
+        episodeId:     { type: 'number' },
         limit:         { type: 'number' },
       },
       required: ['action'],
@@ -105,14 +104,14 @@ export const VIRTUAL_TOOLS: Record<string, VirtualToolDef> = {
 
   movies: {
     name: 'movies',
-    description: "Inspect movies via Radarr. action:'search'=find by name. action:'status'=view movies/queue/history. action:'releases'=find torrents.",
+    description: 'Inspect movies via Radarr. search=find, status=details/queue/history, releases=find releases.',
     parameters: {
       type: 'object',
       properties: {
         action:   { type: 'string', enum: ['search', 'status', 'releases'] },
         query:    { type: 'string' },
         view:     { type: 'string', enum: ['movies', 'queue', 'history'] },
-        movieId:  { type: 'number', description: 'Radarr internal movie id' },
+        movieId:  { type: 'number' },
         limit:    { type: 'number' },
       },
       required: ['action'],
@@ -121,7 +120,7 @@ export const VIRTUAL_TOOLS: Record<string, VirtualToolDef> = {
 
   downloads: {
     name: 'downloads',
-    description: "Check download queues and status. action:'status'=check client queue and folders. action:'list_queue'=list active downloads in Sonarr, Radarr, or qBittorrent.",
+    description: 'Check download queues and status in clients.',
     parameters: {
       type: 'object',
       properties: {
@@ -134,14 +133,14 @@ export const VIRTUAL_TOOLS: Record<string, VirtualToolDef> = {
 
   media_format: {
     name: 'media_format',
-    description: "Analyze and propose media format transformations. action:'analyze'=inspect audio and subtitle streams. action:'propose'=propose a recoverable remux, subtitle conversion, or transcode job.",
+    description: 'Analyze streams and propose format transformations. analyze=inspect streams, propose=propose remux/transcode job.',
     parameters: {
       type: 'object',
       properties: {
         action:      { type: 'string', enum: ['analyze', 'propose'] },
-        path:        { type: 'string', description: 'Logical path to the media file' },
-        job:         { type: 'string', enum: ['remux', 'subtitle-convert', 'transcode'], description: 'Job type for propose' },
-        profileName: { type: 'string', description: 'Target profile name (optional, defaults per job type)' },
+        path:        { type: 'string' },
+        job:         { type: 'string', enum: ['remux', 'subtitle-convert', 'transcode'] },
+        profileName: { type: 'string' },
       },
       required: ['action'],
     },
@@ -149,7 +148,7 @@ export const VIRTUAL_TOOLS: Record<string, VirtualToolDef> = {
 
   maintenance: {
     name: 'maintenance',
-    description: "Server maintenance. action:'cleanup'=preview server cleanup (dryRun is always true). action:'check_jobs'=monitor background operations by jobId.",
+    description: 'Server maintenance and background jobs. cleanup=preview cleanup, check_jobs=job status.',
     parameters: {
       type: 'object',
       properties: {
@@ -163,12 +162,12 @@ export const VIRTUAL_TOOLS: Record<string, VirtualToolDef> = {
 
   operations: {
     name: 'operations',
-    description: "Operation plans and status. action:'status'=check execution state and steps of an operation plan by planId.",
+    description: 'Operation plans. status=check execution state and steps of an operation plan by planId.',
     parameters: {
       type: 'object',
       properties: {
         action: { type: 'string', enum: ['status'] },
-        planId: { type: 'string', description: 'Operation plan identifier' },
+        planId: { type: 'string' },
       },
       required: ['action'],
     },
@@ -176,12 +175,11 @@ export const VIRTUAL_TOOLS: Record<string, VirtualToolDef> = {
 
   present_choices: {
     name: 'present_choices',
-    description:
-      "UI helper — render clickable option cards. THIS IS MANDATORY for any pick the user has to make: multi-result searches (>1 hit), release pickers with >1 result, season/episode ranges, replace-vs-keep. NEVER list options as text bullets when present_choices applies. Each item may carry mediaRef/releaseRef/selectionType so user clicks produce typed selections.",
+    description: 'Render clickable choice cards for disambiguation and selection.',
     parameters: {
       type: 'object',
       properties: {
-        prompt: { type: 'string', description: 'Optional one-line question shown above the cards. Keep brief.' },
+        prompt: { type: 'string', description: 'Question shown above cards' },
         items: {
           type: 'array',
           minItems: 2,
@@ -189,13 +187,13 @@ export const VIRTUAL_TOOLS: Record<string, VirtualToolDef> = {
           items: {
             type: 'object',
             properties: {
-              label:         { type: 'string', description: 'Headline' },
-              subtitle:      { type: 'string', description: 'Key facts' },
-              meta:          { type: 'string', description: 'Optional secondary context' },
-              value:         { type: 'string', description: 'Verbatim text echoed as next message' },
-              mediaRef:      { type: 'string', description: 'Opaque candidate media reference' },
-              releaseRef:    { type: 'string', description: 'Opaque release reference' },
-              selectionType: { type: 'string', description: 'Type of selection: select_candidate, select_release, propose_download' },
+              label:         { type: 'string' },
+              subtitle:      { type: 'string' },
+              meta:          { type: 'string' },
+              value:         { type: 'string' },
+              mediaRef:      { type: 'string' },
+              releaseRef:    { type: 'string' },
+              selectionType: { type: 'string' },
             },
             required: ['label', 'value'],
           },

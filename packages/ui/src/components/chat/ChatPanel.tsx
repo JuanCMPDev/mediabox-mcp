@@ -9,7 +9,7 @@ import { useState }        from 'react';
 
 export function ChatPanel() {
   const { t } = useTranslation();
-  const { messages, isStreaming, send, pickChoice, clear } = useChat();
+  const { messages, isStreaming, send, pickChoice, clear, chatInfo } = useChat();
   const [input, setInput] = useState('');
   const [confirmClear, setConfirmClear] = useState(false);
 
@@ -35,6 +35,22 @@ export function ChatPanel() {
             <div className={styles.headerTitle}>
               {t('chat.title')}
               <span className={styles.betaBadge}>Beta</span>
+              {chatInfo && (
+                <span
+                  style={{
+                    marginLeft: '8px',
+                    fontSize: '11px',
+                    padding: '2px 6px',
+                    borderRadius: '4px',
+                    background: chatInfo.mode === 'local' ? 'rgba(76, 175, 80, 0.15)' : 'rgba(33, 150, 243, 0.15)',
+                    color: chatInfo.mode === 'local' ? '#81c784' : '#64b5f6',
+                    border: `1px solid ${chatInfo.mode === 'local' ? 'rgba(76, 175, 80, 0.3)' : 'rgba(33, 150, 243, 0.3)'}`,
+                  }}
+                  title={chatInfo.mode === 'local' ? `Local runtime: ${chatInfo.runtime || 'native'}, backend: ${chatInfo.backend || 'auto'}` : `Cloud provider: ${chatInfo.provider}`}
+                >
+                  {chatInfo.mode === 'local' ? `Local: ${chatInfo.model}` : `Cloud: ${chatInfo.model}`}
+                </span>
+              )}
             </div>
             <div className={styles.headerSub}>
               {t('chat.subtitle')}

@@ -1,0 +1,110 @@
+{
+  "id": "agt-01",
+  "title": "Strict argument validation before dispatch, single repair, and exhaustion (AGT-01)",
+  "locale": "en",
+  "turns": [
+    {
+      "user": "Find movies like Inception",
+      "provider": [
+        {
+          "sse": [
+            "data: {\"choices\":[{\"delta\":{\"tool_calls\":[{\"index\":0,\"id\":\"call-1\",\"function\":{\"name\":\"catalog\",\"arguments\":\"{\\\"action\\\":\\\"search\\\",\\\"bogusProp\\\":\\\"forbidden\\\",\\\"query\\\":\\\"Inception\\\"}\"}}]},\"finish_reason\":\"tool_calls\"}]}\n\n",
+            "data: [DONE]\n\n"
+          ]
+        },
+        {
+          "sse": [
+            "data: {\"choices\":[{\"delta\":{\"tool_calls\":[{\"index\":0,\"function\":{\"name\":\"catalog\",\"arguments\":\"{\\\"action\\\":\\\"sear\"}}]}}]}\n\n",
+            "data: {\"choices\":[{\"delta\":{\"tool_calls\":[{\"index\":0,\"function\":{\"arguments\":\"ch\\\",\\\"query\\\":\\\"Inception\\\",\\\"type\\\":\\\"movie\\\"}\"}}]},\"finish_reason\":\"tool_calls\"}]}\n\n",
+            "data: [DONE]\n\n"
+          ]
+        },
+        {
+          "sse": [
+            "data: {\"choices\":[{\"delta\":{\"content\":\"Found Inception in the catalog.\"}}]}\n\n",
+            "data: {\"choices\":[{\"delta\":{},\"finish_reason\":\"stop\"}]}\n\n",
+            "data: [DONE]\n\n"
+          ]
+        }
+      ],
+      "mcp": {
+        "search_media": "{\"schemaVersion\": 1, \"status\": \"ok\", \"data\": [{\"id\": \"m1\", \"title\": \"Inception\", \"year\": 2010, \"mediaRef\": \"mref_1234567890ab\"}]}"
+      },
+      "expect": {
+        "events": [
+          {
+            "type": "tool-start",
+            "name": "catalog"
+          },
+          {
+            "type": "tool-end",
+            "name": "catalog",
+            "ok": false
+          },
+          {
+            "type": "tool-start",
+            "name": "catalog"
+          },
+          {
+            "type": "tool-end",
+            "name": "catalog",
+            "ok": true
+          },
+          {
+            "type": "done"
+          }
+        ],
+        "ledger": [
+          {
+            "tool": "search_media",
+            "args": {
+              "query": "Inception",
+              "type": "movie"
+            }
+          }
+        ],
+        "inferences": 3
+      }
+    },
+    {
+      "user": "Now run the cleanup maintenance job",
+      "provider": [
+        {
+          "sse": [
+            "data: {\"choices\":[{\"delta\":{\"tool_calls\":[{\"index\":0,\"id\":\"c2\",\"function\":{\"name\":\"catalog\",\"arguments\":\"{\\\"action\\\":\\\"propose_download\\\",\\\"releaseRef\\\":\\\"rref_000000000001\\\"}\"}}]},\"finish_reason\":\"tool_calls\"}]}\n\n",
+            "data: [DONE]\n\n"
+          ]
+        },
+        {
+          "sse": [
+            "data: {\"choices\":[{\"delta\":{\"tool_calls\":[{\"index\":0,\"id\":\"c3\",\"function\":{\"name\":\"catalog\",\"arguments\":\"{\\\"action\\\":\\\"search\\\",\\\"query\\\":\"}}]},\"finish_reason\":\"tool_calls\"}]}\n\n",
+            "data: [DONE]\n\n"
+          ]
+        }
+      ],
+      "expect": {
+        "events": [
+          {
+            "type": "tool-end",
+            "name": "catalog",
+            "ok": false
+          },
+          {
+            "type": "tool-end",
+            "name": "catalog",
+            "ok": false
+          },
+          {
+            "type": "guard",
+            "code": "ERR_REPAIR_EXHAUSTED"
+          },
+          {
+            "type": "done"
+          }
+        ],
+        "ledger": [],
+        "guardCode": "ERR_REPAIR_EXHAUSTED"
+      }
+    }
+  ]
+}

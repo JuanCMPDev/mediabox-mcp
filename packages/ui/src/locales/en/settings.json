@@ -21,7 +21,22 @@
     "setLeaveBlank": "set — leave blank to keep",
     "replaceWithNew": "•••• replace with new key",
     "model": "Model",
-    "updated": "AI provider updated"
+    "updated": "AI provider updated",
+    "local": "Local",
+    "localRuntime": "Local runtime",
+    "localEndpoint": "Endpoint",
+    "localContext": "Context window (tokens)",
+    "diagnostics": "Inference diagnostics",
+    "diagnosticsUnavailable": "The runtime has not answered yet: no diagnostics available.",
+    "mode": "Mode",
+    "runtimeLabel": "Runtime",
+    "backend": "Backend",
+    "contextLabel": "Context",
+    "endpointLabel": "Endpoint",
+    "policyLabel": "Endpoint policy",
+    "canaryLabel": "Tool-calling canary",
+    "canaryUnknown": "not measured on this hardware yet",
+    "canaryFailed": "failed: text only"
   },
   "telegram": {
     "title": "Telegram bot",
@@ -127,12 +142,12 @@
       "esHint": "Stub — translations land in a follow-up PR; missing keys fall back to English."
     },
     "libraryRefresh": {
-      "label":   "Auto-refresh Jellyfin library",
-      "hint":    "Triggers a Jellyfin library scan on a schedule while the app is open. \"Off\" leaves Jellyfin's own scheduler in charge.",
-      "off":     "Off",
-      "hourly":  "Every hour",
+      "label": "Auto-refresh Jellyfin library",
+      "hint": "Triggers a Jellyfin library scan on a schedule while the app is open. \"Off\" leaves Jellyfin's own scheduler in charge.",
+      "off": "Off",
+      "hourly": "Every hour",
       "every6h": "Every 6 h",
-      "daily":   "Daily",
+      "daily": "Daily",
       "updated": "Library refresh schedule updated"
     }
   },

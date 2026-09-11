@@ -20,8 +20,10 @@
     "test:queries": "vitest run packages/mcp-server/src/queries",
     "test:filesystem": "vitest run packages/mcp-server/src/storage/storage.test.ts",
     "test:media-recovery": "vitest run packages/mcp-server/src/storage/media-jobs.test.ts",
+    "test:agent-replay": "vitest run packages/chat-core/src/agent",
     "smoke:media-ffmpeg": "node scripts/ci/smoke-media-ffmpeg.mjs",
     "smoke:node-bun": "node scripts/ci/smoke-node-bun.mjs",
+    "smoke:local-canary": "node scripts/ci/smoke-local-canary.mjs",
     "dev": "npm-run-all --parallel dev:mcp dev:ui",
     "dev:mcp": "npm run dev --workspace packages/mcp-server",
     "dev:ui": "npm run dev --workspace packages/ui",
@@ -30,7 +32,8 @@
     "build:ui": "npm run build  --workspace packages/ui",
     "sidecar:build": "node packages/desktop/scripts/build-sidecar.mjs",
     "bundle:desktop": "npm run bundle --workspace packages/desktop",
-    "icons:desktop": "npm run icons  --workspace packages/desktop"
+    "icons:desktop": "npm run icons  --workspace packages/desktop",
+    "test:local-provider": "vitest run packages/chat-core/src/providers packages/core/src/hardware packages/core/src/models"
   },
   "engines": {
     "node": ">=20"

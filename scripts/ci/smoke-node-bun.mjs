@@ -24,8 +24,8 @@ initializeOperationsSchema(nodeDb);
 
 // Verify tables and user_version
 const version = nodeDb.prepare("PRAGMA user_version;").get();
-if (!version || version.user_version !== 1) {
-  console.error("FAIL: user_version is not 1 in node:sqlite");
+if (!version || version.user_version !== 2) {
+  console.error("FAIL: user_version is not 2 in node:sqlite");
   process.exit(1);
 }
 
@@ -262,4 +262,55 @@ for (let attempt = 0; attempt < 10; attempt++) {
   }
 }
 
-console.log("✓ Gate G08 PASSED: Real mcp-server binary verified under Bun compiled runtime.");
+// ── 5. Validate LocalProvider in Bun Compiled Binary (Gate G08 Extension / P09) ─
+console.log("5. Testing LocalProvider import and initialization in Bun compiled binary...");
+const localTmpDir = path.join(repoRoot, "tmp-local-spike");
+fs.mkdirSync(localTmpDir, { recursive: true });
+const localSpikeEntry = path.join(localTmpDir, "local-spike-entry.ts");
+const localSpikeExe = path.join(localTmpDir, process.platform === "win32" ? "local-spike.exe" : "local-spike");
+
+fs.writeFileSync(
+  localSpikeEntry,
+  `
+import { LocalProvider } from "${path.join(repoRoot, "packages/chat-core/dist/providers/local.js").replace(/\\/g, "/")}";
+const p = new LocalProvider({ baseUrl: "http://127.0.0.1:11434", model: "qwen2.5:7b", runtime: "ollama" });
+if (p.providerName === "local" && p.model === "qwen2.5:7b") {
+  console.log("✓ LocalProvider successfully instantiated in Bun compiled binary!");
+  process.exit(0);
+} else {
+  console.error("LocalProvider failed verification in Bun compiled binary");
+  process.exit(1);
+}
+`
+);
+
+const compileLocalRes = spawnSync(
+  "bun",
+  ["build", localSpikeEntry, "--compile", "--outfile", localSpikeExe],
+  { encoding: "utf8", cwd: repoRoot, shell: true }
+);
+
+if (compileLocalRes.status !== 0) {
+  console.error("FAIL: bun build --compile local provider spike failed:\n", compileLocalRes.stderr || compileLocalRes.stdout);
+  fs.rmSync(localTmpDir, { recursive: true, force: true });
+  process.exit(compileLocalRes.status ?? 1);
+}
+
+const runLocalExe = spawnSync(localSpikeExe, [], { encoding: "utf8" });
+if (runLocalExe.status !== 0) {
+  console.error("FAIL: compiled local provider executable failed to run:\n", runLocalExe.stderr || runLocalExe.stdout);
+  fs.rmSync(localTmpDir, { recursive: true, force: true });
+  process.exit(runLocalExe.status ?? 1);
+}
+
+console.log(runLocalExe.stdout.trim());
+for (let attempt = 0; attempt < 10; attempt++) {
+  try {
+    fs.rmSync(localTmpDir, { recursive: true, force: true });
+    break;
+  } catch {
+    await new Promise((r) => setTimeout(r, 500));
+  }
+}
+
+console.log("✓ Gate G08 PASSED: Real mcp-server & LocalProvider verified under Bun compiled runtime.");

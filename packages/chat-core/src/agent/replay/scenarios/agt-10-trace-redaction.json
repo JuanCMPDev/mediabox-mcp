@@ -1,0 +1,54 @@
+{
+  "id": "agt-10",
+  "title": "The turn trace carries no secrets, no payloads and no full references (AGT-10)",
+  "locale": "en",
+  "turns": [
+    {
+      "user": "use Bearer super-secret-token-xyz and key sk-or-v1-abcdef0123456789 to find Dark",
+      "provider": [
+        [
+          {
+            "type": "tool_call",
+            "id": "call-1",
+            "name": "catalog",
+            "args": {
+              "action": "search",
+              "query": "Dark",
+              "type": "series"
+            }
+          }
+        ],
+        [
+          {
+            "type": "text",
+            "text": "Found Dark."
+          }
+        ]
+      ],
+      "mcp": {
+        "search_media": "{\"schemaVersion\": 1, \"status\": \"ok\", \"data\": [{\"id\": \"s1\", \"title\": \"Dark\", \"mediaRef\": \"mref_1234567890ab\", \"overview\": \"Winden is a small German town with a secret cave system.\"}]}"
+      },
+      "expect": {
+        "events": [
+          {
+            "type": "tool-end",
+            "name": "catalog",
+            "ok": true
+          },
+          {
+            "type": "done"
+          }
+        ],
+        "ledger": [
+          {
+            "tool": "search_media",
+            "args": {
+              "query": "Dark",
+              "type": "series"
+            }
+          }
+        ]
+      }
+    }
+  ]
+}

@@ -1,7 +1,7 @@
 import fs from "node:fs/promises";
 import * as path from "node:path";
 import type { OperationPlan, PlannedTarget, PlannedEffect } from "@mediabox/contracts";
-import { buildOperationPlan } from "../planner.js";
+import { buildOperationPlan, computeProposalKey } from "../planner.js";
 import { mapNamespace } from "../../storage/namespace-map.js";
 import { defaultRootFs } from "../../storage/rootfs.js";
 import { INTERNAL_DIR_NAMES, isInternalPath } from "../../storage/quarantine.js";
@@ -182,6 +182,12 @@ export async function createDeletePlan(options: DeletePlannerOptions): Promise<{
     ownerId: options.scope.ownerId,
     conversationId: options.scope.conversationId,
     operation: "quarantine_files",
+    proposalKey: computeProposalKey({
+      installationId: options.scope.installationId,
+      conversationId: options.scope.conversationId,
+      operation: "quarantine_files",
+      subjects: [...uniqueFiles.keys()].sort(),
+    }),
     targets,
     effects,
     preconditions: [],

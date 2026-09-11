@@ -12,6 +12,7 @@ import type {
   RestartServicesResult,
   OperationPlanRecord,
   OperationPlanSummary,
+  HardwareReport,
 } from '@mediabox/contracts';
 
 import { getRuntimeConfig } from './runtime-config';
@@ -139,6 +140,11 @@ export const api = {
   },
   deleteDownload(hash: string, deleteFiles = false) {
     return del(`/api/dashboard/downloads/qbit/${hash}?deleteFiles=${deleteFiles}`);
+  },
+
+  // ── Local inference hardware (§3.3 / §3.4) ─────────────────────────────────
+  hardwareProfile(force = false): Promise<HardwareReport> {
+    return get(`/api/setup/hardware${force ? '?force=true' : ''}`);
   },
 
   // ── Chat ───────────────────────────────────────────────────────────────────

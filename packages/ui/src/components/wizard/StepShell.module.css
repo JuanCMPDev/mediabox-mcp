@@ -126,3 +126,21 @@
   font-size: 12px;
   color: var(--error);
 }
+
+/* Model suggestion chips in the local inference step (§3.4 / LOC-09). */
+:global(.wizard-chip) {
+  font-family: var(--font-sans);
+  font-size: 12px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--outline, rgba(255, 255, 255, 0.18));
+  background: var(--surface-2, rgba(255, 255, 255, 0.06));
+  color: var(--on-surface);
+  cursor: pointer;
+  transition: background 120ms ease, border-color 120ms ease;
+}
+
+:global(.wizard-chip:hover) {
+  background: var(--surface-3, rgba(255, 255, 255, 0.12));
+  border-color: var(--primary, rgba(129, 199, 132, 0.6));
+}

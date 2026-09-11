@@ -74,6 +74,29 @@ describe("generateEnv", () => {
     expect(env).not.toContain("OPENROUTER_API_KEY=");
     expect(env).toContain("ALLOWED_TELEGRAM_USERS=");
   });
+
+  it("emits the local LLM block with runtime, baseUrl, model, and backend", () => {
+    const cfg = baseConfig();
+    cfg.ai = {
+      kind: "local",
+      runtime: "ollama",
+      baseUrl: "http://127.0.0.1:11434",
+      model: "qwen2.5:7b",
+      contextTokens: 8192,
+      backend: "rocm",
+      allowLan: true,
+      endpointHosts: ["192.168.1.50"],
+    };
+    const env = generateEnv(cfg);
+    expect(env).toContain("LLM_PROVIDER=local");
+    expect(env).toContain("LOCAL_LLM_RUNTIME=ollama");
+    expect(env).toContain("LOCAL_LLM_BASE_URL=http://127.0.0.1:11434");
+    expect(env).toContain("LOCAL_LLM_MODEL=qwen2.5:7b");
+    expect(env).toContain("LOCAL_LLM_CONTEXT_TOKENS=8192");
+    expect(env).toContain("INFERENCE_BACKEND=rocm");
+    expect(env).toContain("INFERENCE_ALLOW_LAN=true");
+    expect(env).toContain("INFERENCE_ENDPOINT_HOSTS=192.168.1.50");
+  });
 });
 
 describe("updateEnvKeys", () => {

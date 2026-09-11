@@ -112,6 +112,18 @@ export function generateEnv(config: DeployConfig, keys?: DiscoveredKeys): string
       if (effectiveLlm.model) {
         lines.push(`LLM_MODEL=${effectiveLlm.model}`);
       }
+    } else if (effectiveLlm.kind === "local") {
+      lines.push(
+        `LOCAL_LLM_RUNTIME=${effectiveLlm.runtime}`,
+        `LOCAL_LLM_BASE_URL=${effectiveLlm.baseUrl}`,
+        `LOCAL_LLM_MODEL=${effectiveLlm.model}`,
+      );
+      if (effectiveLlm.contextTokens) lines.push(`LOCAL_LLM_CONTEXT_TOKENS=${effectiveLlm.contextTokens}`);
+      if (effectiveLlm.backend) lines.push(`INFERENCE_BACKEND=${effectiveLlm.backend}`);
+      if (effectiveLlm.apiKey) lines.push(`LOCAL_LLM_API_KEY=${effectiveLlm.apiKey}`);
+      if (effectiveLlm.allowLan) lines.push(`INFERENCE_ALLOW_LAN=true`);
+      if (effectiveLlm.endpointHosts?.length) lines.push(`INFERENCE_ENDPOINT_HOSTS=${effectiveLlm.endpointHosts.join(",")}`);
+      if (effectiveLlm.tlsFingerprint) lines.push(`INFERENCE_TLS_FINGERPRINT=${effectiveLlm.tlsFingerprint}`);
     }
   }
 
