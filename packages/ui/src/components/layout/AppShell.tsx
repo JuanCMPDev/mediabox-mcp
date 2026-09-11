@@ -3,6 +3,7 @@ import { AtmosphericBackground } from './AtmosphericBackground';
 import { TopBar }      from './TopBar';
 import { Sidebar }     from './Sidebar';
 import { ServiceDock } from './ServiceDock';
+import { OperationsBadge, OperationsGate } from '@/components/operations/OperationsGate';
 import { useHealth, useServices, useSetupInfo } from '@/lib/queries';
 import { MOCK_SERVICES } from '@/mocks/data';
 import type { View } from '@/lib/types';
@@ -26,18 +27,23 @@ export function AppShell({ children, activeView, onViewChange }: AppShellProps) 
   // every refresh; the App-level redirect catches a stale 'chat' selection.
   const aiEnabled    = info ? info.ai.provider !== 'none' : true;
 
+  // OperationsGate owns the owner-approval modal for operation plans and
+  // feeds the top-bar badge. It wraps the whole shell so any view (the
+  // Settings operations list, for one) can reopen a plan via its context.
   return (
-    <div className={styles.shell}>
-      <AtmosphericBackground />
-      <TopBar activeView={activeView} serverOnline={serverOnline} />
-      <Sidebar
-        activeView={activeView}
-        onViewChange={onViewChange}
-        serverOnline={serverOnline}
-        aiEnabled={aiEnabled}
-      />
-      <main className={styles.main}>{children}</main>
-      <ServiceDock services={serviceList} />
-    </div>
+    <OperationsGate>
+      <div className={styles.shell}>
+        <AtmosphericBackground />
+        <TopBar activeView={activeView} serverOnline={serverOnline} actions={<OperationsBadge />} />
+        <Sidebar
+          activeView={activeView}
+          onViewChange={onViewChange}
+          serverOnline={serverOnline}
+          aiEnabled={aiEnabled}
+        />
+        <main className={styles.main}>{children}</main>
+        <ServiceDock services={serviceList} />
+      </div>
+    </OperationsGate>
   );
 }

@@ -8,6 +8,7 @@ import {
 } from 'lucide-react';
 import { LogDrawer }    from '@/components/log-drawer/LogDrawer';
 import { UpdateDrawer } from '@/components/update-drawer/UpdateDrawer';
+import { RecentOperations } from '@/components/operations/RecentOperations';
 
 import { GlassCard }   from '@/components/atoms/GlassCard';
 import { GlassButton } from '@/components/atoms/GlassButton';
@@ -58,6 +59,7 @@ export function SettingsView() {
           <StackOverview info={info} />
           <AIProviderSection info={info} />
           <TelegramSection info={info} />
+          <OperationsSection />
           <ServicePasswordsSection info={info} />
           <JellyfinPasswordSection info={info} />
           <ServiceApiKeysSection info={info} />
@@ -91,6 +93,19 @@ function SettingsSkeleton() {
 /* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
  *  Sections
  * ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
+
+// ─── Operations (owner approval audit trail, Blueprint §4) ──────────────────
+// Strings live under `operations.*` in the common bundle, shared with the
+// approval modal and the top-bar badge.
+
+function OperationsSection() {
+  const { t } = useTranslation('common');
+  return (
+    <Section title={t('operations.recent.title')} subtitle={t('operations.recent.subtitle')}>
+      <RecentOperations />
+    </Section>
+  );
+}
 
 function StackOverview({ info }: { info: SetupInfo }) {
   const { t } = useTranslation('settings');

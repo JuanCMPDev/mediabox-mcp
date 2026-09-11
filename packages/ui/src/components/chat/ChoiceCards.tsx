@@ -1,16 +1,17 @@
 import { ChevronRight } from 'lucide-react';
 import styles from './ChoiceCards.module.css';
 import type { ChatChoiceItem } from '@/lib/types';
+import type { TypedSelection } from '@mediabox/contracts';
 
 interface ChoiceCardsProps {
   prompt?: string;
   items:   ChatChoiceItem[];
-  onPick:  (choiceId: string) => void;
+  onPick:  (choiceId: string, selection?: TypedSelection) => void;
   disabled?: boolean;
 }
 
 /** Clickable cards rendered when the assistant emits a `choices` event.
- *  Each click sends the item's `value` back as the next user message — the
+ *  Each click sends the item's `value` (or typed selection) back as the next user message — the
  *  cards then disappear (use-chat clears `choices` on the message). */
 export function ChoiceCards({ prompt, items, onPick, disabled = false }: ChoiceCardsProps) {
   return (
@@ -22,8 +23,11 @@ export function ChoiceCards({ prompt, items, onPick, disabled = false }: ChoiceC
             key={item.id}
             type="button"
             className={styles.card}
-            onClick={() => onPick(item.id)}
+            onClick={() => onPick(item.id, item.selection)}
             disabled={disabled}
+            data-selection-type={item.selection?.type}
+            data-media-ref={item.selection?.mediaRef}
+            data-release-ref={item.selection?.releaseRef}
           >
             <div className={styles.cardBody}>
               <div className={styles.label}>{item.label}</div>

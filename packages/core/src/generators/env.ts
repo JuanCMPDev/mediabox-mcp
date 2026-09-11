@@ -1,3 +1,4 @@
+import { randomBytes, randomUUID } from "node:crypto";
 import type { DeployConfig } from "../config/types.js";
 import { toPosix } from "../utils/paths.js";
 
@@ -66,6 +67,17 @@ export function generateEnv(config: DeployConfig, keys?: DiscoveredKeys): string
     "# MCP Server",
     `MCP_PUBLIC_URL=${mcp.publicUrl}`,
     `INTERNAL_API_KEY=${mcp.internalApiKey}`,
+    // Dedicated agent credential: the loopback chat client and the Telegram
+    // bot authenticate with this key, never with the owner key above. It MUST
+    // differ from INTERNAL_API_KEY so the agent never carries owner authority
+    // (Blueprint §4.1 / B02). Generated here when the wizard did not supply
+    // one — an empty string counts as absent, since an empty agent key would
+    // silently break bot auth.
+    `AGENT_API_KEY=${mcp.agentApiKey || randomBytes(32).toString("hex")}`,
+    // Stable installation identity bound into sessions, plans and references.
+    // Callers that redeploy should pass the existing id back in so plans and
+    // references minted before the redeploy stay valid.
+    `MEDIABOX_INSTALLATION_ID=${mcp.installationId || randomUUID()}`,
     `IMAGE_TAG=${deployment.imageTag}`,
   ];
 

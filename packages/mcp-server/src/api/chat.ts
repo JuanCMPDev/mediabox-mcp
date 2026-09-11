@@ -11,20 +11,26 @@
 import { Router, type Request, type Response } from "express";
 import { randomUUID } from "crypto";
 import { streamChat }       from "@mediabox/chat-core";
-import type { ChatEvent }   from "@mediabox/contracts";
+import type { ChatEvent, ChatStreamRequest } from "@mediabox/contracts";
 import { getLoopbackCaller }  from "../chat/loopback-client.js";
 import { getChatProvider, chatProviderInfo } from "../chat/provider.js";
 import { chatHistory }      from "../chat/store.js";
+import { isValidTypedSelection, formatTypedSelection } from "../chat/selection.js";
 
 export const chatRouter = Router();
 
 // ── POST /stream ──────────────────────────────────────────────────────────────
 
 chatRouter.post("/stream", async (req: Request, res: Response): Promise<void> => {
-  const { message, conversationId: cidIn } = (req.body ?? {}) as {
-    message?: string;
-    conversationId?: string;
-  };
+  const { message: rawMessage, conversationId: cidIn, selection } = (req.body ?? {}) as Partial<ChatStreamRequest>;
+
+  if (selection !== undefined && !isValidTypedSelection(selection)) {
+    res.status(400).json({ error: "selection is malformed", code: "ERR_INVALID_SELECTION" });
+    return;
+  }
+
+  // A card click becomes a deterministic typed turn (CAT-04); free text stays as typed.
+  const message = selection ? formatTypedSelection(selection, rawMessage) : rawMessage;
 
   if (!message?.trim()) {
     res.status(400).json({ error: "message is required" });

@@ -36,3 +36,19 @@ Documento de entrega y cierre correspondiente a la **Fase P04** del blueprint [L
 | **DEL-02** | Links, escapes y traversal bloqueados por `RootFs.resolveWithinRoot` | Cumplido |
 | **DEL-06** | Cuarentena no sobreestima espacio liberado (reporta que los bytes permanecen en volumen) | Cumplido |
 | **DEL-08** | MCP delega en el mismo plan y ejecutor transaccional de P03 | Cumplido |
+
+---
+
+## 3. Gates Evaluados
+
+| Gate | Check | Resultado |
+|---|---|---|
+| **G00** | `npm run ci:policy` | **PASS** |
+| **G01** | `npm run ci:typecheck && npm run ci:build && npm run ci:test` | **PASS** (513 tests pasando) |
+| **G04** | `npm run test:filesystem` | **PASS** (16 tests pasando en `storage/storage.test.ts`) |
+
+---
+
+## Addendum QA (2026-09-10)
+
+La auditoría posterior completó el cierre integral de DEL-01..DEL-08 en runtime (confinamiento por `RootFs`, cuarentena exacta con preservación de hermanos y subárboles no vacíos, revalidación de identidad y delegación al ejecutor transaccional único). La suite `packages/mcp-server/src/storage/storage.test.ts` evalúa el Gate G04 con 16/16 tests pasando. El detalle de remediación se encuentra registrado en [QA-HANDOFF.es.md](QA-HANDOFF.es.md).

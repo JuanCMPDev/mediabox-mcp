@@ -3,11 +3,12 @@ import styles from './MessageList.module.css';
 import { MessageBubble } from './MessageBubble';
 import { TypingIndicator } from './TypingIndicator';
 import type { ChatMessage } from '@/lib/types';
+import type { TypedSelection } from '@mediabox/contracts';
 
 interface MessageListProps {
   messages: ChatMessage[];
   isTyping: boolean;
-  onPickChoice?: (messageId: string, choiceId: string) => void;
+  onPickChoice?: (messageId: string, choiceId: string, selection?: TypedSelection) => void;
 }
 
 export function MessageList({ messages, isTyping, onPickChoice }: MessageListProps) {

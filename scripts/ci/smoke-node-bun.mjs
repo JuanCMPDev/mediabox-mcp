@@ -4,7 +4,7 @@
  * Validates cross-runtime execution without silent fallbacks (§4.2 / OP-06 / P03).
  */
 
-import { spawnSync } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -168,3 +168,98 @@ console.log(runExe.stdout.trim());
 fs.rmSync(tmpDir, { recursive: true, force: true });
 
 console.log("✓ Gate G08 Spike PASSED: Node.js and Bun compiled SQLite packaging verified.");
+
+// ── 4. Validate Real MCP Server Bun Compiled Execution (Gate G08) ────────────
+console.log("4. Testing real mcp-server Bun compiled execution (/health)...");
+const serverTmpDir = path.join(repoRoot, "tmp-server-bun-smoke");
+fs.mkdirSync(serverTmpDir, { recursive: true });
+
+const serverEntry = path.join(repoRoot, "packages/mcp-server/src/index.ts");
+const serverExe = path.join(serverTmpDir, process.platform === "win32" ? "mcp-server-smoke.exe" : "mcp-server-smoke");
+
+const buildRes = spawnSync(
+  "bun",
+  ["build", serverEntry, "--compile", "--outfile", serverExe],
+  { encoding: "utf8", cwd: repoRoot, shell: true }
+);
+
+if (buildRes.status !== 0) {
+  console.error("FAIL: bun build --compile mcp-server failed:\n", buildRes.stderr || buildRes.stdout);
+  fs.rmSync(serverTmpDir, { recursive: true, force: true });
+  process.exit(buildRes.status ?? 1);
+}
+
+const testPort = 31000 + Math.floor(Math.random() * 5000);
+const opsDbPath = path.join(serverTmpDir, "operations.db");
+const mediaTmp = path.join(serverTmpDir, "media");
+const downloadsTmp = path.join(serverTmpDir, "downloads");
+fs.mkdirSync(mediaTmp, { recursive: true });
+fs.mkdirSync(downloadsTmp, { recursive: true });
+
+const child = spawn(serverExe, [], {
+  env: {
+    ...process.env,
+    NODE_ENV: "production",
+    PORT: String(testPort),
+    INTERNAL_API_KEY: "ci-smoke-internal-key",
+    AGENT_API_KEY: "ci-smoke-agent-key",
+    OPERATIONS_DB_PATH: opsDbPath,
+    MEDIA_PATH: mediaTmp,
+    DOWNLOADS_PATH: downloadsTmp,
+    BIND_HOST: "127.0.0.1",
+  },
+  stdio: ["ignore", "pipe", "pipe"],
+});
+
+let stdoutBuf = "";
+let stderrBuf = "";
+child.stdout.on("data", (d) => { stdoutBuf += d.toString(); });
+child.stderr.on("data", (d) => { stderrBuf += d.toString(); });
+
+let healthy = false;
+const maxAttempts = 30;
+for (let i = 0; i < maxAttempts; i++) {
+  await new Promise((r) => setTimeout(r, 500));
+  if (child.exitCode !== null) {
+    break;
+  }
+  try {
+    const res = await fetch(`http://127.0.0.1:${testPort}/health`);
+    if (res.ok) {
+      const data = await res.json();
+      if (data && data.status === "ok") {
+        healthy = true;
+        break;
+      }
+    }
+  } catch {
+    // wait for bind
+  }
+}
+
+try {
+  child.kill();
+} catch {}
+
+if (!healthy) {
+  console.error("FAIL: Compiled mcp-server failed to respond to /health in time.");
+  console.error("Child exitCode:", child.exitCode);
+  console.error("Stdout:\n", stdoutBuf);
+  console.error("Stderr:\n", stderrBuf);
+  fs.rmSync(serverTmpDir, { recursive: true, force: true });
+  process.exit(1);
+}
+
+console.log(`✓ Real mcp-server Bun compiled binary started and responded /health on port ${testPort}`);
+
+// Clean up server tmp files (retry on windows in case process handle is closing)
+for (let attempt = 0; attempt < 10; attempt++) {
+  try {
+    fs.rmSync(serverTmpDir, { recursive: true, force: true });
+    break;
+  } catch {
+    await new Promise((r) => setTimeout(r, 500));
+  }
+}
+
+console.log("✓ Gate G08 PASSED: Real mcp-server binary verified under Bun compiled runtime.");

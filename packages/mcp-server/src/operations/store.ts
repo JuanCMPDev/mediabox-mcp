@@ -44,6 +44,7 @@ export class InvalidPlanStateError extends OperationStoreError {
 export interface StoreListFilter {
   conversationId?: string;
   status?: OperationStatus;
+  statuses?: OperationStatus[];
   limit?: number;
   offset?: number;
 }
@@ -362,6 +363,25 @@ export class OperationStore {
   }
 
   /**
+   * Returns a claimed plan to the queue (e.g. a resource lease is held by another plan).
+   * Only the worker holding the plan lease may requeue it.
+   */
+  requeuePlan(planId: string, workerId: string, reason?: string): boolean {
+    const res = this.db
+      .prepare(`
+        UPDATE operation_plans
+        SET status = 'queued',
+            started_at = NULL,
+            lease_owner = NULL,
+            lease_expires_at = NULL,
+            status_reason = ?
+        WHERE id = ? AND lease_owner = ? AND status = 'running'
+      `)
+      .run(reason ?? null, planId, workerId);
+    return res.changes > 0;
+  }
+
+  /**
    * Renews the lease for a running plan.
    */
   renewLease(planId: string, workerId: string, leaseDurationMs = 30000): boolean {
@@ -463,6 +483,10 @@ export class OperationStore {
     if (filter.status) {
       clauses.push("status = ?");
       params.push(filter.status);
+    }
+    if (filter.statuses && filter.statuses.length > 0) {
+      clauses.push(`status IN (${filter.statuses.map(() => "?").join(", ")})`);
+      params.push(...filter.statuses);
     }
 
     const where = clauses.length > 0 ? "WHERE " + clauses.join(" AND ") : "";

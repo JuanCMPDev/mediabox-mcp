@@ -6,16 +6,23 @@ on:
   pull_request:
     branches: [master, "integration/**"]
 
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   gate-policy-fixtures:
     name: gate/policy-fixtures (G00)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
-          node-version: 22
+          node-version: 22.19.0
           cache: npm
 
       - name: Install workspaces
@@ -29,11 +36,11 @@ jobs:
     needs: [gate-policy-fixtures]
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
-          node-version: 22
+          node-version: 22.19.0
           cache: npm
 
       - name: Install workspaces
@@ -53,11 +60,11 @@ jobs:
     needs: [gate-build-unit]
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
-          node-version: 22
+          node-version: 22.19.0
           cache: npm
 
       - name: Install workspaces
@@ -69,15 +76,132 @@ jobs:
       - name: Verify Security & Containment Contracts (SEC-01..SEC-06)
         run: npm run test:security-contracts
 
+  gate-operation-state:
+    name: gate/operation-state (G03)
+    needs: [gate-build-unit]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 22.19.0
+          cache: npm
+
+      - name: Install workspaces
+        run: npm ci
+
+      - name: Build workspaces
+        run: npm run ci:build
+
+      - name: Verify Operation State Machine & Persistence (OP-01..OP-06)
+        run: npm run test:operations
+
+  gate-filesystem-safety:
+    name: gate/filesystem-safety (G04)
+    needs: [gate-build-unit]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 22.19.0
+          cache: npm
+
+      - name: Install workspaces
+        run: npm ci
+
+      - name: Build workspaces
+        run: npm run ci:build
+
+      - name: Verify Storage & Filesystem Safety Contracts (FS-01..FS-06)
+        run: npm run test:filesystem
+
+  gate-media-recovery:
+    name: gate/media-recovery (G05)
+    needs: [gate-build-unit]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 22.19.0
+          cache: npm
+
+      - name: Install system ffmpeg
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg
+
+      - name: Install workspaces
+        run: npm ci
+
+      - name: Build workspaces
+        run: npm run ci:build
+
+      - name: Verify Media Recovery Units (MED-01..MED-06)
+        run: npm run test:media-recovery
+
+      - name: Run Real FFmpeg & Recovery Smoke
+        run: npm run smoke:media-ffmpeg
+
+  gate-query-contracts:
+    name: gate/query-contracts (G06)
+    needs: [gate-build-unit]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 22.19.0
+          cache: npm
+
+      - name: Install workspaces
+        run: npm ci
+
+      - name: Build workspaces
+        run: npm run ci:build
+
+      - name: Verify Read-Only Queries & Envelopes (QRY-01..QRY-05)
+        run: npm run test:queries
+
+  gate-runtime-packaging:
+    name: gate/runtime-packaging (G08)
+    needs: [gate-build-unit]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 22.19.0
+          cache: npm
+
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: 1.3.13
+
+      - name: Install workspaces
+        run: npm ci
+
+      - name: Build workspaces
+        run: npm run ci:build
+
+      - name: Run Node and Bun SQLite runtime packaging smoke (G08)
+        run: npm run smoke:node-bun
+
   audit:
     name: Security Audit
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
-          node-version: 22
+          node-version: 22.19.0
 
       # Production dependency gate. Scoped to --omit=dev because dev/build-chain
       # advisories (vitest, esbuild, vite dev server) never ship in the runtime
@@ -87,18 +211,16 @@ jobs:
         run: npm audit --workspaces --omit=dev --audit-level=high
 
   docker-build:
-    # Smoke test that prevents the regression that prompted P0.3: a Dockerfile
-    # that compiles in isolation but fails against the monorepo workspace
-    # layout. Builds amd64 only here (publish workflow handles multi-arch).
     name: Docker images build
+    needs: [gate-build-unit]
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
-      - uses: docker/setup-buildx-action@v3
+      - uses: docker/setup-buildx-action@f7ce87c1d6bead3e36075b2ce75da1f6cc28aaca # v3.9.0
 
       - name: Build mcp-server
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@ca052bb54ab0790a636c9b5f226502c73d547a25 # v5.4.0
         with:
           context: .
           file: packages/mcp-server/Dockerfile
@@ -112,7 +234,9 @@ jobs:
       - name: Smoke test mcp-server (/health)
         run: |
           docker run --rm -d --name mcp-ci -p 3000:3000 \
-            -e INTERNAL_API_KEY=ci-test mediabox-mcp:ci
+            -e INTERNAL_API_KEY=ci-test \
+            -e AGENT_API_KEY=ci-agent \
+            -e MEDIABOX_INSTALLATION_ID=ci mediabox-mcp:ci
           # Container needs a few seconds for express to bind. Poll instead of
           # sleeping a fixed window so the job stays fast on warm caches.
           for i in $(seq 1 15); do
@@ -127,7 +251,7 @@ jobs:
           docker stop mcp-ci
 
       - name: Build mediabox-telegram
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@ca052bb54ab0790a636c9b5f226502c73d547a25 # v5.4.0
         with:
           context: .
           file: packages/mcp-telegram-client/Dockerfile
@@ -136,3 +260,29 @@ jobs:
           tags: mediabox-telegram:ci
           cache-from: type=gha,scope=ci-mediabox-telegram
           cache-to: type=gha,scope=ci-mediabox-telegram,mode=max
+
+  gate-pr:
+    name: gate/pr
+    if: always()
+    needs:
+      - gate-policy-fixtures
+      - gate-build-unit
+      - gate-auth-boundaries
+      - gate-operation-state
+      - gate-filesystem-safety
+      - gate-media-recovery
+      - gate-query-contracts
+      - gate-runtime-packaging
+      - audit
+      - docker-build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Verify all gates succeeded
+        run: |
+          results='${{ toJSON(needs.*.result) }}'
+          echo "Gate results: $results"
+          if echo "$results" | grep -q -E '"(failure|cancelled|skipped)"'; then
+            echo "One or more gates failed, were cancelled, or skipped."
+            exit 1
+          fi
+          echo "All CI gates succeeded."

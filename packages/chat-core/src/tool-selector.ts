@@ -39,11 +39,15 @@ export function selectTools(userMessage: string, history: ChatMessage[] = []): V
   const fileIntent =
     /\b(file|files|archivo|archivos|folder|folders|carpeta|carpetas|ruta|rutas|path|paths|jellyfinitemid|library|biblioteca|scan|escane\w*|refresh|refresc\w*|metadata|metadatos|move|mover|mueve|moviendo|delete|borr\w*|elimin\w*|remove|quit\w*|rename|renombr\w*)\b/.test(text);
 
-  const optimizeIntent =
-    /\b(optimize|optimiz\w*|audio|audios|subtitle|subtitles|subtitul\w*|subs|track|tracks|pista|pistas|mkv|srt|ass|ssa|transcode|transcod\w*|ffmpeg)\b/.test(text);
+  const formatIntent =
+    /\b(optimize|optimiz\w*|audio|audios|subtitle|subtitles|subtitul\w*|subs|track|tracks|pista|pistas|mkv|srt|ass|ssa|transcode|transcod\w*|ffmpeg|remux|format)\b/.test(text);
 
   const maintenanceIntent =
     /\b(maintenance|mantenimiento|cleanup|clean|limpi\w*|cache|temp|tmp|orphan|orphans|huerfano|huerfanos|job|jobs|progreso|progress|background|fondo)\b/.test(text);
+
+  const operationIntent =
+    /\b(plan|planes|operacion|operaciones|operation|operations|aprobar|aprobacion|approve|approval|planid)\b/.test(text) ||
+    /^(estado|status)$/.test(text);
 
   const searchIntent =
     /\b(search|busc\w*|encuentr\w*|find|listar|lista|list|tengo|tenemos|exist\w*|hay|details|detalle|detalles|info|informacion|ver|add|agreg\w*|anad\w*|pon|poner|quiero|consigue|conseguir)\b/.test(text);
@@ -52,11 +56,21 @@ export function selectTools(userMessage: string, history: ChatMessage[] = []): V
     /\b(delete|borr\w*|elimin\w*|remove|quit\w*|replace|reemplaz\w*|sustitu\w*|redownload|redescarg\w*)\b/.test(text);
 
   if (serverIntent) add(selected, 'server_info');
-  if (movieIntent) addWithCompanions(selected, 'movies');
-  if (seriesIntent) addWithCompanions(selected, 'series');
-  if (downloadIntent) addWithCompanions(selected, 'downloads');
+  if (operationIntent) add(selected, 'operations');
+  if (movieIntent) {
+    addWithCompanions(selected, 'movies');
+    add(selected, 'catalog');
+  }
+  if (seriesIntent) {
+    addWithCompanions(selected, 'series');
+    add(selected, 'catalog');
+  }
+  if (downloadIntent) {
+    addWithCompanions(selected, 'downloads');
+    add(selected, 'catalog');
+  }
   if (fileIntent || destructiveIntent) addWithCompanions(selected, 'library_ops');
-  if (optimizeIntent) addWithCompanions(selected, 'optimize');
+  if (formatIntent) addWithCompanions(selected, 'media_format');
   if (maintenanceIntent) addWithCompanions(selected, 'maintenance');
 
   // "Download X" or "show releases for X" often needs Sonarr/Radarr first to
@@ -67,8 +81,9 @@ export function selectTools(userMessage: string, history: ChatMessage[] = []): V
   }
 
   // "Do I have X?" / "find X" should search both local media and Arr catalogs.
-  if (searchIntent && !serverIntent && !maintenanceIntent && !optimizeIntent) {
+  if (searchIntent && !serverIntent && !maintenanceIntent && !formatIntent) {
     add(selected, 'media_query');
+    add(selected, 'catalog');
     if (!movieIntent && !seriesIntent) {
       add(selected, 'movies');
       add(selected, 'series');
@@ -79,6 +94,7 @@ export function selectTools(userMessage: string, history: ChatMessage[] = []): V
   // side for verification or redownload.
   if (destructiveIntent) {
     add(selected, 'media_query');
+    add(selected, 'catalog');
     if (!movieIntent && !seriesIntent) {
       add(selected, 'movies');
       add(selected, 'series');
@@ -101,7 +117,7 @@ function add(selected: Set<string>, name: string): void {
 
 function addWithCompanions(selected: Set<string>, name: string): void {
   add(selected, name);
-  if (['movies', 'series', 'library_ops', 'optimize'].includes(name)) add(selected, 'media_query');
+  if (['movies', 'series', 'library_ops', 'media_format', 'catalog'].includes(name)) add(selected, 'media_query');
 }
 
 function ordered(selected: Set<string>): VirtualToolDef[] {
@@ -124,7 +140,7 @@ function continuationTools(text: string, history: ChatMessage[]): string[] {
 
   // No history is available in a few tests/consumers. Keep this rare fallback
   // broad enough that a yes/no confirmation can still be completed.
-  return ['library_ops', 'movies', 'series', 'downloads', 'optimize', 'maintenance'];
+  return ['library_ops', 'catalog', 'movies', 'series', 'downloads', 'media_format', 'maintenance', 'operations'];
 }
 
 function isBareContinuation(text: string): boolean {

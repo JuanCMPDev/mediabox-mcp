@@ -9,43 +9,57 @@ import { issueConfirmToken, consumeConfirmToken } from "../helpers/confirm-token
 import { assertMutationAllowed } from "../helpers/containment.js";
 import { MEDIA_PATH, DOWNLOADS_PATH } from "../config.js";
 import { defaultOperationStore } from "../operations/default-store.js";
-import { inspectMedia } from "../storage/media-jobs.js";
+import { inspectMedia, listProfiles } from "../storage/media-jobs.js";
+import { mapNamespace } from "../storage/namespace-map.js";
 import { createMediaFormatPlan } from "../operations/planners/media-format.js";
+import { createToolEnvelope } from "../queries/envelope.js";
+import { runEnvelopeTool } from "../queries/tool-result.js";
+import { defaultToolContext, resolvePlanScope, type McpToolContext } from "../security/context.js";
 
-export function registerMaintenanceTools(server: McpServer): void {
+export function registerMaintenanceTools(server: McpServer, context: McpToolContext = defaultToolContext()): void {
+  const scope = resolvePlanScope(context);
+
   server.registerTool("inspect_format", {
-    description: "Inspect media format using ffprobe.",
+    description: "Inspect a media file with ffprobe: container, duration and every stream (type, codec, language). Read-only.",
     inputSchema: {
-      path: z.string().describe("Logical path to the media file"),
+      path: z.string().describe("Logical path to the media file (e.g. 'anime/Show/ep01.mkv' or '/data/movies/film.mkv')"),
     },
-  }, async ({ path: logicalPath }) => {
-    const data = await inspectMedia(logicalPath);
-    return textResult({ data });
-  });
+  }, async ({ path: logicalPath }) =>
+    runEnvelopeTool(async () => {
+      const { rootId, relativePath } = mapNamespace(logicalPath);
+      const probe = await inspectMedia({ rootId, relativePath });
+      return createToolEnvelope({
+        data: { path: `${rootId}:${relativePath}`, ...probe },
+        sources: [{ source: "ffprobe", observedAt: new Date().toISOString(), completeness: "complete" }],
+      });
+    })
+  );
 
   server.registerTool("propose_media_job", {
     description: "Propose a media format conversion job. Options for action: 'remux', 'subtitle-convert', 'transcode'. Profile names: e.g. 'cpu_av1_transcode', 'cpu_hevc_transcode'.",
     inputSchema: {
       path: z.string().describe("Logical path to the media file"),
       action: z.enum(["remux", "subtitle-convert", "transcode"]),
-      profileName: z.string().describe("Profile name to use (e.g., 'cpu_av1_transcode')"),
+      profileName: z.string().optional().describe("Closed profile name (mkv_remux, srt_subtitles, cpu_hevc_transcode, cpu_av1_transcode); omit for the action default"),
     },
-  }, async ({ path: logicalPath, action, profileName }) => {
-    const plan = await createMediaFormatPlan({
-      logicalPath,
-      profile: { action, profileName },
-      ownerId: "local",
-      conversationId: "local",
-    });
-    
-    defaultOperationStore.createPlan(plan);
-    
-    return textResult({
-      message: `Proposed media job plan ${plan.id}. Ask user to review and approve. Use operation_status tool with planId '${plan.id}' to monitor progress.`,
-      planId: plan.id,
-      operation: plan.operation,
-    });
-  });
+  }, async ({ path: logicalPath, action, profileName }) =>
+    runEnvelopeTool(async () => {
+      const { plan, summary } = await createMediaFormatPlan({ logicalPath, action, profileName, scope });
+      defaultOperationStore.createPlan(plan, "awaiting_approval");
+      return createToolEnvelope({
+        data: {
+          planId: plan.id,
+          operation: plan.operation,
+          status: "awaiting_approval",
+          manifestHash: plan.manifestHash,
+          expiresAt: plan.expiresAt,
+          summary,
+          availableProfiles: listProfiles(),
+          message: `Plan ${plan.id} awaits owner approval in the Mediabox app. Use operation_status to follow it.`,
+        },
+      });
+    })
+  );
   // 22. CLEANUP SERVER
   server.registerTool("cleanup_server", {
     description: "Clean up the server: remove Jellyfin cache, temp files, orphan downloads, ghost entries in Sonarr/Radarr, and qBittorrent completed torrents. Two-step flow: dryRun=false without confirmToken returns a preview + a fresh token; show the report to the user, then re-call dryRun=false with that token to apply.",

@@ -2,15 +2,20 @@
  * Uses fetch + ReadableStream (not EventSource) to support custom auth headers.
  * Each line from the server is a JSON-serialized ChatEvent.
  * ──────────────────────────────────────────────────────────────────────── */
-import type { ChatEvent } from '@mediabox/contracts';
+import type { ChatEvent, ChatStreamRequest, TypedSelection } from '@mediabox/contracts';
 import { getRuntimeConfig } from './runtime-config';
 import i18n from './i18n';
 
+/** Streams one chat turn. `selection` is the typed payload of a clicked
+ *  choice card (CAT-04): it travels next to the visible `message` so the
+ *  server can build a deterministic user turn instead of re-parsing text. */
 export async function* streamChat(
   message: string,
   conversationId?: string,
+  selection?: TypedSelection,
 ): AsyncGenerator<ChatEvent> {
   const { apiUrl, internalApiKey } = getRuntimeConfig();
+  const body: ChatStreamRequest = { message, conversationId, selection };
 
   const res = await fetch(`${apiUrl}/api/chat/stream`, {
     method: 'POST',
@@ -22,7 +27,7 @@ export async function* streamChat(
       // Without it the server defaults to English regardless of UI locale.
       'Accept-Language': i18n.language || 'en',
     },
-    body: JSON.stringify({ message, conversationId }),
+    body: JSON.stringify(body),
   });
 
   if (!res.ok) {

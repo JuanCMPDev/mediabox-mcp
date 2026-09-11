@@ -8,10 +8,11 @@ import { ToolCallChip } from './ToolCallChip';
 import { ChoiceCards } from './ChoiceCards';
 import { useToast } from '@/lib/toast';
 import type { ChatMessage } from '@/lib/types';
+import type { TypedSelection } from '@mediabox/contracts';
 
 interface MessageBubbleProps {
   message: ChatMessage;
-  onPickChoice?: (messageId: string, choiceId: string) => void;
+  onPickChoice?: (messageId: string, choiceId: string, selection?: TypedSelection) => void;
 }
 
 export const MessageBubble = memo(function MessageBubble({
@@ -69,7 +70,7 @@ export const MessageBubble = memo(function MessageBubble({
           <ChoiceCards
             prompt={message.choices.prompt}
             items={message.choices.items}
-            onPick={(choiceId) => onPickChoice?.(message.id, choiceId)}
+            onPick={(choiceId, selection) => onPickChoice?.(message.id, choiceId, selection)}
             disabled={message.isStreaming}
           />
         )}

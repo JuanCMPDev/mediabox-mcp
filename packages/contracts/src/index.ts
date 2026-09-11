@@ -145,6 +145,8 @@ export interface ChatChoiceItem {
    * Example: "Quiero la versión de 1968 (TMDB ID: 10331)".
    */
   value:      string;
+  /** Optional structured typed selection (P07 / CAT-04). */
+  selection?: TypedSelection;
 }
 
 export type ChatEvent =
@@ -234,6 +236,14 @@ export interface ServicesConfig {
 export interface McpConfig {
   publicUrl:      string;
   internalApiKey: string;
+  /**
+   * Dedicated agent credential (loopback chat client, Telegram bot). Distinct
+   * from `internalApiKey` so the agent never carries owner authority
+   * (Blueprint §4.1 / B02 / INV-SEPARATION). Generated when absent.
+   */
+  agentApiKey?:   string;
+  /** Stable installation identity bound into sessions, plans and references. */
+  installationId?: string;
 }
 
 export type LLMProviderConfig =
@@ -423,6 +433,9 @@ export interface PlannedTargetFileIdentity {
   mtimeMs?: number;
   inode?: number;
   sha256?: string;
+  /** Hard-link count observed at plan time; >1 means quarantine/purge frees no space (DEL-06). */
+  nlink?: number;
+  kind?: "file" | "directory";
 }
 
 export interface PlannedTarget {
@@ -436,8 +449,14 @@ export interface PlannedTarget {
 }
 
 export interface PlannedEffectResources {
+  /** Extra bytes the effect needs while running (staging, temp output). */
   estimatedDiskBytes?: number;
   estimatedTimeSec?: number;
+  /** Logical bytes selected by the effect (file size). */
+  selectedBytes?: number;
+  /** Bytes actually reclaimable on the volume once the effect completes.
+   *  Quarantine moves never reclaim space; hard-linked files reclaim 0 (§4.3 / DEL-06). */
+  reclaimableBytes?: number;
 }
 
 export interface PlannedEffect {
@@ -447,6 +466,8 @@ export interface PlannedEffect {
   serviceAction: string;
   irreversibleLoss: boolean;
   requiredResources?: PlannedEffectResources;
+  /** Closed, hash-covered parameters for the service action (release guid, indexer id, queue ids…). */
+  params?: Record<string, string | number | boolean>;
 }
 
 export interface Precondition {
@@ -540,5 +561,133 @@ export interface OperationPlanSummary {
   approvedAt?: string;
   startedAt?: string;
   finishedAt?: string;
+}
+
+// ── Normalized Queries & Tool Envelopes (P06 / §4.4) ─────────────────────────
+
+export type DataSourceCompleteness = "complete" | "partial" | "unavailable" | "unknown";
+
+export interface DataSourceStatus {
+  source: string;
+  observedAt: string;
+  snapshotId?: string;
+  completeness: DataSourceCompleteness;
+  error?: {
+    code: string;
+    message: string;
+  };
+}
+
+export interface EnvelopePage {
+  cursor?: string;
+  hasMore: boolean;
+  totalItems: number | null;
+  pageSize: number;
+  pageIndex?: number;
+}
+
+export interface EnvelopeBudget {
+  bytesUsed: number;
+  bytesLimit: number;
+  itemsReturned: number;
+  itemsAvailable?: number;
+  truncatedFields?: string[];
+}
+
+export interface ToolEnvelope<T> {
+  schemaVersion: 1;
+  requestId: string;
+  status: "ok" | "partial" | "error";
+  data: T;
+  sources: DataSourceStatus[];
+  page?: EnvelopePage;
+  warnings?: string[];
+  error?: {
+    code: string;
+    message: string;
+    retryable?: boolean;
+  };
+  budget?: EnvelopeBudget;
+}
+
+// ── Catalog Identity & Deterministic Ranking (P07 / §4.5) ──────────────────
+
+export interface MediaItemProviderIds {
+  tmdbId?: number;
+  tvdbId?: number;
+  imdbId?: string;
+  sonarrId?: number;
+  radarrId?: number;
+  jellyfinId?: string;
+}
+
+export interface MediaItem {
+  id: string;
+  mediaRef: string;
+  title: string;
+  year?: number;
+  type: "movie" | "series" | "episode" | "music";
+  overview?: string;
+  posterUrl?: string;
+  providerIds: MediaItemProviderIds;
+  inLibrary: boolean;
+  libraryStatus?: {
+    monitored?: boolean;
+    status?: string;
+    downloadedEpisodes?: number;
+    totalEpisodes?: number;
+  };
+}
+
+export interface ReleaseCandidate {
+  releaseRef: string;
+  guid: string;
+  title: string;
+  sizeBytes: number;
+  seeders: number;
+  leechers?: number;
+  protocol: "torrent" | "usenet";
+  indexer: string;
+  indexerId?: number;
+  quality: string;
+  resolution?: string;
+  codec?: string;
+  languages: string[];
+  score: number;
+  reasons: string[];
+  rejected: boolean;
+  rejections?: string[];
+}
+
+export interface TypedSelection {
+  type: "select_candidate" | "select_release" | "propose_download";
+  mediaRef?: string;
+  releaseRef?: string;
+  action?: string;
+  value?: string;
+}
+
+/** Body of POST /api/chat/stream. A typed `selection` (card click) is turned
+ *  into a deterministic user turn by the server instead of free LLM text (CAT-04). */
+export interface ChatStreamRequest {
+  message: string;
+  conversationId?: string;
+  selection?: TypedSelection;
+}
+
+// ── Quarantine (P04 / §4.3) ─────────────────────────────────────────────────
+
+export interface QuarantineEntry {
+  rootId: string;
+  /** Path of the quarantined file relative to the root's trash directory. */
+  entryPath: string;
+  originalRelativePath: string;
+  planId?: string;
+  quarantinedAt: string;
+  expiresAt: string;
+  sizeBytes: number;
+  nlink: number;
+  /** Bytes a purge would actually free (0 when hard-linked elsewhere). */
+  reclaimableOnPurgeBytes: number;
 }
 

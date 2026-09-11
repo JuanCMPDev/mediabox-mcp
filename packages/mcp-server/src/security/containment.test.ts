@@ -17,6 +17,7 @@ vi.mock("../helpers/api.js", () => ({
   jfApi: vi.fn().mockResolvedValue({ Items: [] }),
   sonarrApi: vi.fn().mockResolvedValue([]),
   radarrApi: vi.fn().mockResolvedValue([]),
+  prowlarrApi: vi.fn().mockResolvedValue([]),
   textResult: (x: unknown) => ({ content: [{ type: "text", text: JSON.stringify(x) }] }),
 }));
 

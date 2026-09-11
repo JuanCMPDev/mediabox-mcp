@@ -11,7 +11,9 @@ function buildTelegramEnv(config: DeployConfig): string[] {
     "TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}",
     "MCP_SERVER_URL=http://mcp-server:3000/mcp",
     "ALLOWED_TELEGRAM_USERS=${ALLOWED_TELEGRAM_USERS}",
-    "MCP_INTERNAL_API_KEY=${INTERNAL_API_KEY}",
+    // The bot is an agent, not the owner: it gets the dedicated agent
+    // credential, never INTERNAL_API_KEY (Blueprint §4.1 / B02).
+    "MCP_AGENT_API_KEY=${AGENT_API_KEY}",
   ];
 
   const llm = config.telegram?.llm;
@@ -116,6 +118,11 @@ export function generateDockerCompose(config: DeployConfig): string {
       "RADARR_URL=http://radarr:7878",
       "RADARR_API_KEY=${RADARR_API_KEY}",
       "INTERNAL_API_KEY=${INTERNAL_API_KEY}",
+      // Agent credential + installation identity (Blueprint §4.1 / B02). The
+      // agent key is what the loopback chat client presents; it is distinct
+      // from the owner key so agent sessions never gain owner authority.
+      "AGENT_API_KEY=${AGENT_API_KEY}",
+      "MEDIABOX_INSTALLATION_ID=${MEDIABOX_INSTALLATION_ID}",
       "QBIT_URL=http://qbittorrent:8085",
       "QBIT_USER=admin",
       "QBIT_PASSWORD=${QBIT_PASSWORD}",

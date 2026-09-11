@@ -443,7 +443,8 @@ describe("Gate G03 / Phase P03: Operation Plans, Approval & Executor (OP-01 to O
 
       const executor = new OperationExecutor(store, { workerId: "test_worker_1" });
 
-      // Register mock handler for remux
+      // Every step needs a registered handler: unknown actions fail closed (executor-hardening.test.ts).
+      executor.registerStepHandler("inspect", async () => ({ inspected: true }));
       let remuxExecuted = false;
       executor.registerStepHandler("remux", async (step) => {
         remuxExecuted = true;
