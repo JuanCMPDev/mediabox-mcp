@@ -1,6 +1,9 @@
 /* ─── Mediabox Telegram Bot ──────────────────────────────────────────────────
  *
- * Thin transport layer over @mediabox/chat-core. This file owns:
+ * Thin transport layer over @mediabox/chat-core. Connects to mcp-server as an
+ * agent using MCP_AGENT_API_KEY.
+ *
+ * This file owns:
  *   - Telegram-specific setup (grammy, allowlist, commands, typing indicator)
  *   - Remote MCP client connection (to the mcp-server, typically in a sibling
  *     Docker container at http://mcp-server:3000/mcp)
@@ -26,7 +29,13 @@ import { VERSION } from "./version.js";
 // =============================================================================
 const TELEGRAM_TOKEN = process.env.TELEGRAM_BOT_TOKEN || "";
 const MCP_URL        = process.env.MCP_SERVER_URL     || "http://mcp-server:3000/mcp";
-const MCP_API_KEY    = process.env.MCP_INTERNAL_API_KEY || "";
+const MCP_API_KEY    = process.env.MCP_AGENT_API_KEY  || "";
+
+if (!MCP_API_KEY) {
+  console.error("FATAL: MCP_AGENT_API_KEY is required for Telegram bot authentication.");
+  process.exit(1);
+}
+
 const ALLOWED_USERS  = (process.env.ALLOWED_TELEGRAM_USERS || "")
   .split(",")
   .map(Number)

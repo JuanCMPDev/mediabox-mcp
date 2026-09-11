@@ -9,7 +9,7 @@
  *   4. If tool_call chunks arrive → execute tools, append result, loop
  *   5. If only text → yield tokens, emit 'done', return
  * ──────────────────────────────────────────────────────────────────────── */
-import type { ChatEvent, ChatChoiceItem } from '@mediabox/contracts';
+import type { ChatEvent, ChatChoiceItem, TypedSelection } from '@mediabox/contracts';
 import type { StreamChatOptions, ChatMessage, ToolCallInfo, ToolResultInfo } from './types.js';
 import type { LLMStreamChunk } from './providers/types.js';
 import { selectTools }      from './tool-selector.js';
@@ -17,6 +17,7 @@ import { executeVirtualTool } from './tool-router.js';
 import { trimHistory }      from './history.js';
 import { buildSystemPrompt } from './prompt.js';
 import { PRESENT_CHOICES_TOOL } from './virtual-tools.js';
+import { detectToolFailure, extractToolFailureMessage } from './result-budget.js';
 
 const MAX_ITERATIONS = 20;
 const TOOL_TIMEOUT_MS = 150_000;
@@ -124,14 +125,15 @@ export async function* streamChat(opts: StreamChatOptions): AsyncGenerator<ChatE
           errorMessage = err instanceof Error ? err.message : String(err);
           result = JSON.stringify({ error: errorMessage });
         }
-        const ok = !result.includes('"error"');
+        const failed = detectToolFailure(result);
+        const ok = !failed;
         yield {
           type: 'tool-end',
           name: tc.name,
           ok,
           durationMs: Date.now() - t0,
           callId: tc.id,
-          ...(ok ? {} : { error: errorMessage ?? extractErrorMessage(result) }),
+          ...(ok ? {} : { error: errorMessage ?? extractToolFailureMessage(result) }),
         };
         results.push({ id: tc.id, name: tc.name, result });
       }
@@ -160,6 +162,8 @@ function raceTimeout<T>(p: Promise<T>, ms: number, msg: string): Promise<T> {
   ]);
 }
 
+const VALID_SELECTION_TYPES = new Set(['select_candidate', 'select_release', 'propose_download']);
+
 /** Coerce the LLM's `present_choices` arguments into a wire-safe ChatEvent.
  *  Returns null if the args are malformed enough that we'd send empty cards
  *  — in that case the caller falls back to treating the turn as plain text. */
@@ -174,26 +178,40 @@ function buildChoicesEvent(
     const label = typeof r.label === 'string' ? r.label.trim() : '';
     const value = typeof r.value === 'string' ? r.value.trim() : '';
     if (!label || !value) continue;
+
+    const mediaRef = typeof r.mediaRef === 'string' && r.mediaRef.trim() ? r.mediaRef.trim() : undefined;
+    const releaseRef = typeof r.releaseRef === 'string' && r.releaseRef.trim() ? r.releaseRef.trim() : undefined;
+    let selection: TypedSelection | undefined;
+    if (mediaRef || releaseRef) {
+      let type: TypedSelection['type'];
+      const rawType = typeof r.selectionType === 'string' ? r.selectionType.trim() : '';
+      if (VALID_SELECTION_TYPES.has(rawType)) {
+        type = rawType as TypedSelection['type'];
+      } else if (releaseRef) {
+        type = 'select_release';
+      } else {
+        type = 'select_candidate';
+      }
+      selection = {
+        type,
+        value,
+        ...(mediaRef ? { mediaRef } : {}),
+        ...(releaseRef ? { releaseRef } : {}),
+      };
+    }
+
     items.push({
       id:        `c-${i}`,
       label,
       value,
       subtitle:  typeof r.subtitle === 'string' && r.subtitle.trim() ? r.subtitle.trim() : undefined,
       meta:      typeof r.meta     === 'string' && r.meta.trim()     ? r.meta.trim()     : undefined,
+      ...(selection ? { selection } : {}),
     });
   }
   if (items.length === 0) return null;
   const prompt = typeof args.prompt === 'string' && args.prompt.trim() ? args.prompt.trim() : undefined;
   return { type: 'choices', prompt, items };
-}
-
-/** Best-effort extraction of an `error` field from a stringified MCP result. */
-function extractErrorMessage(result: string): string | undefined {
-  try {
-    const parsed = JSON.parse(result);
-    if (parsed && typeof parsed === 'object' && typeof parsed.error === 'string') return parsed.error;
-  } catch {}
-  return undefined;
 }
 
 /**

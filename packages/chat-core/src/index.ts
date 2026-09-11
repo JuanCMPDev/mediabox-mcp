@@ -22,11 +22,12 @@ export {
 } from './history.js';
 
 // Tool selection / routing
-export { selectTools }          from './tool-selector.js';
-export { executeVirtualTool }   from './tool-router.js';
+export { selectTools }                                   from './tool-selector.js';
+export { executeVirtualTool, resolveVirtualCall, MEDIA_FORMAT_DEFAULT_PROFILES } from './tool-router.js';
+export { boundToolResultText, detectToolFailure, extractToolFailureMessage }     from './result-budget.js';
 
 // Static data
-export { VIRTUAL_TOOLS } from './virtual-tools.js';
+export { VIRTUAL_TOOLS, PRESENT_CHOICES_TOOL }     from './virtual-tools.js';
 export { SYSTEM_PROMPT, buildSystemPrompt }        from './prompt.js';
 export type { PromptLocale }                       from './prompt.js';
 

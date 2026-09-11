@@ -12,20 +12,21 @@ describe('selectTools', () => {
   });
 
   it('grounds general media existence questions in both Arr catalogs', () => {
-    expect(names('Tengo The Bear?')).toEqual(['media_query', 'series', 'movies', 'present_choices']);
+    expect(names('Tengo The Bear?')).toEqual(['media_query', 'catalog', 'series', 'movies', 'present_choices']);
   });
 
   it('treats generic add requests as media catalog work', () => {
-    expect(names('Agrega Dragon Ball')).toEqual(['media_query', 'series', 'movies', 'present_choices']);
+    expect(names('Agrega Dragon Ball')).toEqual(['media_query', 'catalog', 'series', 'movies', 'present_choices']);
   });
 
   it('treats generic download requests as catalog plus download work', () => {
-    expect(names('Baja Naruto')).toEqual(['media_query', 'series', 'movies', 'downloads', 'present_choices']);
+    expect(names('Baja Naruto')).toEqual(['media_query', 'catalog', 'series', 'movies', 'downloads', 'present_choices']);
   });
 
   it('routes movie downloads through movie, media, and download tools', () => {
     expect(names('Descarga la pelicula Inception')).toEqual([
       'media_query',
+      'catalog',
       'movies',
       'downloads',
       'present_choices',
@@ -35,6 +36,7 @@ describe('selectTools', () => {
   it('routes episode replacement through files, media, and series tools', () => {
     expect(names('Reemplaza el episodio S04E06 de Mr Robot con version latina')).toEqual([
       'media_query',
+      'catalog',
       'library_ops',
       'series',
       'present_choices',
@@ -56,12 +58,14 @@ describe('selectTools', () => {
   it('keeps a broad fallback for bare confirmations without history', () => {
     expect(names('dale')).toEqual([
       'media_query',
+      'catalog',
       'library_ops',
       'series',
       'movies',
       'downloads',
-      'optimize',
+      'media_format',
       'maintenance',
+      'operations',
       'present_choices',
     ]);
   });
