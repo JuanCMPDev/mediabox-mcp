@@ -20,6 +20,7 @@
     "test:queries": "vitest run packages/mcp-server/src/queries",
     "test:filesystem": "vitest run packages/mcp-server/src/storage/storage.test.ts",
     "test:media-recovery": "vitest run packages/mcp-server/src/storage/media-jobs.test.ts",
+    "test:agent-replay": "vitest run packages/chat-core/src/agent",
     "smoke:media-ffmpeg": "node scripts/ci/smoke-media-ffmpeg.mjs",
     "smoke:node-bun": "node scripts/ci/smoke-node-bun.mjs",
     "dev": "npm-run-all --parallel dev:mcp dev:ui",

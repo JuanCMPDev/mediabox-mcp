@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "version": "1.0.0",
-  "updatedAt": "2026-09-09T11:01:00Z",
+  "version": "1.1.0",
+  "updatedAt": "2026-09-11T00:00:00Z",
   "blueprint": "LOCAL-AGENT-HARDENING.es.md",
   "invariants": {
     "INV-AUTH": "Toda petición protegida tiene identidad comprobada, audiencia correcta y capacidades suficientes; localhost y conocer una session ID no autentican.",
@@ -201,7 +201,13 @@
         "AGT-03": "Repetición sin progreso termina dentro del límite.",
         "AGT-04": "Instrucciones en títulos/release/logs no cambian permisos ni endpoints.",
         "AGT-05": "Replays de aprobación y selecciones ficticias no eluden el reducer.",
-        "AGT-06": "Reinicio de conversación y cambio de modelo conservan operaciones sin reejecutarlas."
+        "AGT-06": "Reinicio de conversación y cambio de modelo conservan operaciones sin reejecutarlas.",
+        "AGT-07": "Desbordamiento de contexto se rechaza antes de llamar al proveedor.",
+        "AGT-08": "Una propuesta repetida devuelve el plan existente, no uno nuevo.",
+        "AGT-09": "Cancelación del turno aborta proveedor y herramienta, y no toca planes.",
+        "AGT-10": "La traza no contiene claves, tokens ni refs completas.",
+        "AGT-11": "Ninguna fase expone más de cuatro virtual tools ni acciones fuera de fase.",
+        "AGT-12": "El contador se calibra con usage y bloquea si la desviación supera el umbral."
       }
     },
     "P09": {
@@ -212,7 +218,12 @@
         "LOC-02": "Fragmentación/finalización/argumentos malformados no duplican llamadas.",
         "LOC-03": "Runtime no disponible con claves cloud presentes no hace fallback.",
         "LOC-04": "Contrato/env/sidecar/UI reflejan el mismo proveedor y modelo.",
-        "LOC-05": "El contexto configurado coincide con el del runtime y sus opciones no soportadas fallan explícitamente."
+        "LOC-05": "El contexto configurado coincide con el del runtime y sus opciones no soportadas fallan explícitamente.",
+        "LOC-06": "La política de endpoint bloquea hosts públicos, DNS a IP pública, redirecciones y proxies antes de conectar.",
+        "LOC-07": "La detección de hardware clasifica correctamente fixtures reales de NVIDIA, AMD, Intel, Apple y CPU, en los tres SO.",
+        "LOC-08": "Las particularidades de Ollama, LM Studio, llama.cpp y vLLM se normalizan a un mismo stream.",
+        "LOC-09": "Un modelo que no cabe en el hardware no se recomienda y se marca al forzarlo.",
+        "LOC-10": "El diagnóstico no expone secretos y refleja el modo local."
       }
     },
     "P10": {

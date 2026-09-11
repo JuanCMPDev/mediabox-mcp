@@ -1,0 +1,34 @@
+{
+  "id": "agt-11",
+  "title": "Phase tool catalog constraint <= 4 virtual tools + present_choices (AGT-11)",
+  "locale": "en",
+  "turns": [
+    {
+      "user": "Overview status",
+      "provider": [
+        [
+          {
+            "type": "tool_call",
+            "id": "call-1",
+            "name": "server_info",
+            "args": { "action": "status" }
+          }
+        ],
+        [
+          { "type": "text", "text": "Server online." }
+        ]
+      ],
+      "mcp": {
+        "server_status": "{\"status\":\"healthy\"}"
+      },
+      "expect": {
+        "events": [
+          { "type": "tool-start", "name": "server_info" },
+          { "type": "tool-end", "name": "server_info", "ok": true },
+          { "type": "done" }
+        ],
+        "state": { "phase": "orient" }
+      }
+    }
+  ]
+}

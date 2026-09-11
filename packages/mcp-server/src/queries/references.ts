@@ -32,11 +32,35 @@ export interface ReferencePayload {
   expiresAt: number;
 }
 
+// In-memory store for short reference tokens (mref_<12 hex>, rref_<12 hex>)
+const SHORT_REF_STORE = new Map<string, ReferencePayload>();
+
+function cleanupShortRefs(): void {
+  const now = Date.now();
+  for (const [key, payload] of SHORT_REF_STORE.entries()) {
+    if (now > payload.expiresAt) {
+      SHORT_REF_STORE.delete(key);
+    }
+  }
+}
+
 function signPayload(serialized: string): string {
   return createHmac("sha256", REFERENCE_SECRET).update(serialized).digest("hex");
 }
 
 function encodeReference(payload: ReferencePayload): string {
+  if (SHORT_REF_STORE.size > 2000) {
+    cleanupShortRefs();
+  }
+  const prefix = payload.type === "media" ? "mref" : "rref";
+  const shortId = randomBytes(6).toString("hex");
+  const token = `${prefix}_${shortId}`;
+  SHORT_REF_STORE.set(token, payload);
+  return token;
+}
+
+/** Legacy helper to encode full signed payload (for testing backward compatibility). */
+export function encodeLegacySignedReference(payload: ReferencePayload): string {
   const jsonStr = JSON.stringify(payload);
   const sig = signPayload(jsonStr);
   const base = Buffer.from(jsonStr, "utf8").toString("base64url");
@@ -61,6 +85,44 @@ export function verifyReference(
     );
   }
 
+  // 1. Check if token is short reference format: mref_<12hex> or rref_<12hex>
+  const shortMatch = /^[mr]ref_[0-9a-f]{12}$/.test(refString);
+  if (shortMatch) {
+    const payload = SHORT_REF_STORE.get(refString);
+    if (!payload) {
+      throw new ReferenceValidationError("Reference has expired", "ERR_EXPIRED_REFERENCE");
+    }
+
+    if (payload.type !== expectedType) {
+      throw new ReferenceValidationError(
+        `Reference payload type mismatch: expected ${expectedType}, found ${payload.type}`,
+        "ERR_REFERENCE_WRONG_TYPE"
+      );
+    }
+
+    if (Date.now() > payload.expiresAt) {
+      SHORT_REF_STORE.delete(refString);
+      throw new ReferenceValidationError("Reference has expired", "ERR_EXPIRED_REFERENCE");
+    }
+
+    if (payload.installationId !== context.installationId) {
+      throw new ReferenceValidationError(
+        `Reference installation mismatch: expected ${context.installationId}`,
+        "ERR_REFERENCE_MISMATCH"
+      );
+    }
+
+    if (payload.ownerId !== context.ownerId) {
+      throw new ReferenceValidationError(
+        `Reference owner mismatch: expected ${context.ownerId}`,
+        "ERR_REFERENCE_MISMATCH"
+      );
+    }
+
+    return payload;
+  }
+
+  // 2. Legacy fallback: signed base64url payload with HMAC
   const stripped = refString.slice(expectedPrefix.length);
   const parts = stripped.split(".");
   if (parts.length !== 2) {

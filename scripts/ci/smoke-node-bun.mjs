@@ -24,8 +24,8 @@ initializeOperationsSchema(nodeDb);
 
 // Verify tables and user_version
 const version = nodeDb.prepare("PRAGMA user_version;").get();
-if (!version || version.user_version !== 1) {
-  console.error("FAIL: user_version is not 1 in node:sqlite");
+if (!version || version.user_version !== 2) {
+  console.error("FAIL: user_version is not 2 in node:sqlite");
   process.exit(1);
 }
 

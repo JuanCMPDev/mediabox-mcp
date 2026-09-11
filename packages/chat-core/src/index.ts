@@ -41,3 +41,22 @@ export type {
   ToolResultInfo,
   StreamChatOptions,
 } from './types.js';
+
+// Agent engine exports (P08)
+export { AgentRuntime, type AgentRuntimeOptions } from './agent/runtime.js';
+export { AgentError } from './agent/errors.js';
+export {
+  type WorkflowState,
+  type WorkflowEvent,
+  type WorkflowStore,
+  InMemoryWorkflowStore,
+  reduce,
+  createInitialWorkflowState,
+} from './agent/workflow.js';
+export { getPhaseTools, suggestPhase } from './agent/phases.js';
+export { prepareContext, compactToolResult, buildStateSummary, DEFAULT_BUDGET, type BudgetConfig } from './agent/budget.js';
+export { TokenCounter } from './agent/tokenizer.js';
+export { TurnGuards, type GuardConfig, DEFAULT_GUARDS } from './agent/guards.js';
+export { dispatchToolCall, validateToolCall } from './agent/dispatch.js';
+export { redactTrace, redactSecrets, type AgentTrace } from './agent/trace.js';
+export { heuristicPhase } from './tool-selector.js';

@@ -1,0 +1,20 @@
+{
+  "id": "agt-12",
+  "title": "Token counter calibration against real usage with safety margin (AGT-12)",
+  "locale": "en",
+  "turns": [
+    {
+      "user": "Short query",
+      "provider": [
+        [
+          { "type": "text", "text": "Hello there.", "usage": { "prompt_tokens": 800, "completion_tokens": 10 } }
+        ]
+      ],
+      "expect": {
+        "events": [
+          { "type": "done" }
+        ]
+      }
+    }
+  ]
+}

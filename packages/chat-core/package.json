@@ -25,6 +25,7 @@
     "@google/genai": "^1.47.0",
     "@mediabox/contracts": "*",
     "@modelcontextprotocol/sdk": "^1.12.1",
+    "ajv": "^8.17.1",
     "openai": "^4.86.0"
   },
   "devDependencies": {

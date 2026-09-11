@@ -1,0 +1,33 @@
+{
+  "id": "agt-10",
+  "title": "Turn trace enforces complete secret redaction and reference truncation (AGT-10)",
+  "locale": "en",
+  "turns": [
+    {
+      "user": "Auth Bearer secret-token-xyz with key sk-1234567890abcdef",
+      "provider": [
+        [
+          {
+            "type": "tool_call",
+            "id": "call-1",
+            "name": "catalog",
+            "args": { "action": "search", "query": "Dark", "type": "series" }
+          }
+        ],
+        [
+          { "type": "text", "text": "Results found with reference mref_1234567890ab." }
+        ]
+      ],
+      "mcp": {
+        "search_media": "{\"schemaVersion\":1,\"status\":\"ok\",\"data\":[{\"id\":\"s1\",\"title\":\"Dark\",\"mediaRef\":\"mref_1234567890ab\"}]}"
+      },
+      "expect": {
+        "events": [
+          { "type": "tool-start", "name": "catalog" },
+          { "type": "tool-end", "name": "catalog", "ok": true },
+          { "type": "done" }
+        ]
+      }
+    }
+  ]
+}

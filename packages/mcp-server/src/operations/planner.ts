@@ -23,6 +23,7 @@ export interface CreatePlanInput {
   ttlMs?: number;
   snapshotId?: string;
   policyVersion?: string;
+  proposalKey?: string;
 }
 
 /**
@@ -50,6 +51,7 @@ export function buildOperationPlan(input: CreatePlanInput): OperationPlan {
     recovery: input.recovery ?? {
       strategy: "none",
     },
+    proposalKey: input.proposalKey,
   };
 
   const manifestHash = computePlanManifestHash(planWithoutHash as any);

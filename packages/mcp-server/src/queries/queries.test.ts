@@ -24,6 +24,7 @@ import {
   verifyMediaRef,
   createReleaseRef,
   verifyReleaseRef,
+  encodeLegacySignedReference,
   ReferenceValidationError,
 } from "./references.js";
 import { buildCanonicalMediaId } from "./catalog.js";
@@ -429,6 +430,33 @@ describe("Gate G06 & Phases P06-P07: Query Contracts, Identity & Download Verifi
           installationId: "other_inst",
         })
       ).toThrowError(/installation mismatch/);
+    });
+
+    it("emits short 17-character references and preserves legacy signed format compatibility", () => {
+      const mref = createMediaRef({ id: "movie:1" }, context);
+      expect(mref).toMatch(/^mref_[0-9a-f]{12}$/);
+      expect(mref.length).toBe(17);
+      const verified = verifyMediaRef(mref, context);
+      expect(verified.id).toBe("movie:1");
+
+      const rref = createReleaseRef({ guid: "rel_1", title: "Release 1", mediaId: "movie:1" }, context);
+      expect(rref).toMatch(/^rref_[0-9a-f]{12}$/);
+      expect(rref.length).toBe(17);
+      const verifiedRref = verifyReleaseRef(rref, context);
+      expect(verifiedRref.id).toBe("rel_1");
+
+      // Legacy signed token compatibility
+      const legacySigned = encodeLegacySignedReference({
+        type: "media",
+        installationId: context.installationId,
+        ownerId: context.ownerId,
+        conversationId: context.conversationId,
+        id: "movie:legacy:99",
+        expiresAt: Date.now() + 60000,
+      });
+      expect(legacySigned).toContain(".");
+      const verifiedLegacy = verifyMediaRef(legacySigned, context);
+      expect(verifiedLegacy.id).toBe("movie:legacy:99");
     });
   });
 

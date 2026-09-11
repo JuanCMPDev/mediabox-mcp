@@ -1,0 +1,79 @@
+{
+  "id": "agt-08",
+  "title": "Proposal idempotency returns existing plan without duplicate creation (AGT-08)",
+  "locale": "en",
+  "turns": [
+    {
+      "selection": {
+        "type": "select_release",
+        "value": "Propose download",
+        "releaseRef": "rref_dup12345678",
+        "mediaRef": "mref_dup12345678"
+      },
+      "provider": [
+        [
+          {
+            "type": "tool_call",
+            "id": "call-1",
+            "name": "catalog",
+            "args": {
+              "action": "propose_download",
+              "releaseRef": "rref_dup12345678",
+              "mediaRef": "mref_dup12345678"
+            }
+          }
+        ],
+        [
+          { "type": "text", "text": "Proposed plan_dup_1." }
+        ]
+      ],
+      "mcp": {
+        "propose_download": "{\"planId\":\"plan_dup_1\",\"operation\":\"media_download\",\"status\":\"awaiting_approval\",\"proposalKey\":\"key_dup_1\"}"
+      },
+      "expect": {
+        "events": [
+          { "type": "tool-start", "name": "catalog" },
+          { "type": "tool-end", "name": "catalog", "ok": true },
+          { "type": "done" }
+        ],
+        "state": { "phase": "monitor" }
+      }
+    },
+    {
+      "selection": {
+        "type": "select_release",
+        "value": "Propose download again",
+        "releaseRef": "rref_dup12345678",
+        "mediaRef": "mref_dup12345678"
+      },
+      "provider": [
+        [
+          {
+            "type": "tool_call",
+            "id": "call-2",
+            "name": "catalog",
+            "args": {
+              "action": "propose_download",
+              "releaseRef": "rref_dup12345678",
+              "mediaRef": "mref_dup12345678"
+            }
+          }
+        ],
+        [
+          { "type": "text", "text": "Existing plan_dup_1 returned idempotently." }
+        ]
+      ],
+      "mcp": {
+        "propose_download": "{\"planId\":\"plan_dup_1\",\"operation\":\"media_download\",\"status\":\"awaiting_approval\",\"proposalKey\":\"key_dup_1\"}"
+      },
+      "expect": {
+        "events": [
+          { "type": "tool-start", "name": "catalog" },
+          { "type": "tool-end", "name": "catalog", "ok": true },
+          { "type": "done" }
+        ],
+        "state": { "phase": "monitor" }
+      }
+    }
+  ]
+}

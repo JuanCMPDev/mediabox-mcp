@@ -1,0 +1,60 @@
+{
+  "id": "agt-02",
+  "title": "Context budget compaction and sliding window with long history (AGT-02)",
+  "locale": "en",
+  "turns": [
+    {
+      "user": "Search for Sci-Fi series",
+      "provider": [
+        [
+          {
+            "type": "tool_call",
+            "id": "call-1",
+            "name": "catalog",
+            "args": { "action": "search", "query": "Sci-Fi", "type": "series" }
+          }
+        ],
+        [
+          { "type": "text", "text": "Here are some popular Sci-Fi series." }
+        ]
+      ],
+      "mcp": {
+        "search_media": "{\"schemaVersion\":1,\"status\":\"ok\",\"data\":[{\"id\":\"s1\",\"title\":\"Dark\",\"year\":2017,\"mediaRef\":\"mref_001122334455\"},{\"id\":\"s2\",\"title\":\"Severance\",\"year\":2022,\"mediaRef\":\"mref_66778899aabb\"}]}"
+      },
+      "expect": {
+        "events": [
+          { "type": "tool-start", "name": "catalog" },
+          { "type": "tool-end", "name": "catalog", "ok": true },
+          { "type": "done" }
+        ],
+        "state": { "phase": "select" }
+      }
+    },
+    {
+      "user": "Tell me more about Dark",
+      "provider": [
+        [
+          {
+            "type": "tool_call",
+            "id": "call-2",
+            "name": "catalog",
+            "args": { "action": "details", "mediaRef": "mref_001122334455" }
+          }
+        ],
+        [
+          { "type": "text", "text": "Dark is a German science fiction thriller television series." }
+        ]
+      ],
+      "mcp": {
+        "media_details": "{\"schemaVersion\":1,\"status\":\"ok\",\"data\":{\"id\":\"s1\",\"title\":\"Dark\",\"year\":2017,\"overview\":\"A family saga with a supernatural twist in a German town.\",\"mediaRef\":\"mref_001122334455\"}}"
+      },
+      "expect": {
+        "events": [
+          { "type": "tool-start", "name": "catalog" },
+          { "type": "tool-end", "name": "catalog", "ok": true },
+          { "type": "done" }
+        ]
+      }
+    }
+  ]
+}

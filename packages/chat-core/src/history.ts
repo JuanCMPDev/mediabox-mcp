@@ -5,7 +5,7 @@ import type {
 } from 'openai/resources/chat/completions.js';
 import { Type } from '@google/genai';
 
-export const MAX_HISTORY_TOKENS = 200_000;
+export const DEFAULT_INPUT_BUDGET_TOKENS = 6656;
 
 // ── Token estimation ──────────────────────────────────────────────────────────
 
@@ -16,11 +16,11 @@ export function estimateTokens(msg: ChatMessage): number {
   return Math.ceil(chars / 3.5);
 }
 
-export function trimHistory(history: ChatMessage[]): ChatMessage[] {
+export function trimHistory(history: ChatMessage[], maxTokens = DEFAULT_INPUT_BUDGET_TOKENS): ChatMessage[] {
   let total = 0;
   for (let i = history.length - 1; i >= 0; i--) {
     total += estimateTokens(history[i]);
-    if (total > MAX_HISTORY_TOKENS) {
+    if (total > maxTokens) {
       let start = i + 1;
       // Never start mid-exchange (assistant tool-call without its result)
       while (start < history.length && history[start].role === 'assistant' && history[start].toolCalls?.length) {

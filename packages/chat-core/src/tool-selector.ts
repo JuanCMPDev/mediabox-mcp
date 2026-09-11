@@ -1,5 +1,29 @@
+import type { Phase } from '@mediabox/contracts';
 import type { ChatMessage, VirtualToolDef } from './types.js';
 import { VIRTUAL_TOOLS } from './virtual-tools.js';
+
+/**
+ * Heuristic phase detector (§2.3).
+ * Suggests an initial phase for a user turn based on keywords and references.
+ * The effective phase is ultimately governed by the pure workflow reducer.
+ */
+export function heuristicPhase(userMessage: string, history: ChatMessage[] = []): Phase {
+  const text = normalize(userMessage);
+
+  if (/\b(maintenance|mantenimiento|cleanup|clean|limpi\w*|cache|temp|tmp|orphan|orphans|huerfano|huerfanos|job|jobs)\b/.test(text)) {
+    return 'maintain';
+  }
+  if (/\brref_[0-9a-fA-Za-z_-]+/.test(text)) {
+    return 'propose';
+  }
+  if (/\bmref_[0-9a-fA-Za-z_-]+/.test(text)) {
+    return 'select';
+  }
+  if (/\b(search|busc\w*|encuentr\w*|find|download|descarg\w*|baj\w*|torrent|pelicula|movie|series?|show|anime|delete|borr\w*|elimin\w*|transcod\w*|optimize)\b/.test(text)) {
+    return 'discover';
+  }
+  return 'orient';
+}
 
 /**
  * Pick the virtual tools relevant to the user's message and recent context.

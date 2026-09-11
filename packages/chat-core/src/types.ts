@@ -41,11 +41,18 @@ export interface HistoryStore {
 
 /** Arguments passed to the stream engine. */
 export interface StreamChatOptions {
-  message:        string;
+  message?:       string;
   conversationId: string;
   provider:       import('./providers/types.js').StreamProvider;
   mcpCall:        McpCallFn;
   historyStore:   HistoryStore;
   /** BCP-47 locale for the response language (PR 3.4d). Defaults to "en". */
   locale?:        string;
+  workflowStore?: import('./agent/workflow.js').WorkflowStore;
+  signal?:        AbortSignal;
+  selection?:     import('@mediabox/contracts').TypedSelection;
+  budget?:        import('./agent/budget.js').BudgetConfig;
+  guards?:        Partial<import('./agent/guards.js').GuardConfig>;
+  clock?:         import('./agent/workflow.js').ClockFn;
+  onTrace?:       (trace: import('./agent/trace.js').AgentTrace) => void;
 }

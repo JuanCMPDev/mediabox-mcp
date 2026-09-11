@@ -61,7 +61,22 @@ export class OperationStore {
    * Persists an OperationPlan with initial status (default "planned").
    * Verifies that the declared manifestHash matches the computed canonical hash (§4.2).
    */
-  createPlan(plan: OperationPlan, initialStatus: OperationStatus = "planned"): OperationPlanRecord {
+  createPlan(
+    plan: OperationPlan,
+    initialStatus: OperationStatus = "planned",
+    proposalKey?: string,
+  ): OperationPlanRecord {
+    const key = proposalKey ?? plan.proposalKey;
+    if (key) {
+      const existing = this.db
+        .prepare(`SELECT id FROM operation_plans WHERE proposal_key = ? AND status IN ('planned', 'awaiting_approval')`)
+        .get<{ id: string }>(key);
+      if (existing) {
+        const found = this.getPlan(existing.id);
+        if (found) return found;
+      }
+    }
+
     const computedHash = computePlanManifestHash(plan);
     if (plan.manifestHash !== computedHash) {
       throw new ManifestHashMismatchError(
@@ -78,8 +93,9 @@ export class OperationStore {
           INSERT INTO operation_plans (
             id, schema_version, installation_id, owner_id, conversation_id,
             operation, manifest_version, manifest_hash, created_at, expires_at,
-            policy_version, snapshot_id, plan_json, status, total_steps, current_step
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            policy_version, snapshot_id, plan_json, status, total_steps, current_step,
+            proposal_key
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `)
         .run(
           plan.id,
@@ -97,7 +113,8 @@ export class OperationStore {
           JSON.stringify(plan),
           initialStatus,
           totalSteps,
-          0
+          0,
+          key ?? null
         );
 
       // Create initial pending steps
@@ -177,6 +194,7 @@ export class OperationStore {
       steps,
       leaseOwner: row.lease_owner ?? undefined,
       leaseExpiresAt: row.lease_expires_at ?? undefined,
+      proposalKey: row.proposal_key ?? undefined,
     };
   }
 

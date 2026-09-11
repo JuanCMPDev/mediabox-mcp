@@ -1,0 +1,55 @@
+{
+  "id": "agt-06",
+  "title": "Reset clears conversation and state while preserving plans; model switch is transparent (AGT-06)",
+  "locale": "en",
+  "initialState": {
+    "schemaVersion": 1,
+    "conversationId": "conv_agt-06",
+    "principalId": "user1",
+    "installationId": "inst1",
+    "phase": "select",
+    "references": { "mediaRef": "mref_1234567890ab" },
+    "selections": [],
+    "proposals": [
+      {
+        "planId": "plan_existing_1",
+        "operation": "media_download",
+        "status": "awaiting_approval",
+        "manifestHash": "hash1",
+        "proposalKey": "prop1"
+      }
+    ],
+    "lastToolCalls": [],
+    "turn": 3,
+    "updatedAt": "2026-09-10T00:00:00.000Z"
+  },
+  "turns": [
+    {
+      "user": "Check server info with new model",
+      "provider": [
+        [
+          {
+            "type": "tool_call",
+            "id": "call-1",
+            "name": "catalog",
+            "args": { "action": "details", "mediaRef": "mref_1234567890ab" }
+          }
+        ],
+        [
+          { "type": "text", "text": "Switched model cleanly with preserved workflow state." }
+        ]
+      ],
+      "mcp": {
+        "media_details": "{\"schemaVersion\":1,\"status\":\"ok\",\"data\":{\"id\":\"m1\",\"title\":\"Movie\",\"mediaRef\":\"mref_1234567890ab\"}}"
+      },
+      "expect": {
+        "events": [
+          { "type": "tool-start", "name": "catalog" },
+          { "type": "tool-end", "name": "catalog", "ok": true },
+          { "type": "done" }
+        ],
+        "state": { "phase": "select" }
+      }
+    }
+  ]
+}

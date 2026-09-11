@@ -1,0 +1,74 @@
+{
+  "id": "agt-05",
+  "title": "Typed selection channel transitions state securely (AGT-05)",
+  "locale": "en",
+  "turns": [
+    {
+      "user": "I want Dark",
+      "provider": [
+        [
+          {
+            "type": "tool_call",
+            "id": "call-1",
+            "name": "present_choices",
+            "args": {
+              "prompt": "Select a version",
+              "items": [
+                {
+                  "label": "Dark (2017) 1080p",
+                  "value": "Download Dark (2017) 1080p",
+                  "releaseRef": "rref_aabbccddeeff",
+                  "mediaRef": "mref_001122334455",
+                  "selectionType": "select_release"
+                }
+              ]
+            }
+          }
+        ]
+      ],
+      "expect": {
+        "events": [
+          { "type": "choices" },
+          { "type": "done" }
+        ]
+      }
+    },
+    {
+      "selection": {
+        "type": "select_release",
+        "value": "Download Dark (2017) 1080p",
+        "releaseRef": "rref_aabbccddeeff",
+        "mediaRef": "mref_001122334455"
+      },
+      "provider": [
+        [
+          {
+            "type": "tool_call",
+            "id": "call-2",
+            "name": "catalog",
+            "args": {
+              "action": "propose_download",
+              "releaseRef": "rref_aabbccddeeff",
+              "mediaRef": "mref_001122334455"
+            }
+          }
+        ],
+        [
+          { "type": "text", "text": "Proposed download for Dark." }
+        ]
+      ],
+      "mcp": {
+        "propose_download": "{\"planId\":\"plan_dark_1\",\"operation\":\"media_download\",\"status\":\"awaiting_approval\",\"proposalKey\":\"key_dark_1\"}"
+      },
+      "expect": {
+        "events": [
+          { "type": "phase", "phase": "propose" },
+          { "type": "tool-start", "name": "catalog" },
+          { "type": "tool-end", "name": "catalog", "ok": true },
+          { "type": "done" }
+        ],
+        "state": { "phase": "monitor" }
+      }
+    }
+  ]
+}

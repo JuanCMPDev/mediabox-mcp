@@ -1,0 +1,20 @@
+{
+  "id": "agt-07",
+  "title": "Context overflow explicitly caught and rejected before provider call (AGT-07)",
+  "locale": "en",
+  "turns": [
+    {
+      "user": "This turn will be provided with an overwhelming context to test budget limits",
+      "provider": [
+        [
+          { "type": "text", "text": "Should never reach provider if budget overflows." }
+        ]
+      ],
+      "expect": {
+        "events": [
+          { "type": "done" }
+        ]
+      }
+    }
+  ]
+}

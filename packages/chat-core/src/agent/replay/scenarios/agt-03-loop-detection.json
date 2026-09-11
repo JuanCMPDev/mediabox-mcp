@@ -1,0 +1,40 @@
+{
+  "id": "agt-03",
+  "title": "Repetition guard stops execution on loop detection (AGT-03)",
+  "locale": "en",
+  "turns": [
+    {
+      "user": "Check server health",
+      "provider": [
+        [
+          {
+            "type": "tool_call",
+            "id": "call-1",
+            "name": "server_info",
+            "args": { "action": "status" }
+          }
+        ],
+        [
+          {
+            "type": "tool_call",
+            "id": "call-2",
+            "name": "server_info",
+            "args": { "action": "status" }
+          }
+        ]
+      ],
+      "mcp": {
+        "server_status": "{\"status\":\"healthy\",\"uptime\":12345}"
+      },
+      "expect": {
+        "events": [
+          { "type": "tool-start", "name": "server_info" },
+          { "type": "tool-end", "name": "server_info", "ok": true },
+          { "type": "guard", "code": "ERR_LOOP_DETECTED" },
+          { "type": "done" }
+        ],
+        "guardCode": "ERR_LOOP_DETECTED"
+      }
+    }
+  ]
+}

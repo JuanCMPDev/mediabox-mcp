@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { selectTools } from './tool-selector.js';
+import { selectTools, heuristicPhase } from './tool-selector.js';
 import type { ChatMessage } from './types.js';
 
 function names(message: string, history: ChatMessage[] = []): string[] {
@@ -68,5 +68,29 @@ describe('selectTools', () => {
       'operations',
       'present_choices',
     ]);
+  });
+});
+
+describe('heuristicPhase (§2.3)', () => {
+  it('detects orient phase for server and general status queries', () => {
+    expect(heuristicPhase('estado del servidor')).toBe('orient');
+    expect(heuristicPhase('hola')).toBe('orient');
+  });
+
+  it('detects discover phase for search and download requests', () => {
+    expect(heuristicPhase('busca la pelicula Inception')).toBe('discover');
+    expect(heuristicPhase('descarga Dark temporada 1')).toBe('discover');
+  });
+
+  it('detects select phase when mediaRef is present', () => {
+    expect(heuristicPhase('ver opciones para mref_1234567890ab')).toBe('select');
+  });
+
+  it('detects propose phase when releaseRef is present', () => {
+    expect(heuristicPhase('descargar release rref_abcdef123456')).toBe('propose');
+  });
+
+  it('detects maintain phase for cleanup / orphan queries', () => {
+    expect(heuristicPhase('limpiar archivos huerfanos y temporales')).toBe('maintain');
   });
 });

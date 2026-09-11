@@ -342,7 +342,7 @@ describe("Gate G03 / Phase P03: Operation Plans, Approval & Executor (OP-01 to O
   describe("OP-06: Database migrations and transaction rollback", () => {
     it("enforces schema versioning and enables foreign key integrity", () => {
       const versionRow = db.prepare("PRAGMA user_version;").get<{ user_version: number }>();
-      expect(versionRow?.user_version).toBe(1);
+      expect(versionRow?.user_version).toBe(2);
 
       const fkRow = db.prepare("PRAGMA foreign_keys;").get<{ foreign_keys: number }>();
       expect(fkRow?.foreign_keys).toBe(1);
@@ -589,4 +589,38 @@ describe("Gate G03 / Phase P03: Operation Plans, Approval & Executor (OP-01 to O
       expect(approveData.approvedAt).toBeDefined();
     });
   });
+
+  describe("AGT-08: Proposal Idempotency", () => {
+    it("returns existing active plan when creating with duplicate proposalKey", () => {
+      const plan1 = buildOperationPlan({
+        installationId: "install_test",
+        ownerId: "owner_1",
+        conversationId: "conv_1",
+        operation: "media_download",
+        targets: [],
+        effects: [{ serviceAction: "download", irreversibleLoss: false }],
+        proposalKey: "prop_key_123",
+      });
+
+      const rec1 = store.createPlan(plan1, "awaiting_approval", "prop_key_123");
+      expect(rec1.plan.id).toBe(plan1.id);
+      expect(rec1.proposalKey).toBe("prop_key_123");
+
+      const plan2 = buildOperationPlan({
+        installationId: "install_test",
+        ownerId: "owner_1",
+        conversationId: "conv_1",
+        operation: "media_download",
+        targets: [],
+        effects: [{ serviceAction: "download", irreversibleLoss: false }],
+        proposalKey: "prop_key_123",
+      });
+
+      // Second creation with same proposalKey returns rec1
+      const rec2 = store.createPlan(plan2, "awaiting_approval", "prop_key_123");
+      expect(rec2.plan.id).toBe(rec1.plan.id);
+      expect(rec2.proposalKey).toBe("prop_key_123");
+    });
+  });
 });
+

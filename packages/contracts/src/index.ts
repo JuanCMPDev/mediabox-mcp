@@ -149,19 +149,43 @@ export interface ChatChoiceItem {
   selection?: TypedSelection;
 }
 
+export type Phase = 'orient' | 'discover' | 'select' | 'propose' | 'monitor' | 'maintain';
+
+export type AgentErrorCode =
+  | 'ERR_TOOL_NOT_EXPOSED'
+  | 'ERR_ARGS_INVALID'
+  | 'ERR_REPAIR_EXHAUSTED'
+  | 'ERR_LOOP_DETECTED'
+  | 'ERR_TURN_BUDGET'
+  | 'ERR_CONTEXT_OVERFLOW'
+  | 'ERR_PROVIDER_UNAVAILABLE'
+  | 'ERR_PROVIDER_PROTOCOL'
+  | 'ERR_TOOL_TIMEOUT'
+  | 'ERR_CANCELLED'
+  | 'ERR_WORKFLOW_CORRUPT'
+  | 'ERR_ENDPOINT_POLICY'
+  | 'ERR_TURN_IN_FLIGHT';
+
 export type ChatEvent =
   | { type: 'conversation'; id: string }
   | { type: 'token';        text: string }
   | { type: 'tool-start';   name: string; args: Record<string, unknown>; callId?: string }
   | { type: 'tool-end';     name: string; ok: boolean; durationMs: number; callId?: string; error?: string }
+  | { type: 'phase';        phase: Phase; reason: string }
+  | { type: 'guard';        code: AgentErrorCode; message: string }
   | { type: 'choices';      prompt?: string; items: ChatChoiceItem[] }
   | { type: 'done';         fullText: string }
-  | { type: 'error';        message: string };
+  | { type: 'error';        message: string; code?: string };
 
 /** Returned by GET /api/chat/info — tells the UI which provider/model is active. */
 export interface ChatInfo {
   provider: string;
   model:    string;
+  mode:     'local' | 'cloud';
+  runtime?: string;
+  backend?: string;
+  contextTokens?: number;
+  agentCompatible?: boolean;
 }
 
 /** Simplified entry returned by GET /api/chat/:id/history — display-only. */
@@ -246,9 +270,38 @@ export interface McpConfig {
   installationId?: string;
 }
 
+export type LocalRuntimeKind =
+  | 'ollama'
+  | 'lmstudio'
+  | 'llamacpp'
+  | 'vllm'
+  | 'lemonade'
+  | 'openai-compatible';
+
+export type InferenceBackend =
+  | 'auto'
+  | 'cuda'
+  | 'rocm'
+  | 'vulkan'
+  | 'sycl'
+  | 'metal'
+  | 'cpu';
+
 export type LLMProviderConfig =
   | { kind: 'openrouter'; apiKey: string; model: string }
-  | { kind: 'google';     apiKey: string; model?: string };
+  | { kind: 'google';     apiKey: string; model?: string }
+  | {
+      kind: 'local';
+      runtime: LocalRuntimeKind;
+      baseUrl: string;
+      model: string;
+      contextTokens?: number;
+      backend?: InferenceBackend;
+      apiKey?: string;
+      allowLan?: boolean;
+      endpointHosts?: string[];
+      tlsFingerprint?: string;
+    };
 
 export interface TelegramConfig {
   botToken:        string;
@@ -299,9 +352,9 @@ export type SetupStatus =
   | { type: 'finished'; ok: boolean; warnings: string[]; durationMs: number }
   | { type: 'error';    message: string };
 
-// ── Settings administration (PR 3.2 — Tier A) ────────────────────────────────
-// `GET /api/setup/info` returns this — sanitised view of the deployed stack
-// for the Settings panel. Booleans like `hasPassword` let the UI render a
+// ── Setup info snapshot (Phase 3.4a) ─────────────────────────────────────────
+// Returned by GET /api/setup/info. Summarises current stack configuration for
+// the Settings panel. Sensitive secrets are masked to boolean flags or a
 // "•••• configured" placeholder without ever shipping the secret to the webview.
 
 export interface SetupInfo {
@@ -333,7 +386,7 @@ export interface SetupInfo {
     bazarr:       ServiceCreds & { enabled: boolean };
   };
   ai: {
-    provider: 'none' | 'openrouter' | 'google';
+    provider: 'none' | 'openrouter' | 'google' | 'local';
     model:    string | null;
     hasKey:   boolean;
   };
@@ -502,6 +555,7 @@ export interface OperationPlan {
   effects: PlannedEffect[];
   preconditions: Precondition[];
   recovery: RecoveryPlan;
+  proposalKey?: string;
 }
 
 export interface OperationStepRecord {
@@ -528,6 +582,7 @@ export interface OperationPlanRecord {
   steps?: OperationStepRecord[];
   leaseOwner?: string;
   leaseExpiresAt?: number;
+  proposalKey?: string;
 }
 
 export interface PlanApprovalRequest {

@@ -1,0 +1,29 @@
+{
+  "id": "agt-09",
+  "title": "Turn cancellation stops tool execution and preserves state (AGT-09)",
+  "locale": "en",
+  "turns": [
+    {
+      "user": "Long running search",
+      "provider": [
+        [
+          {
+            "type": "tool_call",
+            "id": "call-1",
+            "name": "catalog",
+            "args": { "action": "search", "query": "Dark", "type": "series" }
+          }
+        ]
+      ],
+      "mcp": {
+        "search_media": "{\"schemaVersion\":1,\"status\":\"ok\",\"data\":[]}"
+      },
+      "expect": {
+        "events": [
+          { "type": "tool-start", "name": "catalog" },
+          { "type": "tool-end", "name": "catalog", "ok": true }
+        ]
+      }
+    }
+  ]
+}
