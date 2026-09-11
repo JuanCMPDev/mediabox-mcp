@@ -5,9 +5,21 @@ export class BunSqliteAdapter implements DatabaseAdapter {
 
   constructor(location: string = ":memory:") {
     // Dynamically acquire Bun's Database to allow typecheck and build in Node environments
-    // @ts-ignore
-    const { Database } = typeof Bun !== "undefined" ? Bun : require("bun:sqlite");
-    this.db = new Database(location);
+    // In Bun, Database is exported from "bun:sqlite"
+    let DatabaseClass: any;
+    try {
+      // @ts-ignore
+      DatabaseClass = typeof require === "function" ? require("bun:sqlite")?.Database : undefined;
+    } catch {}
+    if (!DatabaseClass) {
+      try {
+        const { createRequire } = require("node:module");
+        DatabaseClass = createRequire(import.meta.url)("bun:sqlite")?.Database;
+      } catch (err) {
+        throw new Error(`bun:sqlite is not available: ${err}`);
+      }
+    }
+    this.db = new DatabaseClass(location);
     this.db.run("PRAGMA foreign_keys = ON;");
   }
 

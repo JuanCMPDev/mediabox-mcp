@@ -1,11 +1,14 @@
-import { DatabaseSync } from "node:sqlite";
+import { createRequire } from "node:module";
+import type { DatabaseSync } from "node:sqlite";
 import type { DatabaseAdapter, RunResult, StatementAdapter } from "./contract.js";
 
 export class NodeSqliteAdapter implements DatabaseAdapter {
   private db: DatabaseSync;
 
   constructor(location: string = ":memory:") {
-    this.db = new DatabaseSync(location);
+    const req = createRequire(import.meta.url);
+    const { DatabaseSync: NativeDatabaseSync } = req("node:sqlite");
+    this.db = new NativeDatabaseSync(location);
     this.db.exec("PRAGMA foreign_keys = ON;");
   }
 

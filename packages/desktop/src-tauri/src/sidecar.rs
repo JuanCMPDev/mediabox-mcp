@@ -63,6 +63,15 @@ pub async fn spawn(app: AppHandle) -> Result<(), Box<dyn std::error::Error + Sen
         cmd = cmd.env("STACK_DIR", dir);
     }
 
+    // Direct operations database to the app data directory so the sidecar
+    // does not write to its current working directory (which may be read-only
+    // in packaged desktop installations).
+    if let Ok(data_dir) = app.path().app_data_dir() {
+        let _ = std::fs::create_dir_all(&data_dir);
+        let db_path = data_dir.join("operations.db");
+        cmd = cmd.env("OPERATIONS_DB_PATH", db_path.to_string_lossy().to_string());
+    }
+
     // The sidecar runs ON the host (not inside the Docker network), so the
     // mcp-server defaults like `http://jellyfin:8096` are unresolvable.
     // Override every service URL with the host port that docker-compose maps.
