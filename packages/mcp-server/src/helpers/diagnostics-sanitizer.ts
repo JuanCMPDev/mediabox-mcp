@@ -13,6 +13,10 @@ const ALLOWED_DIAGNOSTIC_KEYS = new Set([
   "endpoint",
   "endpointPolicy",
   "privacyProfile",
+  "privacyIsolation",
+  "runtimeState",
+  "runtimeReason",
+  "artifactStatus",
   "warning",
 ]);
 
@@ -26,19 +30,19 @@ const SENSITIVE_PATTERNS: RegExp[] = [
   /bearer\s+[A-Za-z0-9_.-]{16,}/gi,
   /[a-z0-9_-]+_api_key=[^&\s]+/gi,
   /[a-z0-9_-]+_token=[^&\s]+/gi,
-  /:\/\/[^:]+:([^@]+)@/g, // credentials inside URLs
 ];
 
 /**
  * Strips secrets, embedded credentials, prompts and query strings from a text string.
+ * Query strings go first and credentials keep the scheme, so one redaction never
+ * hides a URL from the other.
  */
 export function sanitizeString(text: string): string {
-  let result = text;
+  let result = text.replace(/([a-z][a-z0-9+.-]*:\/\/[^\s?#]+)\?[^\s#]*/gi, "$1?[REDACTED_QUERY]");
+  result = result.replace(/([a-z][a-z0-9+.-]*:\/\/)[^\s/@]+@/gi, "$1[REDACTED]@");
   for (const pattern of SENSITIVE_PATTERNS) {
     result = result.replace(pattern, "[REDACTED]");
   }
-  // Sanitize raw URLs to remove query strings that might hold secrets
-  result = result.replace(/(https?:\/\/[^\s?#]+)\?[^\s]*/gi, "$1?[REDACTED_QUERY]");
   return result;
 }
 

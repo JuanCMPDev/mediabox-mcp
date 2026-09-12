@@ -9,7 +9,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { NodeSqliteAdapter } from "../../packages/mcp-server/dist/operations/sqlite/node-adapter.js";
-import { initializeOperationsSchema } from "../../packages/mcp-server/dist/operations/schema.js";
+import { initializeOperationsSchema, CURRENT_SCHEMA_VERSION } from "../../packages/mcp-server/dist/operations/schema.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -24,8 +24,8 @@ initializeOperationsSchema(nodeDb);
 
 // Verify tables and user_version
 const version = nodeDb.prepare("PRAGMA user_version;").get();
-if (!version || version.user_version !== 2) {
-  console.error("FAIL: user_version is not 2 in node:sqlite");
+if (!version || version.user_version !== CURRENT_SCHEMA_VERSION) {
+  console.error(`FAIL: user_version is not ${CURRENT_SCHEMA_VERSION} in node:sqlite`);
   process.exit(1);
 }
 

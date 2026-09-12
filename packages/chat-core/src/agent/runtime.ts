@@ -208,6 +208,15 @@ function collectPaths(parsed: unknown, out: string[]): void {
     const p = item?.path ?? item?.relativePath ?? item?.logicalPath;
     if (typeof p === 'string' && p.length > 0 && p.length <= 300) out.push(p);
   }
+  // manage_files lists `{ path, items: [{ name, type }] }`: entries are relative to `path`.
+  if (Array.isArray(record.items)) {
+    const base = typeof record.path === 'string' ? record.path.replace(/[\\/]+$/, '') : '';
+    for (const item of record.items.slice(0, 20)) {
+      const own = item?.path ?? item?.relativePath;
+      const name = typeof own === 'string' ? own : typeof item?.name === 'string' ? (base ? `${base}/${item.name}` : item.name) : undefined;
+      if (typeof name === 'string' && name.length > 0 && name.length <= 300) out.push(name);
+    }
+  }
 }
 
 /** Extracts only the references this tool is entitled to produce. */

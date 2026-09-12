@@ -64,8 +64,18 @@ export function registerJellyfinTools(server: McpServer): void {
       limit: z.number().default(15).describe("Number of entries to return"),
     },
   }, async ({ limit }) => {
-    const log = await jfApi(`/System/ActivityLog/Entries?limit=${limit}`);
-    return textResult(log.Items.map((e: any) => ({ type: e.Type, name: e.Name, date: e.Date?.slice(0, 16), user: e.UserName })));
+    const [log, users] = await Promise.all([
+      jfApi(`/System/ActivityLog/Entries?limit=${limit}`),
+      // Activity entries only carry UserId; names come from /Users.
+      jfApi(`/Users`).catch(() => []),
+    ]);
+    const userNames = new Map<string, string>((Array.isArray(users) ? users : []).map((u: any) => [u.Id, u.Name]));
+    return textResult(log.Items.map((e: any) => ({
+      type: e.Type,
+      name: e.Name,
+      date: e.Date?.slice(0, 16),
+      user: e.UserName ?? (e.UserId ? userNames.get(e.UserId) : undefined),
+    })));
   });
 
   // 3. JELLYFIN SEARCH

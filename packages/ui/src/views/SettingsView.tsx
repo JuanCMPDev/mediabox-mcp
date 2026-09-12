@@ -271,6 +271,21 @@ function AIProviderSection({ info }: { info: SetupInfo }) {
 }
 
 /**
+ * A strict profile is only shown as verified when the server observed containment
+ * itself (§3.1); a configured value alone reads as "not verified".
+ */
+function privacyLabel(
+  profile: string | undefined,
+  isolation: string | undefined,
+  t: (key: string, fallback: string) => string,
+): string {
+  if (!profile || profile === 'unverified') return t('ai.privacyUnverified', 'not configured (isolation not verified)');
+  return isolation === 'no-default-route'
+    ? `${profile} · ${t('ai.privacyVerified', 'verified: no default route')}`
+    : `${profile} · ${t('ai.privacyNotVerified', 'not verified in this process')}`;
+}
+
+/**
  * Local inference diagnostics (§3.7 / LOC-10). Everything here comes from
  * GET /api/chat/info, which is redacted server-side: no key ever reaches the UI.
  */
@@ -312,6 +327,21 @@ function LocalInferenceDiagnostics() {
           ? t('ai.canaryUnknown', 'not measured on this hardware yet')
           : data.agentCompatible ? '3/3' : t('ai.canaryFailed', 'failed: text only')}
       />
+      <Row k={t('ai.runtimeStateLabel', 'Runtime state')} v={data.runtimeState ?? '—'} />
+      <Row k={t('ai.artifactLabel', 'Model artifact')} v={data.artifactStatus ?? '—'} />
+      <Row
+        k={t('ai.privacyLabel', 'Privacy profile')}
+        v={privacyLabel(data.privacyProfile, data.privacyIsolation, t)}
+      />
+      {data.privacyProfile && data.privacyProfile !== 'unverified' && data.privacyIsolation !== 'no-default-route' && (
+        <p className={styles.labelHint}>
+          {t(
+            'ai.privacyStrictUnavailable',
+            'This process cannot prove network containment (native run or a default route is present). The strict profile is configured but not verified here; use the isolated Docker deployment for a verified profile.',
+          )}
+        </p>
+      )}
+      {data.runtimeReason && <p className={styles.labelHint}>{data.runtimeReason}</p>}
       {data.warning && <p className={styles.labelHint}>{data.warning}</p>}
     </div>
   );

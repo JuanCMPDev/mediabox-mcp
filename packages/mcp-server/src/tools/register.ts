@@ -9,6 +9,7 @@ import { registerOperationTools } from "./operations.js";
 import { registerCatalogTools } from "./catalog.js";
 import { defaultOperationStore } from "../operations/default-store.js";
 import { defaultToolContext, type McpToolContext } from "../security/context.js";
+import { defaultToolAuditLog, instrumentToolAudit, type ToolAuditLog } from "../security/tool-audit.js";
 import { VERSION } from "../version.js";
 
 /**
@@ -16,8 +17,12 @@ import { VERSION } from "../version.js";
  * the caller's principal (installation, owner) and conversation so proposals
  * and opaque references are scoped to the real identity (Blueprint 4.1 / 4.4).
  */
-export function createMcpServer(context: McpToolContext = defaultToolContext()): McpServer {
+export function createMcpServer(
+  context: McpToolContext = defaultToolContext(),
+  auditLog: ToolAuditLog | null = defaultToolAuditLog,
+): McpServer {
   const server = new McpServer({ name: "mediabox-mcp", version: VERSION });
+  instrumentToolAudit(server, context, auditLog);
   registerJellyfinTools(server);
   registerLibraryTools(server, context);
   registerSonarrTools(server);

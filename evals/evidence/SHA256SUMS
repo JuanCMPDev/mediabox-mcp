@@ -1,6 +1,0 @@
-6856da538d41bbe47de2cef752cfbda66e717a22d7f163341c5b8e0a59fb28ab  evals/evidence/experiment-manifest.json
-90d46c7a90f83226c6be6bec8ad425e73a3b7bf37d0fce2a6a60aa7a10898000  evals/evidence/evaluation-report.json
-ade978736b7048b770c54d21b5f489eed48a472dd141e8cddf221d75a0b28c75  evals/local-agent/corpus.json
-dd36b47e99929861b6b5b9860730cdaf6435e69edbbc4ca6c73d85743e91e5aa  ci/model-profiles/qwen2.5-7b-ollama-rx7800xt.json
-a99c9efc879ab8699fe79387c5481d30ad82faa42a6b614976deb1414ab3d163  evals/local-agent/scorer.mjs
-d81c20724a3d8b6a1ef9c6bafbd376d3d3dd879a50d1994c3f0642a412f73d4d  docs/blueprints/handoffs/PR05-EVAL-CONTRACT.json

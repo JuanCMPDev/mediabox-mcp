@@ -199,6 +199,36 @@ export interface ChatInfo {
   warning?: string;
   /** Observable privacy profile (§3.1 / NET-01..06). Unverified when unconfigured. */
   privacyProfile?: PrivacyProfile | 'unverified';
+  /**
+   * What the process itself can observe about network containment (§3.1). Only
+   * `no-default-route` backs a strict profile; a native sidecar is never verified
+   * just because it listens on localhost.
+   */
+  privacyIsolation?: 'no-default-route' | 'default-route-present' | 'unverified-native';
+  /** Runtime lifecycle as seen by the server (§3.3); `ready` never implies agentCompatible. */
+  runtimeState?: RuntimeLifecycleState;
+  /** Sanitized cause of the last lifecycle transition. */
+  runtimeReason?: string;
+  /** Pinned model artifact check before the agent starts (§3.2). */
+  artifactStatus?: 'verified' | 'unpinned' | 'mismatch' | 'missing' | 'unverifiable' | 'not_required';
+}
+
+/**
+ * Server-side record of one executed MCP tool handler (independent of what the
+ * model claims). Written by the server, read by the owner and by the P11 scorer.
+ */
+export interface ToolAuditRecord {
+  id: number;
+  ts: string;
+  principalId: string;
+  principalKind: string;
+  sessionId: string;
+  conversationId: string;
+  tool: string;
+  argsJson: string;
+  ok: boolean;
+  errorCode?: string;
+  durationMs: number;
 }
 
 // ── Privacy & Verifiable Deployment Profiles (P10 / §3.1) ───────────────────
@@ -422,6 +452,7 @@ export type DeployPhase =
   | 'generate:qbittorrent'
   | 'generate:caddy'
   | 'generate:directories'
+  | 'deploy:prepare-artifacts'
   | 'deploy:prepare-images'
   | 'deploy:start'
   | 'deploy:health'

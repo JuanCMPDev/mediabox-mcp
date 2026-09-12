@@ -72,6 +72,16 @@ export function mapNamespace(logicalPath: string): NamespaceMapping {
     throw new PathMappingUnknownError("Empty path cannot be mapped to a root");
   }
 
+  // "<rootId>:<relative>" is how the tools themselves report paths (inspect_format,
+  // plan summaries), so an agent can hand one back unchanged. Containment is still
+  // enforced by resolveWithinRoot.
+  const namespaced = unified.match(/^(media|downloads):(.*)$/);
+  if (namespaced) {
+    const rest = namespaced[2].replace(/^\/+/, "");
+    if (rest.length === 0) throw new PathMappingUnknownError("Empty path cannot be mapped to a root");
+    return { rootId: namespaced[1], relativePath: rest };
+  }
+
   // Container-style absolute paths ("/tv/Show", "/data/movies/X", "/downloads/Y").
   if (unified.startsWith("/") && !unified.startsWith("//")) {
     const sorted = [...mounts].sort((a, b) => b.prefix.length - a.prefix.length);

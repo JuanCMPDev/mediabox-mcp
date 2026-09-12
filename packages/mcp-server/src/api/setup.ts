@@ -38,6 +38,7 @@ import type {
   RestartServicesResult,
 } from "@mediabox/contracts";
 import { VERSION } from "../version.js";
+import { stripUrlCredentials } from "../fetchers/utils.js";
 import { readEnvFile, readEnvMap, patchEnvFile, filterEditable, stackDir } from "../helpers/stack-env.js";
 import {
   restartServices as runRestartServices,
@@ -244,39 +245,40 @@ setupRouter.get("/info", async (_req: Request, res: Response): Promise<void> => 
       anime:  env.ANIME_PATH  || "./media/anime",
       music:  env.MUSIC_PATH  || "./media/music",
     },
+    // URLs are shown to the owner without any user:password they may embed (NET-05).
     services: {
       jellyfin: {
-        url:        process.env.JELLYFIN_URL    || "http://localhost:8096",
+        url:        stripUrlCredentials(process.env.JELLYFIN_URL    || "http://localhost:8096"),
         user:       process.env.JELLYFIN_ADMIN_USER || env.JELLYFIN_ADMIN_USER || undefined,
         hasApiKey:  has("JELLYFIN_API_KEY"),
       },
       qbittorrent: {
-        url:         process.env.QBIT_URL || "http://localhost:8085",
+        url:         stripUrlCredentials(process.env.QBIT_URL || "http://localhost:8085"),
         user:        process.env.QBIT_USER || "admin",
         hasPassword: has("QBIT_PASSWORD"),
       },
       pyload: {
-        url:         process.env.PYLOAD_URL || "http://localhost:8001",
+        url:         stripUrlCredentials(process.env.PYLOAD_URL || "http://localhost:8001"),
         user:        process.env.PYLOAD_USER || "pyload",
         hasPassword: has("PYLOAD_PASSWORD"),
       },
       sonarr: {
-        url:        process.env.SONARR_URL || "http://localhost:8989",
+        url:        stripUrlCredentials(process.env.SONARR_URL || "http://localhost:8989"),
         hasApiKey:  has("SONARR_API_KEY"),
       },
       radarr: {
-        url:        process.env.RADARR_URL || "http://localhost:7878",
+        url:        stripUrlCredentials(process.env.RADARR_URL || "http://localhost:7878"),
         hasApiKey:  has("RADARR_API_KEY"),
       },
       prowlarr: {
-        url:        process.env.PROWLARR_URL || "http://localhost:9696",
+        url:        stripUrlCredentials(process.env.PROWLARR_URL || "http://localhost:9696"),
         hasApiKey:  has("PROWLARR_API_KEY"),
       },
       flaresolverr: {
-        url:        process.env.FLARESOLVERR_URL || "http://localhost:8191",
+        url:        stripUrlCredentials(process.env.FLARESOLVERR_URL || "http://localhost:8191"),
       },
       bazarr: {
-        url:         process.env.BAZARR_URL || "http://localhost:6767",
+        url:         stripUrlCredentials(process.env.BAZARR_URL || "http://localhost:6767"),
         enabled:     (process.env.BAZARR_ENABLED || env.BAZARR_ENABLED || "false") === "true",
       },
     },

@@ -342,7 +342,7 @@ describe("Gate G03 / Phase P03: Operation Plans, Approval & Executor (OP-01 to O
   describe("OP-06: Database migrations and transaction rollback", () => {
     it("enforces schema versioning and enables foreign key integrity", () => {
       const versionRow = db.prepare("PRAGMA user_version;").get<{ user_version: number }>();
-      expect(versionRow?.user_version).toBe(2);
+      expect(versionRow?.user_version).toBe(3);
 
       const fkRow = db.prepare("PRAGMA foreign_keys;").get<{ foreign_keys: number }>();
       expect(fkRow?.foreign_keys).toBe(1);

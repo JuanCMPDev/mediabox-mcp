@@ -10,7 +10,7 @@ import { createMcpServer } from "./tools/register.js";
 import { dashboardRouter } from "./api/dashboard.js";
 import { chatRouter }      from "./api/chat.js";
 import { setupRouter }     from "./api/setup.js";
-import { chatProviderInfo } from "./chat/provider.js";
+import { chatProviderInfo, getRuntimeSupervisor } from "./chat/provider.js";
 import { initI18n, localeMiddleware } from "./helpers/i18n.js";
 import { buildCorsOriginCallback, buildOriginMiddleware, type OriginPolicy } from "./helpers/origin.js";
 import { createOperationsRouter } from "./api/operations.js";
@@ -227,6 +227,8 @@ if (process.env.NODE_ENV !== "test") {
     }
 
     const llm = chatProviderInfo();
+    // The local runtime is started and verified now, outside any chat turn (§3.3).
+    void getRuntimeSupervisor()?.ensureStarted();
     if (llm) {
       console.log(`Chat: ${PUBLIC_URL}/api/chat/stream (${llm.provider}/${llm.model})`);
     } else {

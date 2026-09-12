@@ -38,9 +38,22 @@ export function formatTicks(ticks: number): string {
     : `${m}:${String(s).padStart(2, "0")}`;
 }
 
+/** Drops any user:password embedded in a URL before it is shown to anyone (NET-05). */
+export function stripUrlCredentials(url: string): string {
+  try {
+    const parsed = new URL(url);
+    if (!parsed.username && !parsed.password) return url;
+    parsed.username = "";
+    parsed.password = "";
+    return parsed.toString().replace(/\/$/, url.endsWith("/") ? "/" : "");
+  } catch {
+    return url.replace(/\/\/[^@/]*@/, "//");
+  }
+}
+
 /** Replace Docker container hostname with localhost for browser-accessible URLs */
 export function toHostUrl(containerUrl: string, hostPort?: string): string {
-  const withLocal = containerUrl.replace(/\/\/[^:/]+/, "//localhost");
+  const withLocal = stripUrlCredentials(containerUrl).replace(/\/\/[^:/]+/, "//localhost");
   if (hostPort) return withLocal.replace(/:\d+/, `:${hostPort}`);
   return withLocal;
 }

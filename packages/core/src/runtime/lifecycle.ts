@@ -16,13 +16,18 @@ export const DEFAULT_RESOURCE_LIMITS: RuntimeResourceLimits = {
   maxParallelInferences: 1,
 };
 
+/**
+ * §3.3: not_provisioned → stopped (artifacts verified) → starting → ready, plus
+ * unavailable, error and explicit stop. Nothing starts from not_provisioned or
+ * error: artifacts are verified first, and an error is cleared through `stopped`.
+ */
 const VALID_TRANSITIONS: Record<RuntimeLifecycleState, RuntimeLifecycleState[]> = {
-  not_provisioned: ["starting", "error"],
+  not_provisioned: ["stopped", "error"],
   stopped: ["starting", "not_provisioned", "error"],
   starting: ["ready", "unavailable", "error", "stopped"],
   ready: ["stopped", "unavailable", "error"],
   unavailable: ["starting", "stopped", "error"],
-  error: ["stopped", "starting", "not_provisioned"],
+  error: ["stopped", "not_provisioned"],
 };
 
 export interface LifecycleSnapshot {
@@ -32,6 +37,28 @@ export interface LifecycleSnapshot {
   loadedModel: string | null;
   lastTransitionAt: string;
   reason?: string;
+}
+
+export interface WaitForReadyOptions {
+  /** Longest wait for a healthy probe (default 120 s, §3.3). */
+  timeoutMs?: number;
+  /** Delay between probes (default 30 s, §3.3). */
+  pollIntervalMs?: number;
+  /** Cancels the wait; the runtime is left `stopped`. */
+  signal?: AbortSignal;
+}
+
+function sleep(ms: number, signal?: AbortSignal): Promise<void> {
+  return new Promise((resolve) => {
+    if (signal?.aborted) return resolve();
+    const done = () => {
+      clearTimeout(timer);
+      signal?.removeEventListener("abort", done);
+      resolve();
+    };
+    const timer = setTimeout(done, ms);
+    signal?.addEventListener("abort", done, { once: true });
+  });
 }
 
 export class RuntimeLifecycleManager {
@@ -85,6 +112,30 @@ export class RuntimeLifecycleManager {
     }
   }
 
+  /**
+   * Artifacts were verified: the runtime may now be started. Valid before the
+   * first start or after an error; a no-op when already stopped.
+   */
+  markProvisioned(reason = "Artifacts verified"): void {
+    if (this._state === "stopped") return;
+    if (this._state !== "not_provisioned" && this._state !== "error") {
+      throw new RuntimeLifecycleError(
+        "ERR_INVALID_TRANSITION",
+        `Cannot mark artifacts provisioned while runtime state is '${this._state}'`,
+      );
+    }
+    this.transition("stopped", reason);
+  }
+
+  /**
+   * Explicit stop. Also ends a pending waitForReady. Nothing to stop before the
+   * artifacts are provisioned, so not_provisioned stays as it is.
+   */
+  stop(reason = "Stopped explicitly"): void {
+    if (this._state === "stopped" || this._state === "not_provisioned") return;
+    this.transition("stopped", reason);
+  }
+
   setLoadedModel(model: string | null): void {
     if (model && this._loadedModel && this._loadedModel !== model && this._limits.maxLoadedModels <= 1) {
       // Unload previous model when single model limit is enforced
@@ -124,39 +175,81 @@ export class RuntimeLifecycleManager {
   }
 
   /**
-   * Waits for the runtime to become healthy with max 120s timeout and 30s poll interval (§3.3).
+   * Starts from `stopped` or `unavailable` and waits for a healthy probe: at most
+   * 120 s, probing every 30 s by default (§3.3). Timeout leaves `unavailable` with
+   * a sanitized cause; cancellation or an explicit stop leaves `stopped`.
    */
   async waitForReady(
-    probeFn: () => Promise<boolean>,
-    options?: { timeoutMs?: number; pollIntervalMs?: number },
+    probeFn: (signal?: AbortSignal) => Promise<boolean>,
+    options: WaitForReadyOptions = {},
   ): Promise<void> {
-    const timeoutMs = options?.timeoutMs ?? 120_000;
-    const pollIntervalMs = options?.pollIntervalMs ?? 30_000;
+    const timeoutMs = options.timeoutMs ?? 120_000;
+    const pollIntervalMs = options.pollIntervalMs ?? 30_000;
+    const { signal } = options;
+
+    if (this._state === "ready") return;
+    if (this._state === "not_provisioned") {
+      throw new RuntimeLifecycleError(
+        "ERR_NOT_PROVISIONED",
+        "Runtime artifacts are not verified; run prepare before starting",
+      );
+    }
+    if (this._state !== "stopped" && this._state !== "unavailable") {
+      throw new RuntimeLifecycleError(
+        "ERR_INVALID_TRANSITION",
+        `Cannot start the runtime while its state is '${this._state}'`,
+      );
+    }
+    if (signal?.aborted) {
+      throw new RuntimeLifecycleError("ERR_STARTUP_ABORTED", "Runtime startup was cancelled");
+    }
+
     const startTime = Date.now();
-
     this.transition("starting", "Waiting for runtime readiness");
+    let lastFailure: string | undefined;
 
-    while (Date.now() - startTime < timeoutMs) {
+    for (;;) {
+      let healthy = false;
       try {
-        const isHealthy = await probeFn();
-        if (isHealthy) {
-          this.transition("ready", "Runtime is healthy and ready");
-          return;
-        }
+        healthy = await probeFn(signal);
+        lastFailure = undefined;
       } catch (err) {
-        // Continue polling until timeout
+        lastFailure = err instanceof Error ? err.message : String(err);
+      }
+      this.assertStillStarting(signal);
+      if (healthy) {
+        this.transition("ready", "Runtime is healthy and ready");
+        return;
       }
 
       const remaining = timeoutMs - (Date.now() - startTime);
       if (remaining <= 0) break;
-      await new Promise((resolve) => setTimeout(resolve, Math.min(pollIntervalMs, remaining)));
+      await sleep(Math.min(pollIntervalMs, remaining), signal);
+      this.assertStillStarting(signal);
     }
 
-    this.transition("unavailable", "Runtime startup timed out after 120s");
+    this.transition(
+      "unavailable",
+      `Runtime startup timed out after ${timeoutMs / 1000}s${lastFailure ? ` (${lastFailure})` : ""}`,
+    );
     throw new RuntimeLifecycleError(
       "ERR_STARTUP_TIMEOUT",
       `Runtime failed to reach ready state within ${timeoutMs / 1000}s`,
     );
+  }
+
+  /** Cancellation or a concurrent transition ends the wait without claiming readiness. */
+  private assertStillStarting(signal?: AbortSignal): void {
+    if (signal?.aborted) {
+      if (this._state === "starting") this.transition("stopped", "Startup cancelled");
+      throw new RuntimeLifecycleError("ERR_STARTUP_ABORTED", "Runtime startup was cancelled");
+    }
+    if (this._state !== "starting") {
+      throw new RuntimeLifecycleError(
+        "ERR_STARTUP_ABORTED",
+        `Runtime startup was interrupted (state is now '${this._state}')`,
+      );
+    }
   }
 
   private sanitizeReason(reason: string): string {

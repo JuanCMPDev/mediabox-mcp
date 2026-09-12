@@ -39,7 +39,8 @@
     "icons:desktop": "npm run icons  --workspace packages/desktop",
     "test:local-provider": "vitest run packages/chat-core/src/providers packages/core/src/hardware packages/core/src/models",
     "test:eval-harness": "node --test tests/eval-harness/*.test.mjs",
-    "eval:local": "node evals/local-agent/runner.mjs",
+    "eval:local": "node evals/local-agent/controller.mjs",
+    "eval:profile": "node evals/local-agent/profile.mjs",
     "ci:evidence": "node scripts/ci/evidence.mjs",
     "ci:verify-evidence": "node scripts/ci/verify-evidence.mjs"
   },

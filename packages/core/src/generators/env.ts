@@ -1,6 +1,7 @@
 import { randomBytes, randomUUID } from "node:crypto";
 import type { DeployConfig } from "../config/types.js";
 import { toPosix } from "../utils/paths.js";
+import { isStrictPrivacyProfile } from "./docker-compose.js";
 
 /**
  * Discovered API keys that can be injected after services are up.
@@ -119,6 +120,9 @@ export function generateEnv(config: DeployConfig, keys?: DiscoveredKeys): string
         `LOCAL_LLM_BASE_URL=${effectiveLlm.baseUrl}`,
         `LOCAL_LLM_MODEL=${effectiveLlm.model}`,
       );
+      // Strict profiles: `prepare` fills this from the artifact lock. Empty means
+      // unverified, and the server refuses to start the agent (§3.2).
+      if (isStrictPrivacyProfile(deployment.privacyProfile)) lines.push("LOCAL_LLM_MODEL_DIGEST=");
       if (effectiveLlm.contextTokens) lines.push(`LOCAL_LLM_CONTEXT_TOKENS=${effectiveLlm.contextTokens}`);
       if (effectiveLlm.backend) lines.push(`INFERENCE_BACKEND=${effectiveLlm.backend}`);
       if (effectiveLlm.apiKey) lines.push(`LOCAL_LLM_API_KEY=${effectiveLlm.apiKey}`);

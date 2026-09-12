@@ -1,7 +1,7 @@
 import type { OperationPlan, PlannedTarget, PlannedEffect } from "@mediabox/contracts";
 import { buildOperationPlan } from "../planner.js";
 import { defaultRootFs } from "../../storage/rootfs.js";
-import { listQuarantine, QUARANTINE_DIR_NAME } from "../../storage/quarantine.js";
+import { listQuarantine, locateQuarantineEntry } from "../../storage/quarantine.js";
 import type { PlanScope } from "../../security/context.js";
 
 /**
@@ -31,7 +31,9 @@ async function loadEntries(rootId: string, entryPaths: string[]) {
   for (const entryPath of wanted) {
     const entry = byPath.get(entryPath);
     if (!entry) throw new Error(`Quarantine entry not found: ${entryPath}`);
-    const resolved = await defaultRootFs.resolveWithinRoot(rootId, `${QUARANTINE_DIR_NAME}/${entryPath}`, {
+    const located = await locateQuarantineEntry(rootId, entryPath);
+    if (!located) throw new Error(`Quarantine entry not found: ${entryPath}`);
+    const resolved = await defaultRootFs.resolveWithinRoot(rootId, located, {
       mustExist: true,
       expectKind: "file",
     });

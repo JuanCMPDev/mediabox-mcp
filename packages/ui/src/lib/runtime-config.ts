@@ -54,8 +54,10 @@ async function loadFromTauri(): Promise<RuntimeConfig> {
 
 function loadFromEnv(): RuntimeConfig {
   return {
-    apiUrl:         import.meta.env.VITE_API_URL          || 'http://localhost:3000',
-    internalApiKey: import.meta.env.VITE_INTERNAL_API_KEY || '',
+    apiUrl:         import.meta.env.VITE_API_URL || 'http://localhost:3000',
+    // Development server only: every VITE_* value is inlined into a production bundle,
+    // and the owner key must never ship inside static assets (NET-05).
+    internalApiKey: import.meta.env.DEV ? (import.meta.env.VITE_INTERNAL_API_KEY || '') : '',
   };
 }
 

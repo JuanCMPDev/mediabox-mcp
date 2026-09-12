@@ -1,226 +1,277 @@
 #!/usr/bin/env node
 /**
- * ci:verify-evidence (§5 / PR05-P10-P11-SPEC / Gate G10)
+ * ci:verify-evidence — Gate G10 verifier (PR05 §5).
  *
- * Cryptographically and structurally verifies evaluation evidence:
- *  - Validates repository provenance, commit SHA and tree SHA
- *  - Verifies hashes of contract, corpus, model profile, scorer, and lockfiles
- *  - Confirms completion of 180 planned executions across 3 passes
- *  - Enforces zero tolerance for authorization, scope, egress, and invalid argument violations
- *  - Enforces pass rates (min 54/60 per pass, READ >= 16/20, all others >= 8/10)
- *  - Enforces latency (p95 <= 8s TTFT, p95 <= 30s task) and hardware thresholds
+ * The report of a PR never validates itself. This verifier:
+ *  1. binds the evidence to a real candidate commit: the manifest's checkout
+ *     SHA must be an ancestor of HEAD and nothing but evidence/docs may have
+ *     changed since; every sealed input is re-hashed from that commit's blobs;
+ *  2. rejects anything that is not a live run of a real model (no simulated,
+ *     scripted or replay evidence), and requires the evidence class the gate
+ *     asks for — G10 accepts only `trusted-controller` evidence;
+ *  3. recomputes every pass summary, percentile and threshold from the
+ *     per-execution records instead of trusting recorded summaries, checks
+ *     completeness (60 IDs per pass, fixed order, attempts retained) and the
+ *     performance controls;
+ *  4. checks SHA256SUMS and, when the controller's raw observations are
+ *     available, re-hashes and re-scores every execution from them.
+ *
+ *   node scripts/ci/verify-evidence.mjs [--evidence <dir>] [--require-class trusted-controller|local-lab]
+ *                                        [--observations <dir>] [--json]
  */
 
+import { execFileSync } from 'node:child_process';
+import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
-import crypto from 'node:crypto';
-import { execSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
 const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-const repoRoot = path.resolve(__dirname, '../..');
+const repoRoot = path.resolve(path.dirname(__filename), '../..');
 
-export function computeSha256(filePath) {
-  return crypto.createHash('sha256').update(fs.readFileSync(filePath)).digest('hex');
+export const VERIFIER_VERSION = '2.0.0';
+/** Paths that may change between the evaluated commit and the verified HEAD. */
+export const POST_EVIDENCE_ALLOWED = [/^evals\/evidence\//, /^docs\//];
+export const EVIDENCE_CLASSES = ['local-lab', 'trusted-controller'];
+
+export function sha256(buf) {
+  return crypto.createHash('sha256').update(buf).digest('hex');
 }
 
-export function parseCliArgs(argv = process.argv.slice(2)) {
-  const args = {
-    manifest: path.join(repoRoot, 'evals/evidence/experiment-manifest.json'),
-    contract: path.join(repoRoot, 'docs/blueprints/handoffs/PR05-EVAL-CONTRACT.json'),
-    corpus: path.join(repoRoot, 'evals/local-agent/corpus.json'),
-    scorer: path.join(repoRoot, 'evals/local-agent/scorer.mjs')
-  };
+function git(args, opts = {}) {
+  return execFileSync('git', args, { cwd: repoRoot, encoding: opts.encoding ?? 'utf8', maxBuffer: 256 * 1024 * 1024 });
+}
 
+/** Hash of a file as stored in a commit (independent of CRLF checkout settings). */
+export function blobSha256(commit, relPath) {
+  const bytes = execFileSync('git', ['cat-file', 'blob', `${commit}:${relPath}`], { cwd: repoRoot, maxBuffer: 256 * 1024 * 1024 });
+  return sha256(bytes);
+}
+
+export function blobText(commit, relPath) {
+  return git(['cat-file', 'blob', `${commit}:${relPath}`]);
+}
+
+export function parseArgs(argv) {
+  const args = { evidence: null, requireClass: 'trusted-controller', observations: null, json: false };
   for (let i = 0; i < argv.length; i++) {
-    if (argv[i] === '--manifest' && argv[i + 1]) {
-      args.manifest = path.resolve(process.cwd(), argv[++i]);
-    } else if (argv[i] === '--contract' && argv[i + 1]) {
-      args.contract = path.resolve(process.cwd(), argv[++i]);
-    }
+    const a = argv[i];
+    if (a === '--evidence') args.evidence = path.resolve(argv[++i]);
+    else if (a === '--require-class') args.requireClass = argv[++i];
+    else if (a === '--observations') args.observations = path.resolve(argv[++i]);
+    else if (a === '--json') args.json = true;
   }
-
   return args;
 }
 
-export function verifyEvidence(options = {}) {
-  const args = { ...parseCliArgs([]), ...options };
-  const errors = [];
-
-  console.log('=== Gate G10: Verifying Local Model Evaluation Evidence ===');
-  console.log(`Manifest: ${args.manifest}`);
-
-  if (!fs.existsSync(args.manifest)) {
-    console.error(`FAILED: Experiment manifest not found: ${args.manifest}`);
-    process.exitCode = 1;
-    return { valid: false, errors: [`Manifest file not found: ${args.manifest}`] };
-  }
-
-  let manifest;
-  try {
-    manifest = JSON.parse(fs.readFileSync(args.manifest, 'utf8'));
-  } catch (err) {
-    console.error(`FAILED: Invalid JSON in manifest: ${err.message}`);
-    process.exitCode = 1;
-    return { valid: false, errors: [`Invalid JSON in manifest: ${err.message}`] };
-  }
-
-  // 1. Structure and schema version
-  if (manifest.schemaVersion !== 1) {
-    errors.push(`Invalid manifest schemaVersion: expected 1, got ${manifest.schemaVersion}`);
-  }
-
-  // 2. Repository provenance
-  if (manifest.repo !== 'JuanCMPDev/mediabox-mcp') {
-    errors.push(`Invalid repository in manifest: expected 'JuanCMPDev/mediabox-mcp', got '${manifest.repo}'`);
-  }
-  if (!manifest.controllerId || !manifest.controllerId.startsWith('ctrl_')) {
-    errors.push(`Invalid or missing controller ID in manifest: '${manifest.controllerId}'`);
-  }
-
-  // Check git SHA match
-  try {
-    const currentHead = execSync('git rev-parse HEAD', { cwd: repoRoot, encoding: 'utf8' }).trim();
-    if (manifest.headSha && manifest.headSha !== currentHead && manifest.headSha !== 'unknown') {
-      // In detached PR check or merge commit, compare if commit exists in git
-      try {
-        execSync(`git cat-file -e ${manifest.headSha}`, { cwd: repoRoot });
-      } catch {
-        errors.push(`Manifest headSha '${manifest.headSha}' does not exist in repository`);
-      }
-    }
-  } catch {
-    // skip git check if git not present
-  }
-
-  // 3. Cryptographic hashes verification
-  const contractPath = args.contract || path.join(repoRoot, 'docs/blueprints/handoffs/PR05-EVAL-CONTRACT.json');
-  const corpusPath = args.corpus || path.join(repoRoot, 'evals/local-agent/corpus.json');
-  const scorerPath = args.scorer || path.join(repoRoot, 'evals/local-agent/scorer.mjs');
-  const profilePath = path.join(repoRoot, 'ci/model-profiles', `${manifest.profile?.profileId || 'qwen2.5-7b-ollama-rx7800xt'}.json`);
-
-  if (fs.existsSync(contractPath)) {
-    const actualContractHash = computeSha256(contractPath);
-    if (manifest.hashes?.contractSha256 !== actualContractHash) {
-      errors.push(`Contract hash mismatch: expected ${actualContractHash}, manifest recorded ${manifest.hashes?.contractSha256}`);
-    }
-  }
-  if (fs.existsSync(corpusPath)) {
-    const actualCorpusHash = computeSha256(corpusPath);
-    if (manifest.hashes?.corpusSha256 !== actualCorpusHash) {
-      errors.push(`Corpus hash mismatch: expected ${actualCorpusHash}, manifest recorded ${manifest.hashes?.corpusSha256}`);
-    }
-  }
-  if (fs.existsSync(profilePath)) {
-    const actualProfileHash = computeSha256(profilePath);
-    if (manifest.hashes?.profileSha256 !== actualProfileHash) {
-      errors.push(`Profile hash mismatch: expected ${actualProfileHash}, manifest recorded ${manifest.hashes?.profileSha256}`);
-    }
-  }
-  if (fs.existsSync(scorerPath)) {
-    const actualScorerHash = computeSha256(scorerPath);
-    if (manifest.hashes?.scorerSha256 !== actualScorerHash) {
-      errors.push(`Scorer hash mismatch: expected ${actualScorerHash}, manifest recorded ${manifest.hashes?.scorerSha256}`);
-    }
-  }
-
-  // 4. Planned executions and passes
-  const contract = manifest.contract || JSON.parse(fs.readFileSync(contractPath, 'utf8'));
-
-  if (!manifest.executions || manifest.executions.length !== contract.plannedExecutions) {
-    errors.push(`Planned executions mismatch: expected ${contract.plannedExecutions}, found ${manifest.executions?.length}`);
-  }
-  if (!manifest.passes || manifest.passes.length !== contract.passes) {
-    errors.push(`Pass count mismatch: expected ${contract.passes}, found ${manifest.passes?.length}`);
-  }
-
-  // 5. Invariants and Violations
-  let totalAuthViolations = 0;
-  let totalScopeViolations = 0;
-  let totalEgressViolations = 0;
-  let totalInvalidArgs = 0;
-
-  for (const exec of manifest.executions || []) {
-    totalAuthViolations += exec.violations?.authorization || 0;
-    totalScopeViolations += exec.violations?.scope || 0;
-    totalEgressViolations += exec.violations?.egress || 0;
-    totalInvalidArgs += exec.violations?.invalidArguments || 0;
-  }
-
-  if (totalAuthViolations > contract.maxAuthorizationViolations) {
-    errors.push(`Authorization violations found: ${totalAuthViolations} (max: ${contract.maxAuthorizationViolations})`);
-  }
-  if (totalScopeViolations > contract.maxScopeViolations) {
-    errors.push(`Scope violations found: ${totalScopeViolations} (max: ${contract.maxScopeViolations})`);
-  }
-  if (totalEgressViolations > contract.maxEgressViolations) {
-    errors.push(`Egress violations found: ${totalEgressViolations} (max: ${contract.maxEgressViolations})`);
-  }
-  if (totalInvalidArgs > contract.maxInvalidArgumentsExecuted) {
-    errors.push(`Invalid arguments executed: ${totalInvalidArgs} (max: ${contract.maxInvalidArgumentsExecuted})`);
-  }
-
-  // 6. Pass Thresholds
-  for (const p of manifest.passes || []) {
-    if (p.successCount < contract.minSuccessPerPass) {
-      errors.push(`Pass ${p.passNumber} score ${p.successCount}/${p.scenarioCount} is below minimum ${contract.minSuccessPerPass}`);
-    }
-    for (const [catName, catRules] of Object.entries(contract.categories)) {
-      const cat = p.categoryRates?.[catName];
-      if (!cat) {
-        errors.push(`Pass ${p.passNumber} missing category: ${catName}`);
-      } else if (cat.success < catRules.minSuccessPerPass) {
-        errors.push(`Pass ${p.passNumber} category ${catName} score ${cat.success}/${cat.count} is below minimum ${catRules.minSuccessPerPass}`);
-      }
-    }
-
-    if (p.warmFirstUsefulEventP95Ms > contract.performance.warmFirstUsefulEventP95Ms) {
-      errors.push(`Pass ${p.passNumber} warm p95 first event ${p.warmFirstUsefulEventP95Ms}ms exceeds threshold ${contract.performance.warmFirstUsefulEventP95Ms}ms`);
-    }
-    if (p.warmEligibleTaskP95Ms > contract.performance.warmEligibleTaskP95Ms) {
-      errors.push(`Pass ${p.passNumber} warm p95 task latency ${p.warmEligibleTaskP95Ms}ms exceeds threshold ${contract.performance.warmEligibleTaskP95Ms}ms`);
-    }
-  }
-
-  // 7. Hardware & Cold Canary thresholds
-  if (manifest.performance?.coldCanaryTimingsMs) {
-    for (const timing of manifest.performance.coldCanaryTimingsMs) {
-      if (timing > contract.performance.coldLoadAndCanaryMaxMs) {
-        errors.push(`Cold canary timing ${timing}ms exceeds max ${contract.performance.coldLoadAndCanaryMaxMs}ms`);
-      }
-    }
-  }
-  if (manifest.performance?.peakMemoryFraction > contract.performance.maxRuntimeMemoryFractionOfReservedBudget) {
-    errors.push(`Peak memory fraction ${manifest.performance.peakMemoryFraction} exceeds max ${contract.performance.maxRuntimeMemoryFractionOfReservedBudget}`);
-  }
-  if (manifest.performance?.mediaThroughputDegradation > contract.performance.maxMediaThroughputLoss) {
-    errors.push(`Media throughput degradation ${manifest.performance.mediaThroughputDegradation} exceeds max ${contract.performance.maxMediaThroughputLoss}`);
-  }
-  if (manifest.performance?.oomOrRestarts > contract.performance.maxOomOrRestarts) {
-    errors.push(`OOM or restarts observed: ${manifest.performance.oomOrRestarts}`);
-  }
-
-  // 8. Final Status
-  if (manifest.finalStatus !== 'passed') {
-    errors.push(`Manifest finalStatus is '${manifest.finalStatus}', expected 'passed'`);
-  }
-
-  if (errors.length > 0) {
-    console.error('FAILED Gate G10 Evidence Verification:');
-    for (const err of errors) {
-      console.error(`  - ${err}`);
-    }
-    return { valid: false, errors };
-  }
-
-  console.log(`✓ Gate G10 Evidence VERIFIED: 180 executions, 0 violations, all thresholds satisfied.`);
-  return { valid: true, errors: [] };
+function resolveEvidenceDir(explicit) {
+  if (explicit) return explicit;
+  const pointer = path.join(repoRoot, 'evals/evidence/current.json');
+  if (!fs.existsSync(pointer)) return null;
+  const { experimentId } = JSON.parse(fs.readFileSync(pointer, 'utf8'));
+  return path.join(repoRoot, 'evals/evidence', experimentId);
 }
 
-if (process.argv[1] === fileURLToPath(import.meta.url)) {
-  const result = verifyEvidence();
-  if (!result.valid) {
-    process.exit(1);
+async function importAt(commit, relPath, scratch) {
+  // Scorer and corpus are taken from the evaluated commit, not from HEAD.
+  const target = path.join(scratch, relPath);
+  fs.mkdirSync(path.dirname(target), { recursive: true });
+  fs.writeFileSync(target, blobText(commit, relPath));
+  return target;
+}
+
+export async function verifyEvidence(options = {}) {
+  const opts = { ...parseArgs([]), ...options };
+  const errors = [];
+  const notes = [];
+  const fail = (msg) => { errors.push(msg); };
+
+  const dir = resolveEvidenceDir(opts.evidence);
+  if (!dir || !fs.existsSync(path.join(dir, 'experiment-manifest.json'))) {
+    return { valid: false, errors: ['No G10 evidence: evals/evidence/current.json or the experiment manifest is missing. G10 stays pending (no skip counts as a pass).'], notes };
   }
+  const manifestPath = path.join(dir, 'experiment-manifest.json');
+  const manifestBytes = fs.readFileSync(manifestPath);
+  const m = JSON.parse(manifestBytes.toString('utf8'));
+
+  // ── 1. Kind of evidence ─────────────────────────────────────────────────
+  if (m.schemaVersion !== 2) fail(`manifest schemaVersion ${m.schemaVersion} is not 2`);
+  if (m.lot !== 'PR05') fail(`manifest lot ${m.lot} is not PR05`);
+  if (m.mode !== 'live') fail(`evidence mode '${m.mode}': only live runs of a real model count for G10`);
+  if (!EVIDENCE_CLASSES.includes(m.evidenceClass)) fail(`unknown evidence class '${m.evidenceClass}'`);
+  if (opts.requireClass && m.evidenceClass !== opts.requireClass) {
+    const order = EVIDENCE_CLASSES.indexOf(m.evidenceClass) - EVIDENCE_CLASSES.indexOf(opts.requireClass);
+    if (order < 0) fail(`evidence class '${m.evidenceClass}' is not accepted where '${opts.requireClass}' is required (G10 needs an isolated, trusted controller; see PR05 §5)`);
+  }
+  if (m.evidenceClass === 'trusted-controller') {
+    const c = m.controller ?? {};
+    if (c.kind !== 'github-actions' || !c.runId || !c.repository) fail('trusted-controller evidence must reference a verifiable controller run (kind github-actions, repository, runId)');
+    else if (!process.env.GITHUB_TOKEN) fail('cannot confirm the controller run without GITHUB_TOKEN');
+    else {
+      const res = await fetch(`https://api.github.com/repos/${c.repository}/actions/runs/${c.runId}`, { headers: { Authorization: `Bearer ${process.env.GITHUB_TOKEN}`, Accept: 'application/vnd.github+json' } });
+      const run = res.ok ? await res.json() : null;
+      if (!run) fail(`controller run ${c.runId} not found (${res.status})`);
+      else {
+        if (run.head_sha !== m.candidate?.headSha) fail(`controller run head ${run.head_sha} != evidence candidate ${m.candidate?.headSha}`);
+        if (run.conclusion !== 'success') fail(`controller run conclusion ${run.conclusion}`);
+      }
+    }
+  }
+
+  // ── 2. Candidate binding ────────────────────────────────────────────────
+  const cand = m.candidate ?? {};
+  const head = git(['rev-parse', 'HEAD']).trim();
+  let candidateOk = false;
+  try {
+    git(['cat-file', '-e', `${cand.headSha}^{commit}`]);
+    candidateOk = true;
+  } catch {
+    fail(`candidate commit ${cand.headSha} does not exist in this repository`);
+  }
+  if (candidateOk) {
+    try {
+      git(['merge-base', '--is-ancestor', cand.headSha, head]);
+    } catch {
+      fail(`candidate ${cand.headSha} is not an ancestor of HEAD ${head}`);
+    }
+    const tree = git(['rev-parse', `${cand.headSha}^{tree}`]).trim();
+    if (tree !== cand.treeSha) fail(`candidate tree ${tree} != recorded ${cand.treeSha}`);
+    if (cand.checkoutSha !== cand.headSha) fail('the controller must evaluate a clean checkout of the candidate commit');
+    const changed = git(['diff', '--name-only', cand.headSha, head]).split('\n').filter(Boolean);
+    const outside = changed.filter((f) => !POST_EVIDENCE_ALLOWED.some((re) => re.test(f)));
+    if (outside.length) fail(`code changed after the evaluated commit, the evidence is stale: ${outside.slice(0, 10).join(', ')}${outside.length > 10 ? ' …' : ''}`);
+    if (m.controller?.cleanCheckout !== true) fail('controller did not record a clean checkout');
+
+    for (const [name, entry] of Object.entries(m.sealed ?? {})) {
+      try {
+        const actual = blobSha256(cand.headSha, entry.path);
+        if (actual !== entry.sha256) fail(`sealed ${name} (${entry.path}) hash ${actual} != recorded ${entry.sha256}`);
+      } catch {
+        fail(`sealed ${name} (${entry.path}) is not in the candidate commit`);
+      }
+    }
+    for (const required of ['contract', 'corpus', 'profile', 'scorer', 'extractor', 'runner', 'stack', 'syntheticServices', 'perf', 'packageLock']) {
+      if (!m.sealed?.[required]) fail(`sealed input '${required}' is not recorded`);
+    }
+  }
+
+  // ── 3. Profile frozen before measuring ──────────────────────────────────
+  const firstPassStart = (m.passes ?? []).map((p) => p.startedAt).filter(Boolean).sort()[0];
+  if (!m.profile?.sealedAt || !firstPassStart || !(m.profile.sealedAt < firstPassStart)) {
+    fail('profile must be sealed (committed) before the first pass starts');
+  }
+
+  if (errors.length && !candidateOk) return { valid: false, errors, notes };
+
+  // ── 4. Recompute results from the candidate's own scorer and corpus ─────
+  const scratch = fs.mkdtempSync(path.join(fs.realpathSync(process.env.TEMP || process.env.TMPDIR || '/tmp'), 'g10-verify-'));
+  let scorer;
+  let corpus;
+  let contract;
+  try {
+    for (const rel of ['evals/local-agent/extractor.mjs', 'evals/local-agent/scorer.mjs']) await importAt(cand.headSha, rel, scratch);
+    // The scorer resolves ajv relative to the repository; point it at this checkout.
+    fs.mkdirSync(path.join(scratch, 'packages/chat-core'), { recursive: true });
+    fs.copyFileSync(path.join(repoRoot, 'packages/chat-core/package.json'), path.join(scratch, 'packages/chat-core/package.json'));
+    fs.symlinkSync(path.join(repoRoot, 'node_modules'), path.join(scratch, 'node_modules'), 'junction');
+    scorer = await import(`file://${path.join(scratch, 'evals/local-agent/scorer.mjs').replace(/\\/g, '/')}`);
+    corpus = JSON.parse(blobText(cand.headSha, m.sealed.corpus.path));
+    contract = JSON.parse(blobText(cand.headSha, m.sealed.contract.path));
+  } catch (err) {
+    fs.rmSync(scratch, { recursive: true, force: true });
+    fail(`cannot load the candidate's scorer/corpus/contract: ${err.message}`);
+    return { valid: false, errors, notes };
+  }
+
+  const ids = corpus.scenarios.map((s) => s.id);
+  if (JSON.stringify(ids) !== JSON.stringify(m.corpus?.scenarioIds)) fail('recorded scenario order differs from the sealed corpus');
+
+  const completed = (m.passes ?? []).filter((p) => p.status === 'completed');
+  const invalidated = (m.passes ?? []).filter((p) => p.status === 'invalidated');
+  for (const p of invalidated) {
+    if (!p.invalidationReason || !p.evidenceOfInfrastructureFault) fail(`invalidated pass ${p.passRunId} lacks a reason and independent evidence`);
+    if (!Array.isArray(p.records)) fail(`invalidated pass ${p.passRunId} dropped its records (all attempts must be kept)`);
+  }
+  if (completed.length !== contract.passes) fail(`${completed.length} completed passes, contract requires ${contract.passes}`);
+
+  const recomputed = [];
+  for (const p of completed) {
+    const recIds = (p.records ?? []).map((r) => r.scenarioId);
+    if (JSON.stringify(recIds) !== JSON.stringify(ids)) fail(`pass ${p.passNumber}: records are not exactly the 60 scenarios in corpus order`);
+    if ((p.records ?? []).some((r) => (r.attempt ?? 1) !== 1)) fail(`pass ${p.passNumber}: individual reruns are not allowed`);
+    const summary = scorer.summarizePass(p.records ?? [], corpus, contract);
+    recomputed.push(summary);
+    const recorded = p.summary ?? {};
+    if (recorded.successCount !== summary.successCount) fail(`pass ${p.passNumber}: recorded success ${recorded.successCount} != recomputed ${summary.successCount}`);
+    for (const k of ['authorization', 'scope', 'egress', 'invalidArguments']) {
+      if (recorded.violations?.[k] !== summary.violations[k]) fail(`pass ${p.passNumber}: recorded ${k} violations differ from records`);
+    }
+  }
+  const planned = completed.reduce((acc, p) => acc + (p.records?.length ?? 0), 0);
+  if (planned !== contract.plannedExecutions) fail(`${planned} counted executions, contract plans ${contract.plannedExecutions}`);
+
+  const thresholds = scorer.evaluateThresholds({ passSummaries: recomputed, performance: m.performance, contract });
+  const compatible = thresholds.valid;
+  if (m.compatibility !== (compatible ? 'compatible' : 'not_compatible')) fail(`manifest claims '${m.compatibility}' but the records give '${compatible ? 'compatible' : 'not_compatible'}'`);
+  if (!compatible) {
+    fail('profile is not compatible with the frozen thresholds (G10 cannot close with this evidence)');
+    notes.push(...thresholds.errors.map((e) => `threshold: ${e}`));
+  }
+
+  // ── 5. Checksums and raw observations ───────────────────────────────────
+  const sumsPath = path.join(dir, 'SHA256SUMS');
+  if (!fs.existsSync(sumsPath)) fail('SHA256SUMS missing');
+  else {
+    for (const line of fs.readFileSync(sumsPath, 'utf8').split('\n').filter(Boolean)) {
+      const [hash, rel] = line.split(/\s+/, 2);
+      const file = path.join(dir, rel);
+      if (!fs.existsSync(file)) fail(`SHA256SUMS lists missing ${rel}`);
+      else if (sha256(fs.readFileSync(file)) !== hash) fail(`checksum mismatch for ${rel}`);
+    }
+    const listed = fs.readFileSync(sumsPath, 'utf8');
+    if (!listed.includes('experiment-manifest.json')) fail('SHA256SUMS does not cover the manifest');
+  }
+
+  if (opts.observations) {
+    const { resolveVirtualCall } = await import(`file://${path.join(repoRoot, 'packages/chat-core/dist/index.js').replace(/\\/g, '/')}`);
+    let rescored = 0;
+    for (const p of completed) {
+      const schemasFile = path.join(opts.observations, p.passRunId, 'tool-schemas.json');
+      const toolSchemas = fs.existsSync(schemasFile) ? JSON.parse(fs.readFileSync(schemasFile, 'utf8')) : null;
+      for (const rec of p.records ?? []) {
+        const file = path.join(opts.observations, p.passRunId, `${rec.scenarioId}.json`);
+        if (!fs.existsSync(file)) { fail(`raw observation missing: ${p.passRunId}/${rec.scenarioId}`); continue; }
+        const bytes = fs.readFileSync(file);
+        if (sha256(bytes) !== rec.observationSha256) { fail(`raw observation hash mismatch: ${p.passRunId}/${rec.scenarioId}`); continue; }
+        const obs = JSON.parse(bytes.toString('utf8'));
+        const again = scorer.scoreExecution(obs, { contract, corpusMeta: corpus, toolSchemas, resolveVirtualCall });
+        if (again.success !== rec.success || JSON.stringify(again.violations) !== JSON.stringify(rec.violations)) {
+          fail(`re-scoring ${p.passRunId}/${rec.scenarioId} gives a different result`);
+        }
+        rescored++;
+      }
+    }
+    notes.push(`re-scored ${rescored} executions from raw observations`);
+  } else {
+    notes.push('raw observations not provided: records verified for consistency, not re-scored');
+  }
+
+  fs.rmSync(scratch, { recursive: true, force: true });
+  return { valid: errors.length === 0, errors, notes, compatible, evidenceClass: m.evidenceClass, candidate: cand.headSha };
+}
+
+if (process.argv[1] === __filename) {
+  const opts = parseArgs(process.argv.slice(2));
+  const result = await verifyEvidence(opts);
+  if (opts.json) console.log(JSON.stringify(result, null, 2));
+  else {
+    console.log('=== Gate G10: model-quality evidence verification ===');
+    for (const n of result.notes ?? []) console.log(`  · ${n}`);
+    if (result.valid) console.log(`✓ G10 evidence verified for ${result.candidate} (${result.evidenceClass})`);
+    else {
+      console.error('✗ G10 evidence NOT accepted:');
+      for (const e of result.errors) console.error(`  - ${e}`);
+    }
+  }
+  process.exit(result.valid ? 0 : 1);
 }

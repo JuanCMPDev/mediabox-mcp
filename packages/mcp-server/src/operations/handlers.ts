@@ -5,7 +5,7 @@ import {
   removeEmptyDirectory,
   restoreQuarantined,
   purgeQuarantined,
-  QUARANTINE_DIR_NAME,
+  locateQuarantineEntry,
 } from "../storage/quarantine.js";
 import { defaultRootFs } from "../storage/rootfs.js";
 import { executeMediaJob, resolveProfile, type MediaAction } from "../storage/media-jobs.js";
@@ -231,8 +231,12 @@ export function registerStepHandlers(executor: OperationExecutor): void {
       );
     }
 
-    // The service accepted the request but has not surfaced it yet.
-    return { status: "submitted", service, guid, indexerId, reconciled: false, note: "Accepted; not yet visible in history/queue" };
+    // Accepted but never observed: without evidence in history or queue the effect is
+    // uncertain, so it is reported as unknown, not as a success (INV-RECOVERY).
+    throw new UnknownOutcomeError(
+      `${service} accepted the release but it did not appear in its history or queue; the outcome is unknown and it is not re-submitted`,
+      { service, guid, serviceReachable: reconciled.serviceReachable }
+    );
   });
 
   executor.registerStepHandler("download.cancel_previous", async (_step, ctx) => {
@@ -274,8 +278,7 @@ async function verifyQuarantine(record: OperationPlanRecord, results: Array<Reco
     const entryPath = String(results[i]!.entryPath);
     const original = await defaultRootFs.resolveWithinRoot(target.rootId, target.relativePath);
     if (original.exists) problems.push(`${target.relativePath} still present at its original path`);
-    const entry = await defaultRootFs.resolveWithinRoot(target.rootId, `${QUARANTINE_DIR_NAME}/${entryPath}`);
-    if (!entry.exists) problems.push(`quarantine entry ${entryPath} missing`);
+    if (!(await locateQuarantineEntry(target.rootId, entryPath))) problems.push(`quarantine entry ${entryPath} missing`);
   }
   return problems.length ? { ok: false, reason: problems.join("; ") } : { ok: true, reason: "Originals absent and quarantine entries present" };
 }
@@ -285,8 +288,7 @@ async function verifyRestore(record: OperationPlanRecord): Promise<VerificationR
   for (const effect of record.plan.effects) {
     if (effect.serviceAction !== "quarantine.restore") continue;
     const target = record.plan.targets[effect.targetIndex!];
-    const entry = await defaultRootFs.resolveWithinRoot(target.rootId, `${QUARANTINE_DIR_NAME}/${target.relativePath}`);
-    if (entry.exists) problems.push(`quarantine entry ${target.relativePath} still present`);
+    if (await locateQuarantineEntry(target.rootId, target.relativePath)) problems.push(`quarantine entry ${target.relativePath} still present`);
   }
   return problems.length ? { ok: false, reason: problems.join("; ") } : { ok: true };
 }
@@ -296,8 +298,7 @@ async function verifyPurge(record: OperationPlanRecord): Promise<VerificationRes
   for (const effect of record.plan.effects) {
     if (effect.serviceAction !== "quarantine.purge") continue;
     const target = record.plan.targets[effect.targetIndex!];
-    const entry = await defaultRootFs.resolveWithinRoot(target.rootId, `${QUARANTINE_DIR_NAME}/${target.relativePath}`);
-    if (entry.exists) problems.push(`quarantine entry ${target.relativePath} still present`);
+    if (await locateQuarantineEntry(target.rootId, target.relativePath)) problems.push(`quarantine entry ${target.relativePath} still present`);
   }
   return problems.length ? { ok: false, reason: problems.join("; ") } : { ok: true };
 }
@@ -317,8 +318,7 @@ async function verifyMediaConversion(record: OperationPlanRecord, results: Array
     }
     const output = await defaultRootFs.resolveWithinRoot(target.rootId, outputRelativePath);
     if (!output.exists || output.kind !== "file") problems.push(`output ${outputRelativePath} missing`);
-    const backup = await defaultRootFs.resolveWithinRoot(target.rootId, `${QUARANTINE_DIR_NAME}/${backupEntryPath}`);
-    if (!backup.exists) problems.push(`backup ${backupEntryPath} missing`);
+    if (!(await locateQuarantineEntry(target.rootId, backupEntryPath))) problems.push(`backup ${backupEntryPath} missing`);
   }
   return problems.length ? { ok: false, reason: problems.join("; ") } : { ok: true, reason: "Output published and original kept in quarantine" };
 }

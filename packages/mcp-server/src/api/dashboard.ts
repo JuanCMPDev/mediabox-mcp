@@ -7,17 +7,29 @@ import { getServices }  from "../fetchers/services.js";
 import { jfApi }        from "../helpers/api.js";
 import { qbitApi, qbitPause, qbitResume } from "../helpers/qbittorrent.js";
 import { assertMutationAllowed, MutationContainedError } from "../helpers/containment.js";
+import { sanitizeString } from "../helpers/diagnostics-sanitizer.js";
 
 export const dashboardRouter = Router();
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
+
+/**
+ * What the dashboard may show about a failure: the service and its HTTP status,
+ * never the upstream body, which can echo keys, tokens or URLs (NET-05).
+ */
+export function publicError(err: unknown): string {
+  const message = err instanceof Error ? err.message : String(err);
+  const upstream = message.match(/^(Jellyfin API|Sonarr|Radarr|Prowlarr|qBittorrent|PyLoad|Bazarr)\s+(\d{3})\b/i);
+  if (upstream) return `${upstream[1]} ${upstream[2]}`;
+  return sanitizeString(message.split("\n")[0]).slice(0, 200);
+}
 
 function wrap(fetcher: () => Promise<unknown>) {
   return async (_req: Request, res: Response): Promise<void> => {
     try {
       res.json(await fetcher());
     } catch (err) {
-      res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
+      res.status(500).json({ error: publicError(err) });
     }
   };
 }
@@ -34,7 +46,7 @@ function fail(res: Response, err: unknown, status = 500) {
     });
     return;
   }
-  res.status(status).json({ error: err instanceof Error ? err.message : String(err) });
+  res.status(status).json({ error: publicError(err) });
 }
 
 // ── Read endpoints ────────────────────────────────────────────────────────────

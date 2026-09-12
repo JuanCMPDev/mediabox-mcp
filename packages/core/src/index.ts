@@ -24,11 +24,23 @@ export type {
   DeployerContext,
   HealthCheck,
   DeployResult,
+  PrepareImagesOptions,
+  UpOptions,
+  ProvisionedModel,
 } from "./deployer/types.js";
+export { PREPARE_ARTIFACTS_PHASE } from "./deployer/types.js";
 export { DockerCliDeployer } from "./deployer/docker-cli.js";
 
 // Generators — pure, no IO
-export { generateDockerCompose } from "./generators/docker-compose.js";
+export {
+  generateDockerCompose,
+  isStrictPrivacyProfile,
+  EDGE_IMAGE,
+  EDGE_SERVICE,
+  PROVISIONER_SERVICE,
+  PROVISION_PROFILE,
+  type GenerateDockerComposeOptions,
+} from "./generators/docker-compose.js";
 export {
   generateEnv,
   updateEnvKeys,
@@ -54,7 +66,11 @@ export * as qbittorrent from "./services/qbittorrent.js";
 export * as arrAuth from "./services/arr-auth.js";
 
 // High-level orchestrator
-export { deployStack, type DeployStackOptions } from "./orchestrate.js";
+export {
+  deployStack,
+  sanitizeDeployDiagnostic,
+  type DeployStackOptions,
+} from "./orchestrate.js";
 
 // Hardware & Local LLM Models (LOC-07, LOC-09)
 export * from "./hardware/types.js";
@@ -85,6 +101,7 @@ export {
 
 // Artifacts & Provisioning (§3.2 / P10)
 export * from "./artifacts/manifest.js";
+export * from "./artifacts/lock.js";
 
 // Runtime Lifecycle & Resource Admission (§3.2, §3.3 / P10)
 export * from "./runtime/lifecycle.js";

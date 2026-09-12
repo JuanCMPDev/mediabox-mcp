@@ -1,115 +1,149 @@
-# Cierre de Fase P10 — Despliegue Local y Privacidad Verificable
+# Cierre de Fase P10 — Despliegue local y privacidad verificable
 
-Documento de entrega y cierre correspondiente a la **Fase P10** del blueprint [LOCAL-AGENT-HARDENING.es.md](../LOCAL-AGENT-HARDENING.es.md) y de la especificación [PR05-P10-P11-SPEC.es.md](PR05-P10-P11-SPEC.es.md). Esta entrega constituye la **Parte 1 de PR05** (P10: Despliegue local y privacidad verificable) previa al inicio de P11 (Evaluación de modelos locales y Gate G10).
-
-## Ficha del Encargo / Lote
+Cierre de la fase P10 del [blueprint](../LOCAL-AGENT-HARDENING.es.md) contra el
+[contrato PR05](PR05-P10-P11-SPEC.es.md) §3. Sustituye al cierre del 2026-09-11,
+que declaraba G09 aprobado con pruebas en proceso (un resolver simulado con un
+mapa JavaScript, `fs.renameSync` como "plan aprobado" e inspección de YAML). La
+auditoría y el estado consolidado del lote están en
+[PR05-QA-HANDOFF.es.md](PR05-QA-HANDOFF.es.md).
 
 | Campo | Valor |
 |---|---|
-| **Fase(s)** | P10 — Despliegue local y privacidad verificable |
-| **Lote / PR** | PR05 (Parte 1 / sublote PR05a) |
-| **Rama de trabajo** | `work/local-agent/p10-p11-private-evals` |
-| **Rama base** | `integration/local-agent-v1` (commit base merge PR04: `79d2d16`) |
-| **Fecha de entrega** | 2026-09-11 |
-| **Gates asociados** | G09 `gate/local-egress` (junto con G00..G08 verificados) |
+| Fase | P10 — despliegue local y privacidad observables |
+| Lote | PR05, rama `work/local-agent/p10-p11-private-evals` → `integration/local-agent-v1` |
+| Base | `79d2d16` (merge de PR04) |
+| Gates | G09 `gate/local-egress`; regresión G00–G08 |
+| Fecha | 2026-09-12 |
 
----
+## 1. Qué entrega P10
 
-## 1. Alcance y Componentes Implementados
+### 1.1 Perfiles y topología (`packages/core/src/generators/docker-compose.ts`)
 
-### 1.1 Contratos de Privacidad y Artefactos (`packages/contracts`)
-- **Perfiles de Privacidad (`PrivacyProfile`)**:
-  - `'offline-library'`: Aislamiento total offline sin salida a Internet, sin Telegram ni proveedores cloud.
-  - `'local-agent-online-media'`: Inferencia del agente estrictamente confinada a la red privada local; únicamente los componentes de adquisición (descargadores/indexadores) acceden a Internet.
-- **Manifiesto de Artefactos (`ArtifactManifest`)**:
-  - Estructura formal de artefactos (`weights`, `manifest`, `binary`, `dataset`) con digests multi-plataforma SHA256 (`ArtifactPlatformDigests`), tipo de archivo (`gguf`, `safetensors`, `binary`, `json`), tamaño en bytes y URI de descarga saneada.
-- **Control de Ciclo de Vida y Recursos (`RuntimeLifecycleState`, `RuntimeResourceLimits`)**:
-  - Estados: `'not_provisioned' | 'stopped' | 'starting' | 'ready' | 'degraded' | 'failed' | 'stopping'`.
-  - Límites de contexto (`maxContextTokens`), memoria VRAM/RAM (`maxMemoryBytes`) y concurrencia de inferencias (`maxParallelInferences`).
+- `offline-library` y `local-agent-online-media`: `mcp-server` e inferencia solo
+  en redes `internal: true` (`mediabox-inference-net`, `mediabox-services-net`);
+  en online-media, descargadores, indexador y *arr también en
+  `mediabox-external-net`. El generador se niega a emitir un perfil estricto en
+  el que `mcp-server` o la inferencia se unan a una red no interna o publiquen
+  puertos. Sin perfil, la salida es idéntica byte a byte a la anterior.
+- **Defecto corregido, verificado en Docker:** un contenedor conectado solo a
+  redes internas no publica puertos (`docker port` vacío, conexión rechazada).
+  El cierre anterior declaraba `ports:` en `mcp-server` y Jellyfin, que en ambos
+  perfiles estrictos quedaban inalcanzables para el owner. Ahora `mediabox-edge`
+  (`alpine/socat` fijado por digest, `read_only`, `cap_drop: [ALL]`,
+  `no-new-privileges`, usuario 65534) está en `mediabox-edge-net` y reenvía solo
+  3000→mcp-server y 8096/8920→Jellyfin. Si un reenviador muere, el contenedor
+  sale y se reinicia. Los servicios que solo tienen redes internas ya no declaran
+  `ports:`.
+- Telegram y `cloudflared` no existen en `offline-library`.
 
-### 1.2 Validación, Ciclo de Vida y Generadores Core (`packages/core`)
-- **Validación de Perfil de Privacidad (`packages/core/src/config/validate.ts`)**:
-  - En `'offline-library'`, prohíbe explícitamente configuración de bot de Telegram, túneles Cloudflare y modelos cloud externos.
-  - En `'local-agent-online-media'`, exige endpoint local/privado para inferencia del agente.
-- **Gestión de Manifiestos de Artefactos (`packages/core/src/artifacts/manifest.ts`)**:
-  - Saneamiento de URIs: redacta contraseñas o tokens embebidos (`user:pass@host` -> `host`).
-  - Verificación estricta de hash SHA-256 en dos fases: `prepare` (descarga/registro inicial) vs `run` (ejecución offline). Si un artefacto falta en modo `run`, falla de forma cerrada (`ERR_ARTIFACT_MISSING`) sin intentar abrir la red.
-- **Máquina de Estados de Ciclo de Vida (`packages/core/src/runtime/lifecycle.ts`)**:
-  - Transiciones verificadas: `not_provisioned` -> `stopped` -> `starting` -> `ready` -> `stopping` -> `stopped`.
-  - Guard de admisión de inferencia (`acquireInferenceSlot()` / `releaseInferenceSlot()`): rechaza peticiones con `ERR_RUNTIME_BUSY` si se excede `maxParallelInferences`.
-  - Polling de arranque a 30s con timeout de 120s en estado `starting`.
-- **Topología de Redes Docker Compose Segregadas (`packages/core/src/generators/docker-compose.ts`)**:
-  - `mediabox-inference-net` (`internal: true`): conecta exclusivamente `mcp-server` con los contenedores de inferencia local (`inference-*`).
-  - `mediabox-services-net` (`internal: true`): conecta `mcp-server` con los servicios de medios (`radarr`, `sonarr`, `jellyfin`).
-  - `mediabox-external-net` (`driver: bridge`): asignada únicamente a descargadores (`qbittorrent`) e indexadores (`prowlarr`) cuando el perfil es `local-agent-online-media`.
-  - `mcp-server` y los contenedores de inferencia **nunca** forman parte de `mediabox-external-net`.
-  - En `offline-library`, se omiten completamente `mediabox-telegram` y `cloudflared`.
-  - El contenedor de `mcp-server` nunca monta `/var/run/docker.sock`, named pipes de Windows (`//./pipe/docker_engine`), variable `DOCKER_HOST`, ni `privileged: true`.
+### 1.2 Artefactos por digest, preparación separada de ejecución
 
-### 1.3 Confinamiento, Saneamiento y Políticas de Endpoint (`packages/chat-core`, `packages/mcp-server`, `packages/desktop`)
-- **Validación Estricta de Endpoints (`packages/chat-core/src/providers/endpoint-policy.ts`)**:
-  - Rechaza endpoints con credenciales embebidas (`http://user:pass@127.0.0.1`).
-  - Bloquea direcciones IP públicas en inferencia privada, DNS rebinding, redirecciones HTTP no autorizadas y proxies de entorno (`HTTP_PROXY` / `HTTPS_PROXY`).
-- **Saneador de Diagnósticos (`packages/mcp-server/src/helpers/diagnostics-sanitizer.ts`)**:
-  - Lista blanca estricta para telemetría y diagnósticos.
-  - Elimina automáticamente campos de prompts, mensajes de conversación, cabeceras HTTP de autenticación, y patrones de secretos canario (`sk-*`, `canary-*`, contraseñas en URLs).
-  - Integrado en `chatProviderInfo()` en `packages/mcp-server/src/chat/provider.ts`.
-- **Sidecar de Escritorio (`packages/desktop/src-tauri/src/sidecar.rs`)**:
-  - Reenvío explícito de la variable `PRIVACY_PROFILE` al subproceso sidecar.
-  - Enlace estricto a loopback (`127.0.0.1`), impidiendo exposición accidental a la red local.
+- `packages/core/src/artifacts/lock.ts`: `ArtifactLock` con, por imagen,
+  `platformDigest` y el índice multiarquitectura, y por modelo, el digest del
+  manifiesto y sus capas. `applyArtifactLock` fija `repo@sha256:…` y
+  `pull_policy: never`; una imagen sin entrada en el lock es un error.
+- `deployStack` en perfil estricto añade la fase `deploy:prepare-artifacts`:
+  1. resuelve cada imagen para la plataforma del daemon;
+  2. escribe `artifacts.lock.json` y el compose fijado;
+  3. ejecuta el aprovisionador;
+  4. verifica el manifiesto del modelo con
+     `createArtifactManifest`/`verifyOrProvisionArtifact("run")`;
+  5. escribe `LOCAL_LLM_MODEL_DIGEST` en `.env`.
 
-### 1.4 Banco de Pruebas y Oráculos NET-01..06 (`tests/local-egress/`)
-- `harness.mjs`: Entorno de aislamiento local con sink TCP/UDP controlado para captura de tráfico y DNS autoritativo local para pruebas de rebinding.
-- `net-01-egress-probe.test.mjs`: NET-01 — Proceso sonda confinado; cero paquetes al sink externo y bloqueo de exfiltración por DNS.
-- `net-02-offline-operations.test.mjs`: NET-02 — Operaciones de mantenimiento aprobadas ejecutadas en root temporal; fallo cerrado de artefactos ausentes sin abrir tráfico.
-- `net-03-isolated-sources.test.mjs`: NET-03 — Endpoints de fuentes e indexador accesibles por componentes de medios autorizados, pero inaccesibles para el agente.
-- `net-04-endpoint-security.test.mjs`: NET-04 — Mitigación de DNS rebinding, bloqueo de redirects no autorizados y rechazo de proxies en inferencia local.
-- `net-05-secret-sanitization.test.mjs`: NET-05 — Diagnósticos y reportes saneados; ausencia absoluta de secretos canarios y texto de usuario.
-- `net-06-container-isolation.test.mjs`: NET-06 — Validación de topología Docker Compose: ausencia de socket Docker, soporte para rutas de volumen con espacios/Unicode y bind a loopback en Desktop.
+  `deploy:start` relee el compose y se niega a arrancar con imágenes sin fijar;
+  `up` se ejecuta con `--pull never`.
+- Aprovisionador `mediabox-provisioner`: perfil `provision`, en
+  `mediabox-provision-net`, comparte el volumen de modelos. Solo actúa en la
+  fase de preparación.
+- llama.cpp se rechaza en perfiles estrictos (su `-hf` descarga al arrancar).
 
-### 1.5 Gate G09 e Integración en CI (`scripts/ci/`, `.github/workflows/ci.yml`)
-- `package.json`: Script registrado `"test:local-egress": "node --test tests/local-egress/*.test.mjs"`.
-- `scripts/ci/implemented-gates.mjs` y `.test.mjs`: Verificación automatizada de G00..G09 (script y job en CI sin `continue-on-error`).
-- `.github/workflows/ci.yml`: Nuevo job `gate-local-egress` (`gate/local-egress (G09)`) ejecutado en pull requests e integrado en `gate-pr`.
+### 1.3 Ciclo de vida y admisión (`packages/core/src/runtime/lifecycle.ts`, `packages/mcp-server/src/chat/runtime-supervisor.ts`)
 
----
+- Tabla de §3.3: `not_provisioned → stopped → starting → ready`, más
+  `unavailable`, `error` y parada explícita.
+- El `RuntimeSupervisor` del servidor arranca el runtime al levantar el proceso,
+  fuera de cualquier turno: consulta la salud cada 30 s durante 120 s como
+  máximo. Con salud correcta verifica el digest fijado contra `/api/tags` del
+  runtime. En un perfil estricto se niega a pasar a `ready` si el digest no está
+  fijado (`ERR_ARTIFACT_UNPINNED`), no coincide (`ERR_ARTIFACT_MISMATCH`), falta
+  (`ERR_ARTIFACT_MISSING`) o el runtime no permite verificarlo
+  (`ERR_ARTIFACT_UNVERIFIABLE`). Nunca descarga.
+- Admite una inferencia a la vez: un segundo turno recibe 429
+  `ERR_INFERENCE_CONCURRENCY_EXCEEDED`. Un fallo durante el turno marca el
+  runtime `unavailable` y lo vuelve a comprobar en segundo plano, sin fallback a
+  la nube.
 
-## 2. Invariantes y Criterios Cumplidos (P10)
+### 1.4 Endpoints, credenciales y diagnóstico
 
-| ID | Criterio | Evidencia / Test | Estado |
-|---|---|---|---|
-| **NET-01** | Proceso sonda y bloqueo de egress hacia sinks externos | `tests/local-egress/net-01-egress-probe.test.mjs` (Zero paquetes capturados en sink externo, bloqueo de exfiltración DNS) | **Cumplido** |
-| **NET-02** | Operaciones locales y mantenimiento con egress público denegado | `tests/local-egress/net-02-offline-operations.test.mjs` (Plan de mantenimiento local ejecutado en root temporal; fallo cerrado sin red en artefactos faltantes) | **Cumplido** |
-| **NET-03** | Acceso a indexador y fuentes solo por componentes autorizados | `tests/local-egress/net-03-isolated-sources.test.mjs` (Fuentes y Torznab aislados del agente/runtime de inferencia) | **Cumplido** |
-| **NET-04** | Seguridad de endpoints, DNS rebinding, redirects y proxies | `tests/local-egress/net-04-endpoint-security.test.mjs` (IP fijada pre-vuelo contra DNS rebinding, denegación de redirects externos y rechazo de proxies) | **Cumplido** |
-| **NET-05** | Saneamiento de diagnósticos, secretos canario y conversaciones | `tests/local-egress/net-05-secret-sanitization.test.mjs` (`chatProviderInfo` y telemetría no filtran secretos `canary-*`, `sk-*` ni fragmentos de chat) | **Cumplido** |
-| **NET-06** | Aislamiento de contenedores, montajes y endpoints | `tests/local-egress/net-06-container-isolation.test.mjs` (Compose sin `/var/run/docker.sock`, sin named pipes, rutas Unicode/espacios y loopback en Desktop) | **Cumplido** |
-| **INV-SEPARATION** | Separación física de redes entre agente, servicios e internet | `packages/core/src/generators/docker-compose.test.ts` & `tests/local-egress/net-06-container-isolation.test.mjs` | **Cumplido** |
-| **INV-LOCAL** | Inferencia confinada a endpoints locales sin fallback | `packages/chat-core/src/providers/select.test.ts` & `tests/local-egress/net-04-endpoint-security.test.mjs` | **Cumplido** |
-| **INV-EVIDENCE** | Evidencia reproducible mediante tests deterministas y oráculos | Banco de pruebas `test:local-egress` y verificación CI en G09 | **Cumplido** |
+- `endpoint-policy.ts`: rechaza credenciales en la URL. Cada nombre conserva la
+  primera IP validada durante toda la vida del proceso: un cambio de respuesta
+  DNS entre peticiones se trata como rebinding. Antes solo se fijaba dentro de
+  cada petición y un DNS que cambiara a otra IP privada podía desviar los
+  prompts siguientes.
+- `privacyIsolation` en `/api/chat/info`:
+  - `no-default-route` solo si el propio proceso ve su espacio de red sin ruta
+    por defecto (IPv4 e IPv6);
+  - `unverified-native` fuera de Linux;
+  - `default-route-present` en los demás casos.
 
----
+  La UI muestra el perfil estricto como "no verificado" salvo con
+  `no-default-route`: un sidecar nativo no obtiene la etiqueta por escuchar en
+  localhost.
+- Saneador de diagnósticos por lista de campos permitidos. Además, redacta la
+  query string antes que las credenciales y conserva el esquema; antes, una
+  redacción ocultaba la URL a la otra.
+- Encontrados por NET-05 y corregidos:
+  - las URLs de `/api/dashboard/services` y `/api/setup/info` ya no incluyen
+    `usuario:clave`;
+  - los errores del dashboard ya no devuelven el cuerpo del servicio externo,
+    solo servicio y código HTTP;
+  - `VITE_INTERNAL_API_KEY` solo se lee en el servidor de desarrollo de Vite, y
+    un build de producción ya no incluye la clave de owner;
+  - `packages/ui/.env.local` deja de estar versionado. Contenía una clave de
+    owner, que sigue en el historial de git y debe rotarse.
+- Cuarentena en el sistema de archivos del propio archivo
+  (`packages/mcp-server/src/storage/quarantine.ts`). El despliegue generado monta
+  `/data/movies`, `/data/tv`… por separado bajo `MEDIA_PATH=/data`, y la papelera
+  en `/data/.mediabox-trash` hacía fallar como cross-device todo borrado de la
+  biblioteca. La papelera va ahora al directorio más alto del mismo sistema de
+  archivos; restaurar, purgar, listar y verificar la localizan ahí.
 
-## 3. Gates Evaluados
+## 2. G09: evidencia real (`npm run test:local-egress`)
 
-| Gate | Check | Resultado | Detalle |
-|---|---|---|---|
-| **G00** | `npm run ci:policy` | **PASS** | Matriz de aceptación, invariantes, scripts implementados G00..G09 y flujo CI verificados |
-| **G01** | `npm run ci:build && npm run ci:test` | **PASS** | 7 paquetes compilados (`@mediabox/contracts`, `@mediabox/core`, `@mediabox/chat-core`, `mediabox-mcp`, `mcp-telegram-client`, `create-mediabox`, `@mediabox/ui`). 466 tests unitarios ejecutados, 0 skips, 0 fallos |
-| **G07** | `npm run test:agent-replay` | **PASS** | 12/12 escenarios de repetición determinista pasando doble pasada (82 tests) |
-| **G08** | `npm run smoke:node-bun && npm run smoke:desktop` | **PASS** | SQLite nativo en Node y Bun, inicialización de `LocalProvider` en Bun compilado, y smoke de subprocesos en Desktop (5/5 assertions) |
-| **G09** | `npm run test:local-egress` | **PASS** | 14/14 tests ejecutados en las 6 suites NET-01..NET-06 |
-| **Harness**| `npm run test:ci-harness` | **PASS** | 14/14 tests verificando rutas de fallo de gates G00..G09 y drivers de smoke |
-| **Lab Canary** | `npm run smoke:local-canary:scripted` | **PASS** | Flujo canario de 3 turnos completado con score 3/3 sin contactar red externa |
+Topología de prueba:
+- Las redes y su asignación son las que emite el generador, sin cambios.
+- `mcp-server` es la imagen real construida desde el árbol.
+- Los servicios de terceros y Ollama se sustituyen por los servicios sintéticos
+  y el runtime guionado, cada uno en sus redes generadas.
+- El sink y el resolver autoritativo son contenedores aparte, con su ledger en
+  un directorio del host que solo monta el sink.
+- Las sondas se ejecutan en el espacio de red del candidato
+  (`--network container:<id>`).
+- Instrumentación explícita de la prueba: `dns:` apuntando al sink como
+  resolver de origen del DNS embebido de Docker.
 
----
+Sin Docker o sin imagen, la suite falla; no hay omisiones.
 
-## 4. Estado de Entrega y Traspaso a Fase P11 (Parte 2 de PR05)
+| Caso | Qué se observa |
+|---|---|
+| NET-01 | Control positivo: se entregan TCP 80/8080, UDP, DNS directo y DNS a través del resolver. `mcp-server` e inferencia en ambos perfiles: cero entregas, ni ruta por defecto IPv4/IPv6, ni acceso a direcciones públicas o de metadata. El edge solo reenvía sus puertos fijos. Metaprueba: unir los candidatos a una red no interna hace llegar las cinco formas y quitar `internal: true` les da ruta por defecto, así que el oráculo se pone en rojo. |
+| NET-02 | Con egress denegado: consulta de la biblioteca por el edge con la clave de agente; turno de chat real con el modelo guionado; `privacyIsolation: no-default-route` y artefacto verificado; cuarentena aprobada por el owner con el efecto exacto en el host (el archivo en la papelera de su montaje, los vecinos idénticos byte a byte); el agente recibe 403 al intentar aprobar. Modelo ausente → `ERR_ARTIFACT_MISSING`; digest distinto → `ERR_ARTIFACT_MISMATCH`, sin pull ni inferencia. Sink vacío. |
+| NET-03 | Orígenes y destinos registrados: prowlarr → indexador Torznab y qBittorrent → origen de descarga. `mcp-server` e inferencia bloqueados por nombre y por dirección. En `offline-library` nadie alcanza las fuentes. |
+| NET-04 | Dentro de la imagen real, con el transporte de producción: DNS cambiante (el primer intento llega al runtime fijado y los siguientes se rechazan como rebinding), redirect, proxy heredado y claves cloud con el runtime caído. Cero bytes en el sink; el servidor real responde `ERR_PROVIDER_UNAVAILABLE` sin fallback y no registra las claves. |
+| NET-05 | Canarios de formato arbitrario en el entorno, en errores de servicios, en URLs con credenciales y en frases de conversación. Se escanean `docker logs`, `/api/chat/info`, dashboard, setup, traza, el bundle de la UI construido con una clave canario y los informes de `evals/evidence/**`, en forma literal, URL-encoded, escapada en JSON y base64. |
+| NET-06 | Contenedor: solo los montajes declarados (rutas con espacios y Unicode), sin socket ni pipe de Docker, sin privilegios ni capacidades añadidas, sin `DOCKER_*`, solo las dos redes internas y el endpoint de inferencia correcto. Node y Bun compilado en el host: solo loopback, endpoint configurado, `unverified-native`, efecto dentro de la raíz temporal. No ejercita la webview de Tauri. |
 
-Con la implementación y verificación de los Pasos 1, 2 y 3:
-1. Queda sellada y certificada la **Fase P10** (Parte 1 de PR05).
-2. Se satisface plenamente el **Gate G09** (`gate/local-egress`).
-3. La base de código queda lista para ejecutar la **Fase P11** (Parte 2 de PR05):
-   - Integración y ejecución de la suite de evaluación de modelos locales (`npm run eval:local`).
-   - Verificación de los umbrales fijos del contrato de evaluación (`docs/blueprints/handoffs/PR05-EVAL-CONTRACT.json`).
-   - Validación del **Gate G10** (`gate/model-quality`).
+Resultado de la ejecución final contra el árbol candidato: ver
+[PR05-QA-HANDOFF.es.md](PR05-QA-HANDOFF.es.md) §3.
+
+## 3. Límites que siguen abiertos
+
+- El script del aprovisionador no se ha ejecutado con la imagen real de Ollama
+  (varios GB); solo se verificó su parte de compose. Si alguna de sus
+  suposiciones es incorrecta, `prepare` falla cerrado por hash.
+- `deployStack` no arranca por sí mismo un perfil de inferencia; el owner lo
+  inicia.
+- La variante nativa (sidecar Desktop, runtime en el host) no puede certificarse
+  como `offline-library`; la UI lo explica. macOS no se ha ejecutado.
+- El edge está en una red bridge y tiene salida a Internet por diseño; se
+  demuestra que no entrega nada y que solo reenvía sus puertos fijos.
