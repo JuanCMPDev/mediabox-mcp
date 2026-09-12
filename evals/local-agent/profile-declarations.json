@@ -1,6 +1,7 @@
 {
   "$comment": "Decisions fixed BEFORE measuring (PR05 §4.1). profile.mjs combines them with values read from the machine and the runtime. Changing any value here requires a new profileId.",
-  "profileId": "qwen2.5-7b-q4km-ollama0.34-win11-rx7800xt-lab1",
+  "profileId": "qwen2.5-7b-q4km-ollama0.34-win11-rx7800xt-lab2",
+  "$supersedes": "lab1 (experiment pr05-g10-20260912T051403-0e813214): llama-server's default 8 GiB host prompt cache took the runtime to 13.3 GB, 1.55 of the RAM reservation. lab2 disables it with LLAMA_ARG_CACHE_RAM=0, inherited by the llama-server that Ollama spawns.",
   "model": "qwen2.5:7b",
   "baseUrl": "http://127.0.0.1:11434",
   "runtimeLogPath": "declared-at-run-time",
@@ -14,7 +15,8 @@
     "OLLAMA_NUM_PARALLEL": "1",
     "OLLAMA_MAX_LOADED_MODELS": "1",
     "OLLAMA_KEEP_ALIVE": "-1",
-    "OLLAMA_NO_CLOUD": "1"
+    "OLLAMA_NO_CLOUD": "1",
+    "LLAMA_ARG_CACHE_RAM": "0"
   },
   "sampling": {
     "temperature": 0,

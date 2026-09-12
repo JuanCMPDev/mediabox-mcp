@@ -213,6 +213,9 @@ describe("generateDockerCompose — agent credential wiring (Blueprint §4.1 / B
     expect(parsed.services["inference-rocm"].profiles).toEqual(["inference-rocm"]);
     expect(parsed.services["inference-rocm"].environment).toContain("OLLAMA_NO_CLOUD=1");
     expect(parsed.services["inference-rocm"].environment).toContain("OLLAMA_CONTEXT_LENGTH=${LOCAL_LLM_CONTEXT_TOKENS:-8192}");
+    for (const name of ["inference-cuda", "inference-rocm", "inference-cpu"]) {
+      expect(parsed.services[name].environment).toContain("LLAMA_ARG_CACHE_RAM=0");
+    }
     expect(parsed.services["inference-rocm"].devices).toEqual(["/dev/kfd", "/dev/dri"]);
 
     expect(parsed.services["inference-cuda"].profiles).toEqual(["inference-cuda"]);

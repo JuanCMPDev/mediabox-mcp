@@ -27,7 +27,7 @@ export const VIRTUAL_TOOLS: Record<string, VirtualToolDef> = {
         action:       { type: 'string', enum: ['search', 'details'] },
         query:        { type: 'string', description: 'Search title' },
         type:         { type: 'string', enum: ['Movie', 'Series', 'Episode', 'Audio'] },
-        showId:       { type: 'string', description: 'Jellyfin item ID' },
+        showId:       { type: 'string', description: 'Required for details: the id of a media_query search result' },
         seasonNumber: { type: 'number', description: 'Season filter' },
         page:         { type: 'number' },
         pageSize:     { type: 'number' },

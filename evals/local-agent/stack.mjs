@@ -199,6 +199,22 @@ function splitMediaSpec(media = {}) {
   return { mediaSpec, downloadsSpec };
 }
 
+/**
+ * Materializes the downloads root first, then the media root, so a library file
+ * can be a hard link of a download (cross-root links: spec `hardlinkOf: "downloads/…"`).
+ */
+export async function materializeInstallation(paths, media = {}) {
+  const { mediaSpec, downloadsSpec } = splitMediaSpec(media);
+  await materialize(paths.downloads, downloadsSpec);
+  for (const [rel, entry] of Object.entries(mediaSpec)) {
+    if (typeof entry.hardlinkOf === 'string' && entry.hardlinkOf.startsWith('downloads/')) {
+      const { hardlinkOf, ...rest } = entry;
+      mediaSpec[rel] = { ...rest, hardlinkOfAbsolute: path.join(paths.downloads, ...hardlinkOf.slice('downloads/'.length).split('/')) };
+    }
+  }
+  await materialize(paths.media, mediaSpec);
+}
+
 async function removeRootSafely(root, token) {
   const tmp = path.resolve(os.tmpdir());
   const resolved = path.resolve(root);
@@ -294,10 +310,8 @@ export async function startStack(options = {}) {
   try {
     await fsp.mkdir(path.join(root, 'state'), { recursive: true });
     await fsp.mkdir(logsDir, { recursive: true });
-    const { mediaSpec, downloadsSpec } = splitMediaSpec(media);
     let t = performance.now();
-    await materialize(paths.media, mediaSpec);
-    await materialize(paths.downloads, downloadsSpec);
+    await materializeInstallation(paths, media);
     timings.materializeMs = Math.round(performance.now() - t);
 
     t = performance.now();

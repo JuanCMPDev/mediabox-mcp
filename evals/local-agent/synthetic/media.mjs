@@ -139,7 +139,7 @@ async function setMtime(abs, mtime) {
 export async function materialize(root, spec = {}) {
   await fsp.mkdir(root, { recursive: true });
   const entries = Object.entries(spec);
-  const rank = (e) => (e.hardlinkOf ? 1 : e.symlinkTo ? 2 : 0);
+  const rank = (e) => (e.hardlinkOf || e.hardlinkOfAbsolute ? 1 : e.symlinkTo ? 2 : 0);
   entries.sort((a, b) => rank(a[1]) - rank(b[1]));
   const files = {};
   for (const [rel, entry] of entries) {
@@ -152,8 +152,9 @@ export async function materialize(root, spec = {}) {
       continue;
     }
     await fsp.mkdir(path.dirname(abs), { recursive: true });
-    if (entry.hardlinkOf) {
-      await fsp.link(absoluteFor(root, entry.hardlinkOf), abs);
+    if (entry.hardlinkOf || entry.hardlinkOfAbsolute) {
+      // hardlinkOfAbsolute: a file already materialized in another root (library ↔ downloads).
+      await fsp.link(entry.hardlinkOfAbsolute ?? absoluteFor(root, entry.hardlinkOf), abs);
     } else if (entry.symlinkTo) {
       await fsp.symlink(entry.symlinkTo, abs);
       continue;

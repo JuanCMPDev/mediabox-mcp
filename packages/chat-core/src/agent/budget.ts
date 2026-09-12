@@ -129,17 +129,37 @@ function truncateString(val: unknown, maxLen: number): string {
   return clean.length > maxLen ? `${clean.slice(0, maxLen)}...` : clean;
 }
 
-function shortenValue(value: unknown, depth = 0): unknown {
+/**
+ * Nesting kept by compaction. Real results nest their ids and names deeper than
+ * two levels (`results[].id`, `libraries[].name`, `seasons[].episodes[].name`);
+ * cutting there left the model with `[object]` and it passed that string back as an id.
+ */
+const TOOL_RESULT_MAX_DEPTH = 4;
+
+/** Past the depth cap a record keeps its scalar fields, never a bare placeholder. */
+function scalarFields(value: Record<string, unknown>): Record<string, unknown> | string {
+  const out: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(value)) {
+    if (typeof v === 'string') out[k] = truncateString(v, TOOL_RESULT_STRING_CAP);
+    else if (typeof v === 'number' || typeof v === 'boolean') out[k] = v;
+  }
+  return Object.keys(out).length > 0 ? out : '[object]';
+}
+
+function shortenValue(value: unknown, depth = 0, itemLimit = TOOL_RESULT_ITEM_CAP): unknown {
   if (typeof value === 'string') return truncateString(value, TOOL_RESULT_STRING_CAP);
   if (Array.isArray(value)) {
-    if (depth >= 2) return `[${value.length} items]`;
-    return value.slice(0, TOOL_RESULT_ITEM_CAP).map(v => shortenValue(v, depth + 1));
+    if (depth >= TOOL_RESULT_MAX_DEPTH) return `[${value.length} items]`;
+    const items = value.slice(0, itemLimit).map(v => shortenValue(v, depth + 1, itemLimit));
+    // Say that the list goes on, or the model reports the first items as all of them.
+    if (value.length > itemLimit) items.push(`[+${value.length - itemLimit} more]`);
+    return items;
   }
   if (value && typeof value === 'object') {
-    if (depth >= 2) return '[object]';
+    if (depth >= TOOL_RESULT_MAX_DEPTH) return scalarFields(value as Record<string, unknown>);
     const out: Record<string, unknown> = {};
     for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
-      out[k] = shortenValue(v, depth + 1);
+      out[k] = shortenValue(v, depth + 1, itemLimit);
     }
     return out;
   }
@@ -147,6 +167,10 @@ function shortenValue(value: unknown, depth = 0): unknown {
 }
 
 function compactEnvelope(parsed: Record<string, unknown>, itemLimit: number): Record<string, unknown> {
+  // A bare JSON array (activity_log) is a list like `data`: bound it and keep its length.
+  if (Array.isArray(parsed)) {
+    return { items: shortenValue(parsed, 1, itemLimit), totalCount: parsed.length };
+  }
   const compacted: Record<string, unknown> = {};
 
   if ('status' in parsed) compacted.status = parsed.status;
@@ -166,18 +190,19 @@ function compactEnvelope(parsed: Record<string, unknown>, itemLimit: number): Re
       if (typeof item !== 'object' || item === null) return shortenValue(item);
       const shortItem: Record<string, unknown> = {};
       for (const [k, v] of Object.entries(item as Record<string, unknown>)) {
-        if (SHORT_ITEM_KEYS.has(k)) shortItem[k] = shortenValue(v, 1);
+        if (SHORT_ITEM_KEYS.has(k)) shortItem[k] = shortenValue(v, 1, itemLimit);
       }
       return shortItem;
     });
     compacted.totalCount = data.length;
     if (data.length > itemLimit) compacted.truncated = true;
   } else if (data !== undefined) {
-    compacted.data = shortenValue(data);
+    compacted.data = shortenValue(data, 0, itemLimit);
   } else {
-    // Non-envelope payload: keep its own short keys so simple tools still say something.
+    // Non-envelope payload (jellyfin_search, server_status, show_details): keep its
+    // fields, with nested lists bounded by the same item limit.
     for (const [k, v] of Object.entries(parsed)) {
-      if (!(k in compacted)) compacted[k] = shortenValue(v, 1);
+      if (!(k in compacted)) compacted[k] = shortenValue(v, 1, itemLimit);
     }
   }
 

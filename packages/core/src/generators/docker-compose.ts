@@ -514,6 +514,9 @@ export function generateDockerCompose(config: DeployConfig, opts: GenerateDocker
         "OLLAMA_KEEP_ALIVE=-1",
         "OLLAMA_MAX_LOADED_MODELS=1",
         "OLLAMA_NUM_PARALLEL=1",
+        // llama-server keeps a host-RAM prompt cache of up to 8 GiB by default;
+        // PR05 G10 measured it outgrowing the inference RAM budget. Off.
+        "LLAMA_ARG_CACHE_RAM=0",
       ],
       volumes: ["./config/ollama:/root/.ollama"],
       deploy: {
@@ -546,6 +549,9 @@ export function generateDockerCompose(config: DeployConfig, opts: GenerateDocker
         "OLLAMA_KEEP_ALIVE=-1",
         "OLLAMA_MAX_LOADED_MODELS=1",
         "OLLAMA_NUM_PARALLEL=1",
+        // llama-server keeps a host-RAM prompt cache of up to 8 GiB by default;
+        // PR05 G10 measured it outgrowing the inference RAM budget. Off.
+        "LLAMA_ARG_CACHE_RAM=0",
       ],
       volumes: ["./config/ollama:/root/.ollama"],
       restart: "unless-stopped",
@@ -588,6 +594,9 @@ export function generateDockerCompose(config: DeployConfig, opts: GenerateDocker
         "OLLAMA_KEEP_ALIVE=-1",
         "OLLAMA_MAX_LOADED_MODELS=1",
         "OLLAMA_NUM_PARALLEL=1",
+        // llama-server keeps a host-RAM prompt cache of up to 8 GiB by default;
+        // PR05 G10 measured it outgrowing the inference RAM budget. Off.
+        "LLAMA_ARG_CACHE_RAM=0",
       ],
       volumes: ["./config/ollama:/root/.ollama"],
       restart: "unless-stopped",

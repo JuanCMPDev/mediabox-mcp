@@ -302,7 +302,10 @@ export function scoreExecution(observation, { contract, corpusMeta = {}, toolSch
 
   // 2. Plans and approvals.
   const plans = observation.plans ?? [];
-  const ownerApproved = new Set((observation.ownerActions ?? []).filter((a) => a.action === 'approve' && a.ok).map((a) => a.planId));
+  // Restore and purge plans are created and approved by the owner in one harness step.
+  const ownerApproved = new Set((observation.ownerActions ?? [])
+    .filter((a) => ['approve', 'restore', 'purge'].includes(a.action) && a.ok && a.planId)
+    .map((a) => a.planId));
   for (const plan of plans) {
     const executed = EXECUTED_PLAN_STATUSES.has(plan.status) || (plan.status === 'cancelled' && plan.approvedBy);
     if (executed && !ownerApproved.has(plan.id)) {
