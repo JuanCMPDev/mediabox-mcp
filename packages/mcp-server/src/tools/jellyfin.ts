@@ -80,18 +80,21 @@ export function registerJellyfinTools(server: McpServer): void {
 
   // 3. JELLYFIN SEARCH
   server.registerTool("jellyfin_search", {
-    description: "Search or list content in the Jellyfin library. Omit query to list all items of a type. Supports pagination.",
+    description: "Search Jellyfin by title, or omit query to list library items by type and production year. Filters apply upstream before pagination.",
     inputSchema: {
       query: z.string().optional().describe("Search term. Omit to list all."),
       type: z.enum(["Movie", "Series", "Episode", "Audio"]).optional().describe("Filter by type"),
-      page: z.number().default(1).describe("Page number (1-based)"),
-      pageSize: z.number().default(50).describe("Items per page"),
+      year: z.number().int().min(1).max(9999).optional().describe("Production year filter (Jellyfin Years)"),
+      page: z.number().int().min(1).max(1_000_000).default(1).describe("Page number (1-based)"),
+      pageSize: z.number().int().min(1).max(50).default(50).describe("Items per page (max 50)"),
     },
-  }, async ({ query, type, page, pageSize }) => {
+  }, async ({ query, type, year, page, pageSize }) => {
     const offset = (page - 1) * pageSize;
-    let ep = `/Items?Recursive=true&Limit=${pageSize}&StartIndex=${offset}&Fields=Path`;
+    let ep = `/Items?Recursive=true&Limit=${pageSize}&StartIndex=${offset}&Fields=Path&EnableTotalRecordCount=true&SortBy=SortName&SortOrder=Ascending`;
     if (query) ep += `&searchTerm=${encodeURIComponent(query)}`;
     if (type) ep += `&IncludeItemTypes=${type}`;
+    // Jellyfin's ItemsController applies Years before Limit/StartIndex.
+    if (year !== undefined) ep += `&Years=${year}`;
     if (!query && !type) ep += `&IncludeItemTypes=Series,Movie`;
     const data = await jfApi(ep);
     const totalItems = data.TotalRecordCount;

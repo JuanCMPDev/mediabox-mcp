@@ -53,12 +53,13 @@ export function resolveVirtualCall(
     }
 
     case 'media_query': {
-      if (action === 'search') {
+      if (action === 'search' || action === 'list') {
         return {
           tool: 'jellyfin_search',
           args: clean({
-            query: args.query,
+            query: action === 'search' ? args.query : undefined,
             type: args.type,
+            year: args.year,
             page: args.page,
             pageSize: args.pageSize,
           }),
@@ -244,18 +245,13 @@ export function resolveVirtualCall(
     }
 
     case 'downloads': {
-      if (action === 'status') {
+      if (action === 'status' || action === 'list_queue') {
         return {
-          tool: 'download_status',
-          args: { action: 'status' },
-        };
-      }
-      if (action === 'list_queue') {
-        return {
-          tool: 'cancel_downloads',
+          tool: 'download_queue',
           args: clean({
-            source: args.source ?? 'sonarr',
-            action: 'list',
+            source: args.source ?? 'all',
+            page: args.page,
+            pageSize: args.pageSize,
           }),
         };
       }

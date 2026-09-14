@@ -20,13 +20,14 @@ export const VIRTUAL_TOOLS: Record<string, VirtualToolDef> = {
 
   media_query: {
     name: 'media_query',
-    description: 'Search or list Jellyfin library content, seasons, and episodes.',
+    description: 'Jellyfin library: search by title; list by type/year without a title; details lists seasons and episodes.',
     parameters: {
       type: 'object',
       properties: {
-        action:       { type: 'string', enum: ['search', 'details'] },
+        action:       { type: 'string', enum: ['search', 'list', 'details'] },
         query:        { type: 'string', description: 'Search title' },
         type:         { type: 'string', enum: ['Movie', 'Series', 'Episode', 'Audio'] },
+        year:         { type: 'integer', minimum: 1, maximum: 9999, description: 'Production year filter, not a search title' },
         showId:       { type: 'string', description: 'Required for details: the id of a media_query search result' },
         seasonNumber: { type: 'number', description: 'Season filter' },
         page:         { type: 'number' },
@@ -120,12 +121,14 @@ export const VIRTUAL_TOOLS: Record<string, VirtualToolDef> = {
 
   downloads: {
     name: 'downloads',
-    description: 'Check download queues and status in clients.',
+    description: 'Read live download queues. Omit source for Sonarr, Radarr and qBittorrent; totals stay separate per source.',
     parameters: {
       type: 'object',
       properties: {
         action: { type: 'string', enum: ['status', 'list_queue'] },
-        source: { type: 'string', enum: ['sonarr', 'radarr', 'qbittorrent'] },
+        source: { type: 'string', enum: ['all', 'sonarr', 'radarr', 'qbittorrent'] },
+        page: { type: 'integer', minimum: 1 },
+        pageSize: { type: 'integer', minimum: 1, maximum: 5, description: 'Rows per source (default 5)' },
       },
       required: ['action'],
     },

@@ -8,12 +8,50 @@ import { execFileAsync, moveFile, isVideoFile, extractEpisodeNumber, resolvePath
 import { startJob, estimateTime } from "../helpers/jobs.js";
 import { issueConfirmToken, consumeConfirmToken } from "../helpers/confirm-tokens.js";
 import { assertMutationAllowed } from "../helpers/containment.js";
-import { MEDIA_PATH } from "../config.js";
+import { MEDIA_PATH, DOWNLOADS_PATH } from "../config.js";
+import { resolveSafePath } from "../helpers/sandbox.js";
+import { mapNamespace, PathMappingUnknownError } from "../storage/namespace-map.js";
 import { defaultOperationStore } from "../operations/default-store.js";
 import { createDeletePlan } from "../operations/planners/delete.js";
 import { createToolEnvelope } from "../queries/envelope.js";
 import { runEnvelopeTool } from "../queries/tool-result.js";
 import { defaultToolContext, resolvePlanScope, type McpToolContext } from "../security/context.js";
+type ListRoot = "media" | "downloads";
+
+/**
+ * Folder to list, in every form the other file tools accept: "media:tv/Show",
+ * "tv/Show", "downloads/x", a container path reported by Jellyfin such as
+ * "/data/tv/Show", or a host path inside a root. The sandbox still decides
+ * containment. The listing reports canonical "<root>:<relative>" paths: the form
+ * inspect_format returns and proposals accept.
+ */
+function resolveListTarget(input: string | undefined): { rootId: ListRoot; relativePath: string; full: string } {
+  const roots: Record<ListRoot, string> = { media: MEDIA_PATH, downloads: DOWNLOADS_PATH };
+  const unified = (input ?? "").replace(/\\/g, "/").trim();
+  if (unified === "" || unified === "/" || unified === ".") return { rootId: "media", relativePath: "", full: roots.media };
+  const bareRoot = unified.match(/^(media|downloads):\/*$/);
+  if (bareRoot) {
+    const rootId = bareRoot[1] as ListRoot;
+    return { rootId, relativePath: "", full: roots[rootId] };
+  }
+  let logical = unified;
+  try {
+    const mapped = mapNamespace(unified);
+    if (mapped.rootId === "media" || mapped.rootId === "downloads") {
+      const rootId: ListRoot = mapped.rootId;
+      if (!mapped.relativePath) return { rootId, relativePath: "", full: roots[rootId] };
+      logical = rootId === "downloads" ? `downloads/${mapped.relativePath}` : mapped.relativePath;
+    }
+  } catch (err) {
+    // A host path outside the default mounts goes to the sandbox as given: it is
+    // accepted only inside a root, and everything else is rejected.
+    if (!(err instanceof PathMappingUnknownError)) throw err;
+  }
+  const { full, root } = resolveSafePath(logical, roots);
+  const relativePath = path.relative(path.resolve(roots[root]), full).split(path.sep).join("/");
+  return { rootId: root, relativePath, full };
+}
+
 export function registerLibraryTools(server: McpServer, context: McpToolContext = defaultToolContext()): void {
   const scope = resolvePlanScope(context);
   // 5. MANAGE LIBRARY
@@ -50,7 +88,7 @@ export function registerLibraryTools(server: McpServer, context: McpToolContext 
 
   // 6. MANAGE FILES
   server.registerTool("manage_files", {
-    description: "List or move files and folders. Paths starting with 'downloads/' access the downloads folder. All other paths are relative to media volume.",
+    description: "List or move files and folders. Paths starting with 'downloads/' access the downloads folder; other paths are relative to the media volume. list also accepts 'media:…' or 'downloads:…' paths and container paths such as '/data/tv/Show', and reports every entry with its exact '<root>:<path>'.",
     inputSchema: {
       action: z.enum(["list", "move"]).describe("Action to perform"),
       path: z.string().optional().describe("Path (e.g. 'anime/Show', 'downloads/', 'movies/')"),
@@ -59,13 +97,21 @@ export function registerLibraryTools(server: McpServer, context: McpToolContext 
     },
   }, async ({ action, path: filePath, sourcePaths, destFolder }) => {
     if (action === "list") {
-      const full = filePath ? resolvePath(filePath) : MEDIA_PATH;
-      const entries = await fs.readdir(full, { withFileTypes: true });
+      const target = resolveListTarget(filePath);
+      const entries = await fs.readdir(target.full, { withFileTypes: true });
+      entries.sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
+      const prefix = `${target.rootId}:${target.relativePath ? `${target.relativePath}/` : ""}`;
       const items = await Promise.all(entries.map(async (e) => {
-        const s = await fs.stat(path.join(full, e.name)).catch(() => null);
-        return { name: e.name, type: e.isDirectory() ? "dir" : "file", size: s ? `${(s.size / 1024 / 1024).toFixed(1)}MB` : "?" };
+        const s = await fs.stat(path.join(target.full, e.name)).catch(() => null);
+        return {
+          name: e.name,
+          type: e.isDirectory() ? "dir" : "file",
+          size: s ? `${(s.size / 1024 / 1024).toFixed(1)}MB` : "?",
+          // Exact canonical path: what inspect_format reports and proposals accept.
+          path: `${prefix}${e.name}`,
+        };
       }));
-      return textResult({ path: filePath || "/", items });
+      return textResult({ path: `${target.rootId}:${target.relativePath}`, items });
     }
     if (action === "move") {
       if (!sourcePaths?.length || !destFolder) throw new Error("sourcePaths and destFolder required");
