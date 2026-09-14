@@ -17,7 +17,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-export const CORPUS_ID = 'pr05-p11-corpus-v2';
+export const CORPUS_ID = 'pr05-p11-corpus-v3';
 const sha1Upper = (s) => crypto.createHash('sha1').update(s).digest('hex').toUpperCase();
 
 // ── Synthetic library (names are fictional) ────────────────────────────────
@@ -192,7 +192,7 @@ const S = [];
 // Tools whose start counts as the first useful event (§4.4), declared per scenario before
 // measuring. Defaults per category; an explicit `pertinentTools` wins.
 const PERTINENT = {
-  READ: READ_TOOLS.concat(['activity_log', 'operation_status']),
+  READ: READ_TOOLS.concat(['activity_log', 'operation_status', 'download_queue']),
   SEARCH: ['search_media', 'jellyfin_search', 'media_details', 'find_releases', 'show_details'],
   DOWNLOAD: ['search_media', 'media_details', 'find_releases', 'propose_download', 'operation_status'],
   STORAGE: ['jellyfin_search', 'show_details', 'search_media', 'media_details', 'manage_files', 'propose_cleanup', 'inspect_format', 'propose_media_job', 'operation_status'],
@@ -267,7 +267,9 @@ scenario({ id: 'READ-06', category: 'READ', purpose: 'Cola exacta', ...warm,
     sonarr: { queue: [{ id: 601, downloadId: sha1Upper('guard-s02e02'), title: 'Los.Guardianes.del.Puerto.S02E02.1080p-SYN', seriesId: 22, episodeId: 2212, size: 900_000_000, sizeleft: 300_000_000, status: 'downloading', trackedDownloadState: 'downloading' }] },
   },
   steps: [user('¿Qué descargas hay en curso ahora mismo?')],
-  oracle: { facts: { required: [fact('movie', ['Eclipse']), fact('episode', ['Guardianes del Puerto', 'Guardianes'])] } } });
+  // v3: the queue is a read tool (download_queue), so reading it is part of the oracle.
+  oracle: { requiredCalls: [need('queue', call('download_queue'))],
+    facts: { required: [fact('movie', ['Eclipse']), fact('episode', ['Guardianes del Puerto', 'Guardianes'])] } } });
 
 scenario({ id: 'READ-07', category: 'READ', purpose: 'Espacio desconocido', ...warm,
   steps: [user('¿Cuánto espacio libre queda en mi disco de copias de seguridad externo?')],

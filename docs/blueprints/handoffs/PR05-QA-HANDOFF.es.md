@@ -16,6 +16,7 @@ y [P11-HANDOFF.es.md](P11-HANDOFF.es.md).
 | Commit de remediación de la auditoría | `0e813214e817d7575122dd19bb053a4c5943ae82` (candidato del experimento G10 n.º 1) |
 | Evidencia del experimento 1 | `a402c24`, registrada tal cual |
 | Correcciones derivadas del experimento 1 | `81c05f6` (candidato del experimento G10 n.º 2) |
+| Flujo por intención y lectura de la cola | [PR05-AGENT-FLOW-HANDOFF.es.md](PR05-AGENT-FLOW-HANDOFF.es.md), 2026-09-13; sin experimento G10 todavía |
 | Fecha | 2026-09-12 |
 | Veredicto | ver §1 |
 
@@ -339,6 +340,11 @@ Además, para cumplir P10/P11:
    - Revisar los oráculos que rechazan negativas correctas (READ-07,
      ADV-02/04/07). Como se haría después de ver los resultados, habría que
      justificarlo por escrito.
+
+   **Elegida el 2026-09-13: el rediseño del flujo.** Está implementado y
+   verificado en local, junto con la lectura de la cola y el corpus v3; ver
+   [PR05-AGENT-FLOW-HANDOFF.es.md](PR05-AGENT-FLOW-HANDOFF.es.md). Falta medirlo
+   en un experimento nuevo.
 4. **Publicar la rama** y repetir en CI remoto G00–G10. G09 necesita Docker en el
    runner, y G10 fallará hasta que exista evidencia confiable.
 5. **Evidencia del experimento 1.** Se verifica haciendo checkout de `a402c24`.
@@ -385,8 +391,8 @@ Esa base no sustituye al gate.
 Para desbloquear PR06:
 1. **Rotación owner local realizada** (§7.1); si existen instalaciones adicionales
    con la clave expuesta, completar su rotación antes de dar ese alcance por cerrado.
-2. **Decidir la vía de calidad** (§7.3) y medirla en un experimento nuevo que
-   cumpla los umbrales.
+2. **Medir la vía de calidad elegida** (§7.3: rediseño del flujo, corpus v3) en
+   un experimento nuevo que cumpla los umbrales.
 3. **Repetir ese experimento con un controlador confiable** y commitear su
    evidencia `trusted-controller`.
 4. **Publicar la rama** y obtener G00–G10 en verde en CI remoto.

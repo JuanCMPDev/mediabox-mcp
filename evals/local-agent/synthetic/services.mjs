@@ -998,6 +998,14 @@ function qbitRouter(ctx, env) {
     }
     const category = ctx.url.searchParams.get('category');
     if (category !== null) list = list.filter((t) => t.category === category);
+    // WebUI API paging: sort/reverse, then offset (negative counts from the end) and limit (<= 0: all).
+    const sort = ctx.url.searchParams.get('sort');
+    if (sort) list = [...list].sort((a, b) => (a[sort] < b[sort] ? -1 : a[sort] > b[sort] ? 1 : 0));
+    if (ctx.url.searchParams.get('reverse') === 'true') list = [...list].reverse();
+    const offset = Number(ctx.url.searchParams.get('offset') ?? 0) || 0;
+    const limit = Number(ctx.url.searchParams.get('limit') ?? 0) || 0;
+    const start = offset < 0 ? Math.max(0, list.length + offset) : offset;
+    list = list.slice(start, limit > 0 ? start + limit : undefined);
     return json(200, list);
   }
   if (method === 'POST' && ep === 'torrents/delete') {
