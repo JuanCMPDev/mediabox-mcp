@@ -343,7 +343,9 @@ describe('real-path evaluation stack', () => {
     const failed = await stack.callTool('server_status', {});
     samples.server_status_503 = { isError: failed.isError, output: failed.text };
     assert.equal(failed.isError, true);
-    assert.match(failed.text, /Jellyfin API 503/);
+    // A sanitized envelope: the service and status, never the upstream body.
+    assert.equal(failed.json?.error?.code, 'ERR_UPSTREAM_UNAVAILABLE', failed.text);
+    assert.match(failed.json.error.message, /Jellyfin answered HTTP 503/);
     assert.ok(stack.alive, 'server process died');
     assert.equal((await stack.request('GET', '/health', { key: 'none' })).status, 200);
 

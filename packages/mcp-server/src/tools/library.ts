@@ -9,6 +9,7 @@ import { startJob, estimateTime } from "../helpers/jobs.js";
 import { issueConfirmToken, consumeConfirmToken } from "../helpers/confirm-tokens.js";
 import { assertMutationAllowed } from "../helpers/containment.js";
 import { MEDIA_PATH, DOWNLOADS_PATH } from "../config.js";
+import { formatBytes } from "../fetchers/utils.js";
 import { resolveSafePath } from "../helpers/sandbox.js";
 import { mapNamespace, PathMappingUnknownError } from "../storage/namespace-map.js";
 import { defaultOperationStore } from "../operations/default-store.js";
@@ -185,6 +186,7 @@ export function registerLibraryTools(server: McpServer, context: McpToolContext 
   }, async ({ paths }) =>
     runEnvelopeTool(async () => {
       const { plan, summary } = await createDeletePlan({ logicalPaths: paths, scope });
+      const { warnings, ...details } = summary;
       const record = defaultOperationStore.createPlan(plan, "awaiting_approval");
       const effective = record.plan;
       const duplicate = effective.id !== plan.id;
@@ -197,7 +199,10 @@ export function registerLibraryTools(server: McpServer, context: McpToolContext 
           expiresAt: effective.expiresAt,
           proposalKey: effective.proposalKey,
           duplicate,
-          summary: { ...summary, note: "Quarantine keeps the bytes on the same volume; reclaimableBytes is 0 until an owner-approved purge." },
+          // Top level so compaction keeps them: the agent must relay both before approval.
+          warnings,
+          selectedSize: formatBytes(details.selectedBytes),
+          summary: details,
           message: duplicate
             ? `Plan ${effective.id} for these paths is already awaiting owner approval; no second plan was created.`
             : `Plan ${effective.id} awaits owner approval in the Mediabox app. Use operation_status to follow it; do not report anything as deleted until it reports succeeded.`,

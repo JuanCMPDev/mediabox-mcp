@@ -45,6 +45,8 @@ export interface DeletePlanSummary {
   /** Quarantine never frees space on the volume. */
   reclaimableBytes: 0;
   hardLinkedFiles: number;
+  /** Plain statements the agent relays: quarantine frees nothing now, hard links free nothing ever. */
+  warnings: string[];
   paths: string[];
 }
 
@@ -206,6 +208,10 @@ export async function createDeletePlan(options: DeletePlannerOptions): Promise<{
       selectedBytes,
       reclaimableBytes: 0,
       hardLinkedFiles,
+      warnings: [
+        "Quarantine frees 0 B now: the files stay on the same disk until an approved purge.",
+        ...(hardLinkedFiles > 0 ? [`${hardLinkedFiles} of ${uniqueFiles.size} files are hard links: a later purge also frees 0 B for them.`] : []),
+      ],
       paths: [...uniqueFiles.values()].map((f) => `${f.rootId}:${f.relativePath}`),
     },
   };

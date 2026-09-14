@@ -45,6 +45,7 @@ export function registerMaintenanceTools(server: McpServer, context: McpToolCont
   }, async ({ path: logicalPath, action, profileName }) =>
     runEnvelopeTool(async () => {
       const { plan, summary } = await createMediaFormatPlan({ logicalPath, action, profileName, scope });
+      const { warnings, ...details } = summary;
       const record = defaultOperationStore.createPlan(plan, "awaiting_approval");
       const effective = record.plan;
       const duplicate = effective.id !== plan.id;
@@ -57,7 +58,9 @@ export function registerMaintenanceTools(server: McpServer, context: McpToolCont
           expiresAt: effective.expiresAt,
           proposalKey: effective.proposalKey,
           duplicate,
-          summary,
+          // Top level so compaction keeps them: the agent must relay them before approval.
+          warnings,
+          summary: details,
           availableProfiles: listProfiles(),
           message: duplicate
             ? `Plan ${effective.id} for this file and profile is already awaiting owner approval; no second plan was created.`

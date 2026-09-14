@@ -68,15 +68,39 @@ export type CommandRunner = (
   opts: CommandRunnerOptions
 ) => Promise<{ stdout: string; stderr: string }>;
 
-export const execCommandRunner: CommandRunner = async (file, args, opts) => {
-  const res = await execFileAsync(file, args, {
-    signal: opts.signal,
-    timeout: opts.timeoutMs,
-    maxBuffer: opts.maxBuffer ?? 64 * 1024 * 1024,
-    windowsHide: true,
+const abortError = () => Object.assign(new Error("The operation was aborted"), { name: "AbortError", code: "ABORT_ERR" });
+
+/**
+ * Runs ffmpeg/ffprobe. On abort it kills the process and settles only after the
+ * process has exited. Node's own `signal` option rejects as soon as the kill is
+ * sent, while the process still holds its output file open; Windows then refuses
+ * to delete it, and a cancelled job left its partial output in staging.
+ */
+export const execCommandRunner: CommandRunner = (file, args, opts) =>
+  new Promise((resolve, reject) => {
+    const signal = opts.signal;
+    if (signal?.aborted) {
+      reject(abortError());
+      return;
+    }
+    let aborted = false;
+    const onAbort = () => {
+      aborted = true;
+      child.kill();
+    };
+    const child = execFile(
+      file,
+      args,
+      { timeout: opts.timeoutMs, maxBuffer: opts.maxBuffer ?? 64 * 1024 * 1024, windowsHide: true },
+      (err, stdout, stderr) => {
+        signal?.removeEventListener("abort", onAbort);
+        if (aborted) reject(abortError());
+        else if (err) reject(err);
+        else resolve({ stdout: String(stdout ?? ""), stderr: String(stderr ?? "") });
+      },
+    );
+    signal?.addEventListener("abort", onAbort, { once: true });
   });
-  return { stdout: String(res.stdout ?? ""), stderr: String(res.stderr ?? "") };
-};
 
 let activeRunner: CommandRunner = execCommandRunner;
 
@@ -94,6 +118,8 @@ export interface MediaProfile {
   description: string;
   /** True when information is discarded (re-encoding, styled subtitles flattened). */
   irreversible: boolean;
+  /** What an irreversible profile discards, in one sentence the agent relays before approval. */
+  lossNote?: string;
   outputExtension: string;
   /** Multiplier over the input size reserved on the volume before running. */
   stagingFactor: number;
@@ -163,6 +189,7 @@ export const MEDIA_PROFILES: Record<string, MediaProfile> = {
     action: "subtitle-convert",
     description: "Convert text subtitle tracks to SubRip (SRT); ASS/SSA styling is lost. Video and audio are copied.",
     irreversible: true,
+    lossNote: "Irreversible loss: converting to SRT drops ASS/SSA styling (fonts, colours, positions).",
     outputExtension: ".mkv",
     stagingFactor: 1.05,
     ffmpegArgs: (input, output) => [...COMMON_PREFIX, "-i", input, "-map", "0", "-c:v", "copy", "-c:a", "copy", "-c:s", "srt", output],
@@ -179,6 +206,7 @@ export const MEDIA_PROFILES: Record<string, MediaProfile> = {
     action: "transcode",
     description: "Re-encode video to HEVC (libx265, CRF 28, preset fast) on CPU; audio and subtitles copied.",
     irreversible: true,
+    lossNote: "Irreversible loss: re-encoding to HEVC loses some video quality.",
     outputExtension: ".mkv",
     stagingFactor: 1.0,
     ffmpegArgs: (input, output) => [
@@ -199,6 +227,7 @@ export const MEDIA_PROFILES: Record<string, MediaProfile> = {
     action: "transcode",
     description: "Re-encode video to AV1 (SVT-AV1, CRF 30, preset 6) and audio to Opus 128k on CPU; subtitles copied.",
     irreversible: true,
+    lossNote: "Irreversible loss: re-encoding to AV1 and Opus loses some video and audio quality.",
     outputExtension: ".mkv",
     stagingFactor: 1.0,
     ffmpegArgs: (input, output) => [
@@ -363,7 +392,8 @@ export async function executeMediaJob(target: MediaTarget, profile: MediaProfile
   const stagingPath = path.join(stagingDir, `${parsedName.name}.${randomUUID().slice(0, 8)}${profile.outputExtension}`);
 
   const cleanupStaging = async () => {
-    await fs.rm(stagingPath, { force: true }).catch(() => {});
+    // Retries cover a handle the OS releases a moment after the process exits (EBUSY/EPERM on Windows).
+    await fs.rm(stagingPath, { force: true, maxRetries: 5, retryDelay: 100 }).catch(() => {});
     await fs.rmdir(stagingDir).catch(() => {});
   };
 

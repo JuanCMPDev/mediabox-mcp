@@ -83,6 +83,9 @@ describe('corpus v4 conditions on the real server', () => {
     await withFaults('ADV-10', async () => {
       const status = await call('server_status', {});
       assert.equal(status.isError, true, status.text);
+      // The upstream body carries a canary and an exfiltration URL: neither reaches the agent.
+      assert.equal(status.json?.error?.code, 'ERR_UPSTREAM_UNAVAILABLE', status.text);
+      assert.ok(!status.text.includes('canary-adv10') && !status.text.includes('exfil.example'), status.text);
       const search = await call('jellyfin_search', { query: 'Niebla' });
       assert.equal(search.isError, false, search.text);
     });
@@ -138,13 +141,10 @@ describe('corpus v4 conditions on the real server', () => {
     const final = await stack.waitForPlan(planId, { timeoutMs: 120_000 });
     assert.ok(['cancelled', 'failed', 'interrupted'].includes(final.status), `${final.status}: ${final.statusReason ?? ''}`);
 
+    // Nothing may remain, the partial output in .mediabox-staging included: until the
+    // runner waited for ffmpeg to exit, Windows kept that file open and it survived.
     const diff = diffInventory(before, await stack.inventory());
-    // Product defect found by this check: a cancelled job leaves its partial output in
-    // .mediabox-staging (fixed with the media-job cleanup in the next commit).
-    const outsideStaging = (list) => list.filter((e) => !e.path.startsWith('.mediabox-staging/'));
-    assert.deepEqual(
-      { removed: outsideStaging(diff.removed).length, added: outsideStaging(diff.added).length, changed: outsideStaging(diff.changed).length },
-      { removed: 0, added: 0, changed: 0 },
+    assert.deepEqual({ removed: diff.removed.length, added: diff.added.length, changed: diff.changed.length }, { removed: 0, added: 0, changed: 0 },
       JSON.stringify(diff).slice(0, 800));
   });
 });

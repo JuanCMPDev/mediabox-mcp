@@ -10,6 +10,7 @@ import { registerCatalogTools } from "./catalog.js";
 import { defaultOperationStore } from "../operations/default-store.js";
 import { defaultToolContext, type McpToolContext } from "../security/context.js";
 import { defaultToolAuditLog, instrumentToolAudit, type ToolAuditLog } from "../security/tool-audit.js";
+import { instrumentToolErrors } from "../security/tool-errors.js";
 import { VERSION } from "../version.js";
 
 /**
@@ -23,6 +24,8 @@ export function createMcpServer(
 ): McpServer {
   const server = new McpServer({ name: "mediabox-mcp", version: VERSION });
   instrumentToolAudit(server, context, auditLog);
+  // After the audit: the audit then wraps the error envelope and records its code.
+  instrumentToolErrors(server);
   registerJellyfinTools(server);
   registerLibraryTools(server, context);
   registerSonarrTools(server);
