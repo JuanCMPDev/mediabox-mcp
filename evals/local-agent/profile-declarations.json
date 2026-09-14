@@ -1,14 +1,14 @@
 {
   "$comment": "Decisions fixed BEFORE measuring (PR05 §4.1). profile.mjs combines them with values read from the machine and the runtime. Changing any value here requires a new profileId.",
-  "profileId": "qwen2.5-7b-q4km-ollama0.34-win11-rx7800xt-lab4",
-  "$supersedes": "lab3 (qwen3.5:9b, G10 experiments 6-7; experiment 7 on candidate 5e16093 scored 55/54/57 of 60). lab4 does not correct lab3, which stays in git for experiment 9: G10 experiment 8 measures qwen2.5:7b, the lighter model of experiments 2-5, on the same candidate code under the frozen conditions of lab2. Every declared value equals lab2's (8 GiB RAM reservation, 12 GiB VRAM reservation, LLAMA_ARG_CACHE_RAM=0, greedy sampling with seed 42, same media load); only the profileId and these notes differ. sampling.presencePenalty and sampling.thinking did not exist in lab2 and record what lab2 already did: the client sent neither presence_penalty nor reasoning_effort. No reasoningEffort (qwen2.5 does not think) and no sizeTargetDeviation (7.6B parameters, under the 9B target).",
-  "model": "qwen2.5:7b",
+  "profileId": "qwen3.5-9b-q4km-ollama0.34-win11-rx7800xt-lab3",
+  "$supersedes": "lab2 (qwen2.5:7b, G10 experiments 2-5; best 43-46/60 in experiment 5). lab3 changes the model at the owner's request of 2026-09-13 ('Qwen 3.6 9B'): Ollama publishes qwen3.6 only in 27B and 35B, which do not fit the 12 GiB VRAM reservation, so the 9B of the same line, qwen3.5:9b Q4_K_M, is used. The RAM reservation grows to 12 GiB because the runtime working set maps the weights (lab2 peaked at 1.01 times its 4.7 GB weights; these are 6.6 GB).",
+  "model": "qwen3.5:9b",
   "baseUrl": "http://127.0.0.1:11434",
   "runtimeLogPath": "declared-at-run-time",
   "runtimeExe": "declared-at-run-time",
   "contextTokens": 8192,
   "reservedSystemRamBytes": 8589934592,
-  "reservedInferenceRamBytes": 8589934592,
+  "reservedInferenceRamBytes": 12884901888,
   "reservedInferenceVramBytes": 12884901888,
   "runtimeEnv": {
     "OLLAMA_CONTEXT_LENGTH": "8192",
@@ -21,11 +21,15 @@
   "sampling": {
     "temperature": 0,
     "seed": 42,
-    "thinking": "not applicable: qwen2.5:7b has no thinking capability (/api/show capabilities: completion, tools in profile lab2), so no reasoning_effort is declared or sent, as in lab2 (G10 experiments 2-5).",
+    "reasoningEffort": "none",
+    "thinking": "off. qwen3.5 thinks by default; reasoning_effort=none turns it off on Ollama's OpenAI-compatible endpoint (think=false is ignored there). Decided before measuring: the frozen sampling is greedy (temperature 0), and the agent allows 1024 output tokens and 6 inferences per turn.",
     "topP": "runtime default (not sent by the client)",
-    "presencePenalty": "runtime default of the model (not sent by the client, as in lab2)",
-    "source": "LOCAL_LLM_TEMPERATURE / LOCAL_LLM_SEED sent in every /v1/chat/completions request",
+    "presencePenalty": "runtime default of the model (not sent by the client)",
+    "source": "LOCAL_LLM_TEMPERATURE / LOCAL_LLM_SEED / LOCAL_LLM_REASONING_EFFORT sent in every /v1/chat/completions request",
     "unsupported": []
+  },
+  "sizeTargetDeviation": {
+    "reason": "qwen3.5:9b reports 9.65B total parameters because its GGUF includes a 27-block vision encoder the agent never uses; its language model is the 9B-class Qwen3.5 the blueprint names as a candidate (LOCAL-AGENT-HARDENING.es.md, PR04-P08-P09-SPEC.es.md §7). PR05-P10-P11-SPEC states <=9B total as the initial target, not a hard limit."
   },
   "jellyfinLoad": {
     "workload": "ffmpeg hardware transcode representative of a Jellyfin AMF transcode: d3d11va decode, CPU scale to 1280x720, h264_amf encode at 4 Mb/s, audio dropped",
