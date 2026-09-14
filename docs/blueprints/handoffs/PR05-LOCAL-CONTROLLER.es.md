@@ -84,7 +84,10 @@ El script repite la verificación de la preparación y además:
    `%LOCALAPPDATA%\mediabox-g10\account.clixml`.
 2. Da a la cuenta lectura sobre `E:\mediabox-g10` y escritura solo en
    `storage`, `tmp`, `npm-cache` y `runner`.
-3. Añade las reglas del grupo de cortafuegos `mediabox-g10`.
+3. Añade las reglas del grupo de cortafuegos `mediabox-g10` y las prueba como
+   la cuenta: la puerta de enlace privada y una dirección pública desde el Node
+   de evaluación deben devolver `EACCES`. Si no, se detiene antes de tocar
+   ningún permiso de los discos.
 4. Deniega a la cuenta D:\, E:\ y las carpetas de C:\ que no son de Windows.
    **Esto reescribe los permisos heredados de todos los ficheros de esos
    discos y puede tardar mucho en discos grandes.** Se puede interrumpir y

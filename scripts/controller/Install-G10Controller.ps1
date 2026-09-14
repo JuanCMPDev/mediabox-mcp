@@ -55,6 +55,15 @@ $NodeVersion = 'v22.19.0'
 $PublicProbe = '1.1.1.1'
 $SystemSid = 'S-1-5-18'
 $AdministratorsSid = 'S-1-5-32-544'
+# Prints the outcome of one TCP connection: EACCES means the firewall refused it.
+$ConnectProbe = @'
+import net from 'node:net';
+const socket = net.connect({ host: process.argv[2], port: Number(process.argv[3]) });
+const done = (outcome) => { process.stdout.write(outcome); socket.destroy(); process.exit(0); };
+socket.setTimeout(4000, () => done('timeout'));
+socket.once('connect', () => done('connected'));
+socket.once('error', (err) => done(err.code || 'error'));
+'@
 
 function Write-Step([string]$Message) { Write-Host "==> $Message" -ForegroundColor Cyan }
 
@@ -194,7 +203,8 @@ if (Get-LocalUser -Name $Account -ErrorAction SilentlyContinue) {
   Set-LocalUser -Name $Account -Password $password -PasswordNeverExpires $true -UserMayNotChangePassword $true
   Enable-LocalUser -Name $Account
 } else {
-  New-LocalUser -Name $Account -Password $password -Description 'mediabox-mcp G10 trusted controller. No personal data.' -PasswordNeverExpires -UserMayNotChangePassword -AccountNeverExpires | Out-Null
+  # Windows limits the description of a local account to 48 characters.
+  New-LocalUser -Name $Account -Password $password -Description 'mediabox-mcp G10 trusted controller' -PasswordNeverExpires -UserMayNotChangePassword -AccountNeverExpires | Out-Null
 }
 $sid = (Get-LocalUser -Name $Account).SID.Value
 # Users, Performance Monitor Users and Performance Log Users: the memory
@@ -242,6 +252,39 @@ foreach ($exe in $evaluated) {
     $rules.Add([ordered]@{ name = $name; direction = $direction; scope = 'program'; program = $exe.FullName })
   }
 }
+
+# A per-account rule is the one condition Windows could accept without
+# enforcing it, so both kinds of rule are proven from inside the account now,
+# before the long permission rewrite below.
+$probeDir = Join-Path $Root 'tmp\installer'
+New-Item -ItemType Directory -Force -Path $probeDir | Out-Null
+$probeFile = Join-Path $probeDir 'connect-probe.mjs'
+[IO.File]::WriteAllText($probeFile, $ConnectProbe, [Text.Encoding]::ASCII)
+$gateway = (Get-NetRoute -DestinationPrefix '0.0.0.0/0' -ErrorAction SilentlyContinue | Sort-Object RouteMetric | Select-Object -First 1).NextHop
+if (-not $gateway -or $gateway -eq '0.0.0.0') { throw 'No default gateway to probe. Connect the machine to its network and run the script again.' }
+
+function Invoke-AccountProbe([string]$Node, [string]$Target, [int]$Port) {
+  $out = Join-Path $probeDir "probe-$([guid]::NewGuid().ToString('N')).txt"
+  Start-Process -FilePath $Node -ArgumentList "`"$probeFile`" $Target $Port" -Credential $credential -LoadUserProfile -WorkingDirectory $probeDir -RedirectStandardOutput $out -Wait | Out-Null
+  $text = ''
+  if (Test-Path $out) {
+    $text = ([string](Get-Content -Raw $out)).Trim()
+    Remove-Item -LiteralPath $out -Force
+  }
+  return $text
+}
+
+Write-Step 'Proving the firewall rules from inside the account'
+$lanOutcome = Invoke-AccountProbe (Join-Path $Root 'toolchain\node\node.exe') $gateway 80
+if ($lanOutcome -ne 'EACCES') {
+  throw "The account reached the private gateway $gateway with outcome '$lanOutcome': Windows does not enforce the per-account rule here. The installation stopped before changing any permission on the data drives. See docs/blueprints/handoffs/PR05-LOCAL-CONTROLLER.es.md, section 9."
+}
+Write-Host '    ok   the account cannot reach the private gateway (EACCES)'
+$publicOutcome = Invoke-AccountProbe (Join-Path $Root 'toolchain\node-eval\node.exe') $PublicProbe 443
+if ($publicOutcome -ne 'EACCES') {
+  throw "The evaluation node reached $PublicProbe with outcome '$publicOutcome': the program rules are not enforced. The installation stopped before changing any permission on the data drives."
+}
+Write-Host '    ok   the evaluation node cannot reach a public address (EACCES)'
 
 # --- Data locations ------------------------------------------------------------
 
@@ -314,7 +357,7 @@ if ((Test-Path $selfTest) -and (Get-Item $selfTest).Length -gt 0) {
 $pdh = Join-Path $probeDir 'gpu-counters.txt'
 $counterProbe = Start-Process -FilePath "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe" -ArgumentList "-NoProfile -NonInteractive -Command `"(New-Object Diagnostics.PerformanceCounterCategory 'GPU Process Memory').GetInstanceNames().Count`"" -Credential $credential -LoadUserProfile -WorkingDirectory $probeDir -RedirectStandardOutput $pdh -Wait -PassThru
 $instances = 0
-if (Test-Path $pdh) { [void][int]::TryParse(((Get-Content -Raw $pdh) -as [string]).Trim(), [ref]$instances) }
+if (Test-Path $pdh) { [void][int]::TryParse(([string](Get-Content -Raw $pdh)).Trim(), [ref]$instances) }
 if ($counterProbe.ExitCode -eq 0 -and $instances -gt 0) { Write-Host "    ok   gpu-counters: the account reads $instances GPU memory counter instances" }
 else { Write-Host '    FAIL gpu-counters: the account cannot read the GPU Process Memory counters' -ForegroundColor Yellow; $isolationOk = $false }
 
