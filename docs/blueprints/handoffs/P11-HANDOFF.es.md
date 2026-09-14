@@ -14,9 +14,9 @@ corpus se han retirado. El estado consolidado del lote está en
 |---|---|
 | Fase | P11 — evaluación de modelos locales |
 | Lote | PR05, rama `work/local-agent/p10-p11-private-evals` |
-| Candidatos evaluados | `0e813214e817d7575122dd19bb053a4c5943ae82` (experimento 1, perfil lab1), `81c05f6` (experimento 2, perfil lab2, con las correcciones que salieron del 1), `7956db7` (experimento 3, flujo por intención y corpus v3), `25849f4` (experimento 4, con las correcciones que salieron del 3) y `b041854` (experimento 5, corpus v4 y correcciones de producto) |
+| Candidatos evaluados | `0e813214e817d7575122dd19bb053a4c5943ae82` (experimento 1, perfil lab1), `81c05f6` (experimento 2, perfil lab2, con las correcciones que salieron del 1), `7956db7` (experimento 3, flujo por intención y corpus v3), `25849f4` (experimento 4, con las correcciones que salieron del 3), `b041854` (experimento 5, corpus v4 y correcciones de producto) y `1624dd8` (experimento 6, `qwen3.5:9b` con el perfil lab3) |
 | Gates | G10 `gate/model-quality`; `test:eval-harness` en CI sin GPU |
-| Fecha | 2026-09-12; experimentos 3, 4 y 5 el 2026-09-13 |
+| Fecha | 2026-09-12; experimentos 3, 4 y 5 el 2026-09-13; experimento 6 el 2026-09-14 |
 
 ## 1. Camino real evaluado
 
@@ -184,8 +184,12 @@ Los números y el análisis de cada fallo están en
   corregido y tres oráculos revisados con justificación, y correcciones de
   producto. Resultado not_compatible, con 43–46 éxitos de 60 y ninguna
   infracción.
+- **§4.7 y §4.8, experimento 6** sobre `1624dd8`: corpus v5 y el perfil lab3
+  con `qwen3.5:9b`. Resultado not_compatible, con 41–44 éxitos de 60, READ
+  por encima de su umbral y ninguna infracción. El modelo pregunta antes de
+  proponer y no usa tarjetas.
 
 **P11 no está cerrada:** G10 sigue en rojo por calidad y por clase de
 evidencia (`local-lab`).
 
-Los cinco se conservan en `evals/evidence/`, y `current.json` apunta al último.
+Los seis se conservan en `evals/evidence/`, y `current.json` apunta al último.

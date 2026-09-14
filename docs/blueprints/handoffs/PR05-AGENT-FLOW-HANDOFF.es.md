@@ -11,7 +11,7 @@ ese documento (experimento G10 n.º 2, `132a45a`).
 | Base | `132a45a` |
 | Commits | `5d2aeaa` lecturas MCP y router; `c76dcb4` flujo del agente; `7956db7` corpus v3 y documentación; `25849f4` correcciones que destapó el experimento 3 |
 | Fecha | 2026-09-13 |
-| Estado | Medido en los experimentos G10 3 y 4 (§9) y, con el corpus v4 y correcciones de producto, en el 5: 43–46 de 60, no compatible. G10 sigue en rojo. |
+| Estado | Medido en los experimentos G10 3 y 4 (§9) y, con el corpus v4 y correcciones de producto, en el 5: 43–46 de 60; con `qwen3.5:9b`, en el 6: 41–44. No compatible; G10 sigue en rojo. |
 
 ## 1. Problema
 
@@ -199,9 +199,9 @@ Los experimentos G10 3 y 4 midieron este código y sus correcciones (§9).
 - **Oráculos sin tocar.** Los que rechazan negativas correctas (READ-07,
   ADV-02/04/07) siguen igual.
 
-## 9. Experimentos 3, 4 y 5
+## 9. Experimentos 3 a 6
 
-El detalle está en los §4.3, §4.4 y §4.6 de [PR05-QA-HANDOFF.es.md](PR05-QA-HANDOFF.es.md).
+El detalle está en los §4.3, §4.4, §4.6 y §4.8 de [PR05-QA-HANDOFF.es.md](PR05-QA-HANDOFF.es.md).
 
 | Experimento | Candidato | Éxitos por pasada | STORAGE | DOWNLOAD | Primer evento útil, p95 |
 |---|---|---|---|---|---|
@@ -209,6 +209,7 @@ El detalle está en los §4.3, §4.4 y §4.6 de [PR05-QA-HANDOFF.es.md](PR05-QA-
 | 3, este diseño | `7956db7` | 24, 26, 27 | 3–4/10 | 1–2/10 | 1,1–1,2 s |
 | 4, con correcciones | `25849f4` | 38, 37, 36 | 4–5/10 | 6–7/10 | 1,0–1,1 s |
 | 5, corpus v4 y correcciones de producto | `b041854` | 46, 46, 43 | 7–9/10 | 7–9/10 | 1,1 s |
+| 6, `qwen3.5:9b` con corpus v5 | `1624dd8` | 44, 41, 43 | 7/10 | 3/10 | 1,9 s |
 
 El experimento 3 destapó defectos del propio cambio, corregidos en `25849f4`:
 - la línea "Next" de descarga pedía el año, y el modelo lo inventaba;
@@ -229,3 +230,8 @@ termina antes de la cancelación programada.
 
 El experimento 5 no tiene infracciones: el corpus v4 corrige esa carrera y las
 averías que nunca se aplicaban (§4.5 del handoff de QA).
+
+El experimento 6 cambia el modelo a `qwen3.5:9b`. Recorre bien el flujo de este
+diseño hasta el objetivo exacto, pero pregunta antes de proponer y lista las
+opciones en texto en vez de usar `present_choices`. Por eso DOWNLOAD cae a 3/10
+(§4.8 del handoff de QA).
