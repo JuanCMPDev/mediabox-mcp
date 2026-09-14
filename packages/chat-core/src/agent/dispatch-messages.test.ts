@@ -86,8 +86,8 @@ describe('An empty catalog search is completed with a library search', () => {
     const partial = JSON.stringify({ status: 'partial', data: [], sources: [...complete, { source: 'sonarr', completeness: 'unavailable' }] });
     const res = await run(partial, { total: 1, results: [colibri] }, [catalog, mediaQuery]);
     expect(calls.map(([tool]) => tool)).toEqual(['search_media']);
-    // SEARCH-10, experiment 6: the note also says not to repeat the call.
-    expect(JSON.parse(res.result).message).toBe('Incomplete: sonarr did not answer. Say so; do not call its results absent. Do not repeat the call in this turn.');
+    // READ-10 and SEARCH-10, experiment 7: the note names what is missing and what to tell the user.
+    expect(JSON.parse(res.result).message).toBe('Incomplete: sonarr did not respond, so series results are missing. Tell the user; do not say none exist.');
   });
 
   it('leaves results with items, catalogs without media_query and failed library reads unchanged', async () => {

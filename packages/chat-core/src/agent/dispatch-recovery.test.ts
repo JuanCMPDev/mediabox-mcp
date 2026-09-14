@@ -19,6 +19,7 @@ import {
 import { compactToolResult, TOOL_RESULT_STRING_CAP } from './budget.js';
 import { computeArgsHash } from './guards.js';
 import { getPhaseTools } from './phases.js';
+import { extractEntitledReferences } from './runtime.js';
 import { FakeMcp } from './replay/fake-mcp.js';
 import { normalizeResult } from '../mcp-client.js';
 import { resolveVirtualCall, splitTitleYear } from '../tool-router.js';
@@ -61,7 +62,8 @@ describe('library_ops propose_delete accepts `path` for `paths` (STORAGE-02, exp
     const both = new FakeMcp({ propose_cleanup: plan });
     const res = await propose({ action: 'propose_delete', paths: [listed], path: 'media:movies/Eclipse (2019)/Eclipse (2019).mkv' }, both);
     expect(ledger(both)).toEqual([['propose_cleanup', { paths: [listed] }]]);
-    expect(res.args?.paths).toEqual([listed]);
+    // The router ignores `path` for propose_delete, so the effective args drop it (experiment 7).
+    expect(res.args).toEqual({ action: 'propose_delete', paths: [listed] });
 
     const blank = new FakeMcp({ propose_cleanup: plan });
     expect(await propose({ action: 'propose_delete', path: '   ' }, blank)).toMatchObject({ ok: false, rejected: true });
@@ -74,6 +76,74 @@ describe('library_ops propose_delete accepts `path` for `paths` (STORAGE-02, exp
     const res = await propose({ action: 'list', path: folder }, mcp);
     expect(res.args).toEqual({ action: 'list', path: folder });
     expect(ledger(mcp)).toEqual([['manage_files', { action: 'list', path: folder }]]);
+  });
+});
+
+describe('library_ops propose_delete decodes `paths` written as JSON text (STORAGE-02, experiment 7)', () => {
+  const folder = 'media:movies/Niebla de Marzo (2015)';
+  const mkv = `${folder}/Niebla de Marzo (2015).mkv`;
+  const nfo = `${folder}/Niebla de Marzo (2015).nfo`;
+  // The listing of the Niebla folder, in the shape manage_files returns.
+  const listing = { path: folder, items: [
+    { name: 'Niebla de Marzo (2015).mkv', type: 'file', path: mkv },
+    { name: 'Niebla de Marzo (2015).nfo', type: 'file', path: nfo },
+    { name: 'extras', type: 'directory', path: `${folder}/extras` },
+  ] };
+  const references = extractEntitledReferences('library_ops', { action: 'list', path: '/data/movies/Niebla de Marzo (2015)' }, listing)!;
+  const tools = getPhaseTools('propose', { intentKind: 'delete', references });
+  const plan = json({ planId: 'plan_niebla', operation: 'quarantine_files', status: 'awaiting_approval' });
+  const propose = (args: Record<string, unknown>, mcp: FakeMcp) =>
+    dispatchToolCall({ toolName: 'library_ops', args, exposedTools: tools, mcpCall: mcp.callFn, references });
+  const unlisted = 'media:movies/Eclipse (2019)/Eclipse (2019).mkv';
+  // The call qwen3.5 made in the three passes of experiment 7.
+  const experiment7 = { action: 'propose_delete', path: folder, paths: `["${mkv}"]` };
+
+  it('dispatches the experiment 7 call as propose_cleanup with the mkv path only', async () => {
+    expect(references.paths).toEqual([mkv, nfo]);
+    expect(experiment7.paths).toBe(JSON.stringify([mkv]));
+    const mcp = new FakeMcp({ propose_cleanup: plan });
+    const res = await propose(experiment7, mcp);
+    expect(res).toMatchObject({ ok: true, rejected: false, mcpTool: 'propose_cleanup' });
+    expect(ledger(mcp)).toEqual([['propose_cleanup', { paths: [mkv] }]]);
+    // The runtime derives the proposal targets from the effective args: the decoded array, no folder.
+    expect(res.args).toEqual({ action: 'propose_delete', paths: [mkv] });
+    // Loop detection still sees the call as the model wrote it.
+    expect(res.argsHash).toBe(computeArgsHash(experiment7));
+  });
+
+  it('decodes JSON text with blanks around it and without `path`', async () => {
+    const mcp = new FakeMcp({ propose_cleanup: plan });
+    const res = await propose({ action: 'propose_delete', paths: `  ${JSON.stringify([mkv, nfo])} ` }, mcp);
+    expect(ledger(mcp)).toEqual([['propose_cleanup', { paths: [mkv, nfo] }]]);
+    expect(res.args).toEqual({ action: 'propose_delete', paths: [mkv, nfo] });
+  });
+
+  it.each([
+    // ADV-03 asks to send this truncated JSON unchanged: repair or loop guard, never a decoded plan.
+    ['truncated JSON (ADV-03)', '["tv/Serie Ñandú (2024)/Season 01/Serie Ñandú - S01E03.mkv"'],
+    ['an empty array', '[]'],
+    ['an empty path', '[""]'],
+    ['a blank path', '["   "]'],
+    ['a non-string element', `["${mkv}", 7]`],
+    ['a nested array', `[["${mkv}"]]`],
+    ['an object', `{"paths": ["${mkv}"]}`],
+  ])('leaves text that is not a usable JSON array as it is: %s', async (_label, text) => {
+    const mcp = new FakeMcp({ propose_cleanup: plan });
+    const res = await propose({ action: 'propose_delete', paths: text }, mcp);
+    expect(res).toMatchObject({ ok: false, rejected: true, errorCode: 'ERR_ARGS_INVALID' });
+    expect(res.args?.paths).toBe(text);
+    expect(res.errorMessage).toContain('library_ops(action:"list")');
+    expect(mcp.ledger).toEqual([]);
+  });
+
+  it('still rejects a decoded array with a path the listing did not return', async () => {
+    for (const paths of [[unlisted], [mkv, unlisted], [folder], [`${folder}/extras`]]) {
+      const mcp = new FakeMcp({ propose_cleanup: plan });
+      const res = await propose({ action: 'propose_delete', path: folder, paths: JSON.stringify(paths) }, mcp);
+      expect(res, paths.join(',')).toMatchObject({ ok: false, rejected: true, errorCode: 'ERR_ARGS_INVALID' });
+      expect(res.args?.paths, paths.join(',')).toEqual(paths);
+      expect(mcp.ledger).toEqual([]);
+    }
   });
 });
 
@@ -406,24 +476,34 @@ describe('A source that did not answer is not asked again in the same turn (SEAR
   const searchWith = (mcpCall: McpCallFn) =>
     dispatchToolCall({ toolName: 'catalog', args: { action: 'search', query: 'Serie Ñandú' }, exposedTools: searchTools, mcpCall });
 
-  it('adds do-not-repeat to the partial note, and compaction keeps it whole', async () => {
+  it('names what is missing in domain words and what to tell the user, and compaction keeps it whole (READ-10, experiment 7)', async () => {
     const partial = json({ status: 'partial', data: [], sources: [{ source: 'radarr', completeness: 'complete' }, { source: 'sonarr', completeness: 'unavailable' }] });
     const mcp = new FakeMcp({ search_media: partial });
     const res = await searchWith(mcp.callFn);
-    const note = 'Incomplete: sonarr did not answer. Say so; do not call its results absent. Do not repeat the call in this turn.';
+    const note = 'Incomplete: sonarr did not respond, so series results are missing. Tell the user; do not say none exist.';
     expect(JSON.parse(res.result).message).toBe(note);
     expect(JSON.parse(compactToolResult('catalog', res.result)).message).toBe(note);
     expect(mcp.ledger).toHaveLength(1);
   });
 
-  it('keeps realistic source lists within the message cap', () => {
-    for (const names of [['sonarr'], ['radarr'], ['qbittorrent'], ['sonarr', 'radarr'], ['radarr', 'qbittorrent'], ['sonarr', 'radarr', 'qbittorrent']]) {
+  it('keeps realistic source lists within the message cap, with no "do not repeat": the runtime replays the first repeat', () => {
+    for (const names of [['sonarr'], ['radarr'], ['jellyfin'], ['qbittorrent'], ['sonarr', 'radarr'], ['radarr', 'qbittorrent'], ['sonarr', 'radarr', 'qbittorrent']]) {
       const note = incompleteNote(names);
       expect(note.length, names.join(',')).toBeLessThanOrEqual(TOOL_RESULT_STRING_CAP);
-      expect(note).toContain('Do not repeat the call in this turn.');
+      expect(note, names.join(',')).toContain(' did not respond, so ');
+      expect(note, names.join(',')).toContain('Tell the user; do not say none exist.');
+      expect(note, names.join(',')).not.toContain('repeat');
     }
-    expect(incompleteNote(['sonarr', 'radarr'])).toContain('sonarr, radarr did not answer');
-    expect(incompleteNote(['sonarr', 'radarr', 'qbittorrent'])).toContain('3 sources did not answer');
+    expect(incompleteNote(['radarr'])).toBe('Incomplete: radarr did not respond, so movie results are missing. Tell the user; do not say none exist.');
+    expect(incompleteNote(['jellyfin'])).toContain('jellyfin did not respond, so library results are missing.');
+    expect(incompleteNote(['qbittorrent'])).toContain('qbittorrent did not respond, so download client results are missing.');
+    // An unknown source keeps its name, and a source without a name names no domain.
+    expect(incompleteNote(['prowlarr'])).toContain('prowlarr did not respond, so prowlarr results are missing.');
+    expect(incompleteNote(['a source'])).toContain('a source did not respond, so some results are missing.');
+    // Past the cap the domains give way to "their", then the names to a count.
+    expect(incompleteNote(['sonarr', 'radarr'])).toBe('Incomplete: sonarr and radarr did not respond, so their results are missing. Tell the user; do not say none exist.');
+    expect(incompleteNote(['sonarr', 'radarr', 'qbittorrent'])).toBe('Incomplete: 3 sources did not respond, so their results are missing. Tell the user; do not say none exist.');
+    expect(incompleteNote(['x'.repeat(200)])).toBe('Incomplete: a source did not respond, so its results are missing. Tell the user; do not say none exist.');
   });
 
   it('tells the model not to repeat a call whose service is unavailable, keeping the error', async () => {

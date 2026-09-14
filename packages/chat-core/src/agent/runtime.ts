@@ -36,7 +36,7 @@ import { buildSystemPromptForPhase } from '../prompt.js';
 import { PRESENT_CHOICES_TOOL } from '../virtual-tools.js';
 import { prepareContext, budgetForContext, digestToolResult, type BudgetConfig, DEFAULT_BUDGET } from './budget.js';
 import { TurnGuards, type GuardConfig, computeArgsHash } from './guards.js';
-import { dispatchToolCall, retriedTitle } from './dispatch.js';
+import { dispatchToolCall, listNames, missingDomains, retriedTitle } from './dispatch.js';
 import { splitTitleYear } from '../tool-router.js';
 import { TokenCounter } from './tokenizer.js';
 import { redactTrace, type AgentTrace, type InferenceTrace, type ToolCallTrace } from './trace.js';
@@ -527,6 +527,9 @@ export class AgentRuntime {
     // Steps the runtime completes itself because they are not decisions (G10, experiment 6).
     const turnCalls: TurnCall[] = [];
     const sourceFailures = new Map<string, SourceFailure>();
+    // Sources that did not answer in this turn: every later inference hears them
+    // (READ-10, SEARCH-10, experiment 7).
+    const failedSources: string[] = [];
     let proposalAttempted = false;
     let choicesEmitted = false;
     let actionNudged = false;
@@ -625,6 +628,7 @@ export class AgentRuntime {
         const nudges = [
           nudge ? emptyReplyNudge(exposedTools.map(t => t.name)) : '',
           pendingAction ? pendingActionNudge(pendingAction) : '',
+          failedSources.length > 0 ? sourceFailureNote(failedSources) : '',
         ].filter(Boolean).map(note => `\n\n${note}`).join('');
         const combinedSystemPrompt = `${prepared.systemPrompt}\n\n${prepared.stateSummary}${nudges}`;
 
@@ -871,8 +875,15 @@ export class AgentRuntime {
             }
 
             turnCalls.push({ tool: tc.name, args: dispatchRes.args ?? tc.args, ok: dispatchRes.ok, complete: completeResult, parsed: parsedResult });
-            if (!sourceFailures.has(failureKey) && isSourceFailure(parsedResult, dispatchRes.ok)) {
+            const sourceFailed = isSourceFailure(parsedResult, dispatchRes.ok);
+            if (!sourceFailures.has(failureKey) && sourceFailed) {
               sourceFailures.set(failureKey, { result: dispatchRes.result, ok: dispatchRes.ok, source: dispatchRes.mcpTool, replayed: false });
+            }
+            // Every later inference of the turn names what is missing (READ-10, SEARCH-10,
+            // experiment 7). Only names: the result itself is not repeated (ADV-10).
+            if (sourceFailed) {
+              if (failedSources.length === 0) trace.guardDecisions.push('a source did not answer: later inferences of the turn carry a source-failure note');
+              recordFailedSources(failedSources, failedSourceNames(parsedResult));
             }
 
             // recordToolCall can raise ERR_LOOP_DETECTED; the state update above and
@@ -1186,6 +1197,64 @@ function replayedSourceFailure(result: string): string {
   } catch {
     return result;
   }
+}
+
+/**
+ * The services the MCP server names in an unavailability error: "<service> answered
+ * HTTP <status> and is unavailable" (mcp-server security/tool-errors.ts). Only a name
+ * of this list is taken from the message; the rest of an error is upstream text, and
+ * ADV-10 puts an injection canary and an exfiltration URL in an upstream body.
+ */
+const UNAVAILABLE_SERVICE = /\b(Jellyfin|Sonarr|Radarr|Prowlarr|qBittorrent|PyLoad|Bazarr) answered HTTP \d{3} and is unavailable\b/i;
+/** A source name as envelopes give it ("sonarr"); any other text is not repeated to the model. */
+const SOURCE_NAME = /^[A-Za-z][A-Za-z0-9._-]{0,23}$/;
+const UNNAMED_SOURCE = 'a service';
+const MAX_NOTED_SOURCES = 3;
+
+/**
+ * The sources a failed result names, with the detection of isSourceFailure: the
+ * incomplete sources of an envelope and the service of an ERR_UPSTREAM_UNAVAILABLE.
+ * A source without a usable name is "a service".
+ */
+function failedSourceNames(parsed: unknown): string[] {
+  const record = (parsed && typeof parsed === 'object' ? parsed : {}) as Record<string, any>;
+  const names: string[] = [];
+  if (Array.isArray(record.sources)) {
+    for (const source of record.sources) {
+      if (source?.completeness === 'complete') continue;
+      const name = typeof source?.source === 'string' ? source.source.trim() : '';
+      names.push(SOURCE_NAME.test(name) ? name : UNNAMED_SOURCE);
+    }
+  }
+  if (record.error?.code === 'ERR_UPSTREAM_UNAVAILABLE') {
+    const message = typeof record.error.message === 'string' ? record.error.message : '';
+    const service = UNAVAILABLE_SERVICE.exec(message)?.[1];
+    // An error envelope that already names its source (catalog.ts propose_download
+    // with the queue down) must not add a second, unnamed service (review, exp 8).
+    if (service) names.push(service);
+    else if (names.length === 0) names.push(UNNAMED_SOURCE);
+  }
+  return names.length > 0 ? names : [UNNAMED_SOURCE];
+}
+
+/** Adds each of `names` once, case-insensitively, up to MAX_NOTED_SOURCES. */
+function recordFailedSources(noted: string[], names: string[]): void {
+  for (const name of names) {
+    if (noted.length >= MAX_NOTED_SOURCES) return;
+    if (!noted.some(known => known.toLowerCase() === name.toLowerCase())) noted.push(name);
+  }
+}
+
+/**
+ * The system prompt note of every inference after a source failure in the turn.
+ * READ-10 (0/3) and SEARCH-10 (2 of 3 passes), experiment 7: with Sonarr down, qwen3.5
+ * answered that the series had no results although the result's note named sonarr.
+ * That note is in one tool result; this one is on every later inference of the turn.
+ * It adds no inference and changes no tool, phase or reference.
+ */
+function sourceFailureNote(names: string[]): string {
+  const who = listNames(names);
+  return `In this turn ${who} did not respond, so ${missingDomains(names)} results are missing. Your answer must say that ${who} did not respond; never say that nothing was found or that it does not exist.`;
 }
 
 /* ── Homonym cards (SEARCH-06/07, experiment 6) ──────────────────────────── */

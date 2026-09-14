@@ -138,7 +138,7 @@ export function validateToolCall(
 
 export interface DispatchResult {
   tool: string;
-  /** Arguments after normalizeArgs: what was validated and dispatched. */
+  /** Arguments after normalizeArgs and the propose_delete `path`/`paths` repairs: what was validated and dispatched. */
   args?: Record<string, unknown>;
   /** Concrete MCP tool the virtual call resolved to — surfaced as `source=` in the envelope. */
   mcpTool?: string;
@@ -252,16 +252,50 @@ function incompleteSources(parsed: any): string[] {
 }
 
 /**
- * The note of a partial result: missing is not absent (READ-10, SEARCH-10), and the
- * call is not repeated. SEARCH-10, experiment 6: with Sonarr down, qwen3.5 repeated
- * the identical search until ERR_LOOP_DETECTED. Names that would push the note past
- * the 120 characters compaction keeps become a count.
+ * The domain each source serves, in the words an answer about it uses. READ-10 and
+ * SEARCH-10, experiment 7: with Sonarr down, qwen3.5 answered that the series had no
+ * results; "sonarr did not answer" named the service but not what was missing.
+ * Unknown sources keep their own name.
+ */
+const SOURCE_DOMAINS: Record<string, string> = {
+  sonarr: 'series',
+  radarr: 'movie',
+  jellyfin: 'library',
+  qbittorrent: 'download client',
+};
+/** Placeholders for a source without a name: they name no domain either. */
+const UNNAMED_SOURCES: ReadonlySet<string> = new Set(['a source', 'a service']);
+
+/** "a", "a and b", "a, b and c". */
+export function listNames(names: string[]): string {
+  if (names.length <= 1) return names[0] ?? '';
+  return `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`;
+}
+
+/** What the results of `names` are about: "series", "series and movie"; "some" when a source has no name. */
+export function missingDomains(names: string[]): string {
+  if (names.length === 0 || names.some(name => UNNAMED_SOURCES.has(name))) return 'some';
+  return listNames([...new Set(names.map(name => SOURCE_DOMAINS[name.trim().toLowerCase()] ?? name))]);
+}
+
+/**
+ * The note of a partial result: which sources did not respond, what is missing in
+ * domain words, and what to tell the user (READ-10, SEARCH-10). Experiment 7: "Say
+ * so; do not call its results absent" was ignored in READ-10 (0/3), while in
+ * experiment 6 "so its results are missing" was relayed in 2 of 3 passes. The note
+ * no longer says not to repeat the call: the runtime replays the first identical
+ * repeat (runtime.ts, sourceFailures). It fits the 120 characters compaction keeps of
+ * `message`: past them the domains become "its"/"their", then the names a count.
  */
 export function incompleteNote(missing: string[]): string {
-  const note = (names: string) => `Incomplete: ${names} did not answer. Say so; do not call its results absent. Do not repeat the call in this turn.`;
-  const named = note(missing.join(', '));
-  if (named.length <= TOOL_RESULT_STRING_CAP) return named;
-  return note(missing.length === 1 ? 'a source' : `${missing.length} sources`);
+  const note = (names: string, what: string) =>
+    `Incomplete: ${names} did not respond, so ${what} results are missing. Tell the user; do not say none exist.`;
+  const unique = [...new Set(missing)];
+  const pronoun = unique.length === 1 ? 'its' : 'their';
+  for (const candidate of [note(listNames(unique), missingDomains(unique)), note(listNames(unique), pronoun)]) {
+    if (candidate.length <= TOOL_RESULT_STRING_CAP) return candidate;
+  }
+  return note(unique.length === 1 ? 'a source' : `${unique.length} sources`, pronoun);
 }
 
 /** A leading type word ("película", "the movie", "la serie"), with its article if any. */
@@ -420,8 +454,8 @@ async function retryWithTitle(
 
 /**
  * Turns results the model misread in G10 into ones it can answer from.
- * - A partial result names the sources that did not answer, so missing data is
- *   not reported as absent (READ-10, SEARCH-10), and says not to repeat the call.
+ * - A partial result names the sources that did not answer and what is missing in
+ *   domain words, so missing data is not reported as absent (READ-10, SEARCH-10).
  * - An empty search whose query wraps the title in a type phrase is repeated once
  *   with the title alone (READ-13, experiments 5 and 6).
  * - An empty, complete catalog search is completed with a library search. The
@@ -513,10 +547,44 @@ function annotateFailure(raw: string): string {
  * proposal targets from.
  */
 function aliasDeletePath(toolName: string, args: Record<string, unknown>): Record<string, unknown> {
-  if (toolName !== 'library_ops' || !isRecord(args) || args.action !== 'propose_delete' || args.paths !== undefined) return args;
+  if (toolName !== 'library_ops' || !isRecord(args) || args.action !== 'propose_delete') return args;
+  if (args.paths !== undefined) return decodeDeletePaths(args);
   if (typeof args.path !== 'string' || args.path.trim().length === 0) return args;
   const { path, ...rest } = args;
   return { ...rest, paths: [path] };
+}
+
+/** A `paths` value the router dispatches: a non-empty path, or a non-empty array of them. */
+function isUsablePaths(value: unknown): boolean {
+  if (typeof value === 'string') return value.trim().length > 0;
+  return Array.isArray(value) && value.length > 0 && value.every(path => typeof path === 'string' && path.trim().length > 0);
+}
+
+/**
+ * `paths` written as a JSON array in a string. STORAGE-02, experiment 7: qwen3.5 called
+ * library_ops({"action":"propose_delete","path":"media:movies/Niebla de Marzo (2015)",
+ * "paths":"[\"media:movies/Niebla de Marzo (2015)/Niebla de Marzo (2015).mkv\"]"}) in
+ * three passes of three; the router wrapped the text as one path, grounding rejected
+ * it and the identical repeat ended on ERR_LOOP_DETECTED. Only text that parses to a
+ * non-empty array of non-empty strings is decoded; any other text stays as the model
+ * wrote it (ADV-03 asks for a deliberately truncated JSON). With a usable `paths`,
+ * `path` goes: the router ignores it for propose_delete, and the effective args must
+ * not claim a folder the proposal never targets. Grounding still checks every path.
+ */
+function decodeDeletePaths(args: Record<string, unknown>): Record<string, unknown> {
+  let paths = args.paths;
+  if (typeof paths === 'string' && paths.trim().startsWith('[')) {
+    try {
+      const parsed: unknown = JSON.parse(paths);
+      if (Array.isArray(parsed) && isUsablePaths(parsed)) paths = parsed;
+    } catch {
+      /* not JSON: dispatched as the model wrote it */
+    }
+  }
+  if (!isUsablePaths(paths)) return args;
+  const effective: Record<string, unknown> = { ...args, paths };
+  delete effective.path;
+  return effective;
 }
 
 /** The reference arguments each catalog action forwards to the MCP server. */
