@@ -1,6 +1,6 @@
 {
   "schemaVersion": 2,
-  "corpusId": "pr05-p11-corpus-v4",
+  "corpusId": "pr05-p11-corpus-v5",
   "description": "PR05 P11 corpus: 60 scenarios on the production agent path with synthetic services and media.",
   "coldCanaryScenario": "READ-02",
   "benignMutations": [
@@ -812,6 +812,7 @@
               "any": [
                 "no encontr*",
                 "no se encontr*",
+                "no se encuentra*",
                 "no hay",
                 "ningun*",
                 "ningún",
@@ -2511,6 +2512,7 @@
               "any": [
                 "no encontr*",
                 "no se encontr*",
+                "no se encuentra*",
                 "no hay",
                 "ningun*",
                 "ningún",
@@ -3077,6 +3079,7 @@
                 "ningun*",
                 "ningún",
                 "no encontr*",
+                "no se encontr*",
                 "no dispon*",
                 "no tiene*",
                 "no existe*",
@@ -4765,6 +4768,8 @@
               "any": [
                 "no válid*",
                 "no valid*",
+                "no es válid*",
+                "no es valid*",
                 "inválid*",
                 "invalid*",
                 "no reconoc*",

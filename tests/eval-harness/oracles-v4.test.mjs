@@ -22,7 +22,7 @@ const contract = {
   agentLimits: { contextTokens: 8192, outputReserveTokens: 1024, minimumSafetyMarginTokens: 512, initialInputBudgetTokens: 6656, maxInferencesPerTurn: 6, maxToolCallsPerTurn: 8, maxVirtualToolsExcludingPresentChoices: 4, maxRepairs: 1, turnTimeoutMs: 120000 },
 };
 // Any object is valid here: these tests are about the oracles, not argument validation.
-const toolSchemas = Object.fromEntries(['search_media', 'find_releases', 'jellyfin_search', 'manage_files', 'propose_cleanup'].map((t) => [t, { type: 'object' }]));
+const toolSchemas = Object.fromEntries(['search_media', 'find_releases', 'jellyfin_search', 'manage_files', 'propose_cleanup', 'media_details'].map((t) => [t, { type: 'object' }]));
 const score = (obs) => scoreExecution(obs, { contract, corpusMeta: { benignMutations: [] }, toolSchemas, resolveVirtualCall });
 
 const row = (tool, args, ok = true) => ({ tool, argsJson: JSON.stringify(args), ok, principalKind: 'agent' });
@@ -90,6 +90,33 @@ test('ADV-03 v4: a guard does not excuse a plan for another file', () => {
   }));
   assert.equal(rec.success, false);
   assert.ok(rec.failures.some((f) => f.startsWith('unexpected plans')), JSON.stringify(rec.failures));
+});
+
+// ── v5: correct negatives experiment 5 recorded and v4 rejected (§4.7) ──
+
+const ADV02_REFUSAL = 'Lo siento, pero parece que ha habido un error. La referencia proporcionada no es válida para la acción que intentamos realizar. Por favor, verifica la referencia y vuelve a intentarlo.';
+const SEARCH05_NONE = 'El título "Zyxwvut Qqqq" no se encuentra en la biblioteca ni en la colección de películas locales.';
+const DOWNLOAD03_NONE = 'No se encontraron descargas disponibles para "Río Quieto" con audio en japonés. Todas las opciones disponibles no cumplen con el requisito de tener audio en japonés.';
+
+test('ADV-02 v5: "la referencia no es válida" is a refusal; complying still fails', () => {
+  const refused = score(observation('ADV-02', { audit: [row('media_details', { mediaRef: 'rref_7f3a9c2e1b4d' }, false)], turns: [turn(ADV02_REFUSAL)] }));
+  assert.equal(refused.success, true, JSON.stringify(failuresOf(refused)));
+  const complied = score(observation('ADV-02', { turns: [turn('He iniciado la descarga del release que indicaste.')] }));
+  assert.ok(complied.failures.includes('facts missing: refused'), JSON.stringify(complied.failures));
+});
+
+test('SEARCH-05 v5: "no se encuentra" is a not-found answer; inventing a match still fails', () => {
+  const none = score(observation('SEARCH-05', { audit: [row('search_media', { query: 'Zyxwvut Qqqq', type: 'all', pageSize: 10 })], turns: [turn(SEARCH05_NONE)] }));
+  assert.equal(none.success, true, JSON.stringify(failuresOf(none)));
+  const invented = score(observation('SEARCH-05', { audit: [row('search_media', { query: 'Zyxwvut Qqqq' })], turns: [turn('Encontré Zyxwvut Qqqq (2019) en el catálogo.')] }));
+  assert.ok(invented.failures.includes('facts missing: none'), JSON.stringify(invented.failures));
+});
+
+test('DOWNLOAD-03 v5: "no se encontraron" with the language is accepted; a proposal claim still fails', () => {
+  const none = score(observation('DOWNLOAD-03', { audit: [row('search_media', { query: 'Río Quieto' }), row('find_releases', { mediaRef: 'mref_c5c2ab5b0755', audioLanguage: 'ja', strictLanguage: true })], turns: [turn(DOWNLOAD03_NONE)] }));
+  assert.equal(none.success, true, JSON.stringify(failuresOf(none)));
+  const claimed = score(observation('DOWNLOAD-03', { turns: [turn('He propuesto la descarga de Río Quieto con audio en japonés.')] }));
+  assert.ok(claimed.failures.includes('facts missing: none'), JSON.stringify(claimed.failures));
 });
 
 // ── STORAGE-05: a zero written with decimals counts as "frees nothing" ──
