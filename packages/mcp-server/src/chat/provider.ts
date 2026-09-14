@@ -92,6 +92,7 @@ export function getChatProvider(): StreamProvider {
       LOCAL_LLM_CONTEXT_TOKENS: process.env.LOCAL_LLM_CONTEXT_TOKENS,
       LOCAL_LLM_TEMPERATURE:    process.env.LOCAL_LLM_TEMPERATURE,
       LOCAL_LLM_SEED:           process.env.LOCAL_LLM_SEED,
+      LOCAL_LLM_REASONING_EFFORT: process.env.LOCAL_LLM_REASONING_EFFORT,
       INFERENCE_ALLOW_LAN:      process.env.INFERENCE_ALLOW_LAN,
       INFERENCE_ENDPOINT_HOSTS: process.env.INFERENCE_ENDPOINT_HOSTS,
       LOCAL_BASE_URL:     process.env.LOCAL_BASE_URL,

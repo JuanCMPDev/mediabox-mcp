@@ -92,10 +92,17 @@ describe('sampling from the environment (P11 §4.1)', () => {
         LOCAL_LLM_BASE_URL: `http://127.0.0.1:${port}`,
         LOCAL_LLM_TEMPERATURE: '0',
         LOCAL_LLM_SEED: '42',
+        LOCAL_LLM_REASONING_EFFORT: 'None',
       });
       for await (const _ of provider.stream({ systemPrompt: 's', messages: [{ role: 'user', content: 'hi' }], tools: [] })) { /* drain */ }
       expect(body.temperature).toBe(0);
       expect(body.seed).toBe(42);
+      // Qwen3.5 thinks by default; the profile turns it off with reasoning_effort=none.
+      expect(body.reasoning_effort).toBe('none');
+
+      const plain = resolveProvider({ LLM_PROVIDER: 'local', LOCAL_LLM_BASE_URL: `http://127.0.0.1:${port}` });
+      for await (const _ of plain.stream({ systemPrompt: 's', messages: [{ role: 'user', content: 'hi' }], tools: [] })) { /* drain */ }
+      expect('reasoning_effort' in body).toBe(false);
     } finally {
       server.close();
     }
@@ -104,6 +111,7 @@ describe('sampling from the environment (P11 §4.1)', () => {
   it('omits the seed when none is declared and rejects out-of-range values', () => {
     expect(() => resolveProvider({ LLM_PROVIDER: 'local', LOCAL_LLM_TEMPERATURE: '3' })).toThrow(/LOCAL_LLM_TEMPERATURE/);
     expect(() => resolveProvider({ LLM_PROVIDER: 'local', LOCAL_LLM_SEED: '-1' })).toThrow(/LOCAL_LLM_SEED/);
+    expect(() => resolveProvider({ LLM_PROVIDER: 'local', LOCAL_LLM_REASONING_EFFORT: 'max' })).toThrow(/LOCAL_LLM_REASONING_EFFORT/);
     expect(() => resolveProvider({ LLM_PROVIDER: 'local' })).not.toThrow();
   });
 });

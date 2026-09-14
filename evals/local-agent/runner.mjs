@@ -206,6 +206,7 @@ export async function runScenario(scenario, ctx) {
       contextTokens: ctx.profile.context.configuredTokens,
       llmTemperature: ctx.profile.sampling.temperature,
       llmSeed: ctx.profile.sampling.seed,
+      llmReasoningEffort: ctx.profile.sampling.reasoningEffort,
       extraEnv: { LOCAL_LLM_MODEL_DIGEST: ctx.profile.model.manifestDigest, ...(scenario.extraEnv ?? {}) },
       serviceOptions: scenario.serviceOptions ?? {},
     });
@@ -439,7 +440,7 @@ export async function runScenario(scenario, ctx) {
 // ── Whole experiment ───────────────────────────────────────────────────────
 
 async function captureToolSchemas(ctx) {
-  const stack = await startStack({ seed: buildSeed({}), runtimeUrl: ctx.proxy.url, model: ctx.profile.model.name, extraEnv: { LOCAL_LLM_MODEL_DIGEST: ctx.profile.model.manifestDigest } });
+  const stack = await startStack({ seed: buildSeed({}), runtimeUrl: ctx.proxy.url, model: ctx.profile.model.name, llmReasoningEffort: ctx.profile.sampling.reasoningEffort, extraEnv: { LOCAL_LLM_MODEL_DIGEST: ctx.profile.model.manifestDigest } });
   try {
     const client = await stack.mcpClient('agent');
     const { tools } = await client.listTools();

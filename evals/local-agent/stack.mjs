@@ -282,6 +282,7 @@ export async function startStack(options = {}) {
     contextTokens = 8192,
     llmTemperature,
     llmSeed,
+    llmReasoningEffort,
     extraEnv = {},
     logDir,
     serviceOptions = {},
@@ -353,6 +354,7 @@ export async function startStack(options = {}) {
             LOCAL_LLM_CONTEXT_TOKENS: String(contextTokens),
             ...(llmTemperature !== undefined ? { LOCAL_LLM_TEMPERATURE: String(llmTemperature) } : {}),
             ...(llmSeed !== undefined ? { LOCAL_LLM_SEED: String(llmSeed) } : {}),
+            ...(llmReasoningEffort !== undefined ? { LOCAL_LLM_REASONING_EFFORT: String(llmReasoningEffort) } : {}),
           }
         : {}),
       ...extraEnv,

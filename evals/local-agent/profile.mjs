@@ -113,6 +113,12 @@ export async function collectProfile({ id, model, baseUrl, declarations }) {
   const template = layer('template');
   const templateTextDigest = `sha256:${crypto.createHash('sha256').update(show.template ?? '').digest('hex')}`;
   if (template && template.digest !== templateTextDigest) throw new Error(`template layer ${template.digest} != served template ${templateTextDigest}`);
+  // Newer models (qwen3.5) carry no template layer: the config blob names a
+  // built-in renderer and tool-call parser instead. Both are part of the profile.
+  const configPath = path.join(ollamaModelsDir(), 'blobs', manifest.config.digest.replace(':', '-'));
+  if (`sha256:${sha256File(configPath)}` !== manifest.config.digest) throw new Error(`config blob hash differs from manifest ${manifest.config.digest}`);
+  const modelConfig = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+  if (!template && !modelConfig.renderer) throw new Error(`model ${model} has neither a template layer nor a built-in renderer`);
   const weightsPath = path.join(ollamaModelsDir(), 'blobs', weights.digest.replace(':', '-'));
   const weightsActual = `sha256:${sha256File(weightsPath)}`;
   if (weightsActual !== weights.digest) throw new Error(`weights blob hash ${weightsActual} != manifest ${weights.digest}`);
@@ -175,11 +181,21 @@ export async function collectProfile({ id, model, baseUrl, declarations }) {
       layers: manifest.layers.map((l) => ({ mediaType: l.mediaType, digest: l.digest, size: l.size })),
       weights: { digest: weights.digest, sizeBytes: weights.size, verifiedAgainstBlob: true },
       tokenizer: { status: 'not_applicable', reason: `embedded in the GGUF weights blob ${weights.digest}; no separate tokenizer artifact exists` },
-      template: { digest: template?.digest, verifiedAgainstServedTemplate: true },
+      template: template
+        ? { digest: template.digest, verifiedAgainstServedTemplate: true }
+        : {
+            status: 'not_applicable',
+            reason: `no template layer: Ollama renders this model with its built-in renderer '${modelConfig.renderer}', named by the config blob ${manifest.config.digest}`,
+            renderer: modelConfig.renderer,
+            configDigest: manifest.config.digest,
+          },
       capabilities: show.capabilities,
+      ...(declarations.sizeTargetDeviation ? { sizeTargetDeviation: declarations.sizeTargetDeviation } : {}),
     },
     parser: {
-      effective: 'runtime-side: Ollama renders the model template and returns OpenAI tool_calls',
+      effective: modelConfig.parser
+        ? `runtime-side: Ollama's built-in '${modelConfig.parser}' parser returns OpenAI tool_calls`
+        : 'runtime-side: Ollama renders the model template and returns OpenAI tool_calls',
       clientFallback: 'none: RUNTIME_QUIRKS.ollama.hermesXmlToolCalls = false in packages/chat-core/src/providers/local.ts',
     },
     sampling: declarations.sampling,
@@ -214,7 +230,12 @@ export function validateModelProfile(profile) {
   if (profile?.model?.manifestDigest && !DIGEST.test(profile.model.manifestDigest)) errors.push('model.manifestDigest is not sha256:<64 hex>');
   for (const [i, l] of (profile?.model?.layers ?? []).entries()) if (!DIGEST.test(l.digest)) errors.push(`model.layers[${i}].digest is not a sha256 digest`);
   if (profile?.runtime?.binary?.sha256 && !DIGEST.test(profile.runtime.binary.sha256)) errors.push('runtime.binary.sha256 is not a sha256 digest');
-  if (profile?.model?.totalParameters > 9e9) errors.push('model exceeds the 9B total-parameter target of the first profile');
+  // PR05 §4.1 sets ≤9B total parameters as the initial target. A model above it
+  // must carry a written deviation, declared before measuring (profile-declarations.json).
+  const deviation = profile?.model?.sizeTargetDeviation?.reason;
+  if (profile?.model?.totalParameters > 9e9 && !(typeof deviation === 'string' && deviation.trim().length >= 40)) {
+    errors.push('model exceeds the 9B total-parameter target of the first profile and declares no model.sizeTargetDeviation.reason');
+  }
   const emptyHash = 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855';
   if (JSON.stringify(profile ?? {}).includes(emptyHash)) errors.push('profile contains the SHA-256 of an empty input: a digest was not measured');
   return errors;
