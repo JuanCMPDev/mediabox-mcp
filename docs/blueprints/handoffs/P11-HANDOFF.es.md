@@ -14,9 +14,9 @@ corpus se han retirado. El estado consolidado del lote está en
 |---|---|
 | Fase | P11 — evaluación de modelos locales |
 | Lote | PR05, rama `work/local-agent/p10-p11-private-evals` |
-| Candidatos evaluados | `0e813214e817d7575122dd19bb053a4c5943ae82` (experimento 1, perfil lab1) y `81c05f6` (experimento 2, perfil lab2, con las correcciones que salieron del 1) |
+| Candidatos evaluados | `0e813214e817d7575122dd19bb053a4c5943ae82` (experimento 1, perfil lab1), `81c05f6` (experimento 2, perfil lab2, con las correcciones que salieron del 1), `7956db7` (experimento 3, flujo por intención y corpus v3) y `25849f4` (experimento 4, con las correcciones que salieron del 3) |
 | Gates | G10 `gate/model-quality`; `test:eval-harness` en CI sin GPU |
-| Fecha | 2026-09-12 |
+| Fecha | 2026-09-12; experimentos 3 y 4 el 2026-09-13 |
 
 ## 1. Camino real evaluado
 
@@ -167,8 +167,21 @@ Los números y el análisis de cada fallo están en
 
   Lo que falta es calidad del modelo con el diseño actual del agente; ya no
   quedan defectos de infraestructura.
+- **§4.3, experimento 3** sobre `7956db7`: el flujo por intención de
+  [PR05-AGENT-FLOW-HANDOFF.es.md](PR05-AGENT-FLOW-HANDOFF.es.md) con el corpus
+  v3. Resultado not_compatible, con 24–27 éxitos de 60.
+  - STORAGE sube a 3–4/10 y el p95 del primer evento útil baja a 1,1–1,2 s.
+  - DOWNLOAD cae a 1–2/10 por defectos del propio cambio, corregidos en
+    `25849f4`.
+- **§4.4, experimento 4** sobre `25849f4`. Resultado not_compatible, con 36–38
+  éxitos de 60, el mejor hasta ahora.
+  - Todo el rendimiento cumple su umbral.
+  - Las 3 infracciones de alcance por pasada vienen de una carrera del arnés en
+    STORAGE-09, no del agente.
+  - Lo que falta depende de la obediencia del modelo y de oráculos que no
+    reconocen respuestas correctas.
 
 **P11 no está cerrada:** G10 sigue en rojo por calidad y por clase de
 evidencia (`local-lab`).
 
-Los dos se conservan en `evals/evidence/`, y `current.json` apunta al último.
+Los cuatro se conservan en `evals/evidence/`, y `current.json` apunta al último.

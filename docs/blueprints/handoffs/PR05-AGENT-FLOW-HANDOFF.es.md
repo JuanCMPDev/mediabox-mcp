@@ -9,9 +9,9 @@ ese documento (experimento G10 n.º 2, `132a45a`).
 |---|---|
 | Rama | `work/local-agent/p10-p11-private-evals` |
 | Base | `132a45a` |
-| Commits | `5d2aeaa` lecturas MCP y router; `c76dcb4` flujo del agente; el commit de este documento, corpus v3 y documentación |
+| Commits | `5d2aeaa` lecturas MCP y router; `c76dcb4` flujo del agente; `7956db7` corpus v3 y documentación; `25849f4` correcciones que destapó el experimento 3 |
 | Fecha | 2026-09-13 |
-| Estado | Implementado y verificado en local. G10 sigue en rojo: hace falta un experimento nuevo (§8). |
+| Estado | Medido en los experimentos G10 3 y 4 (§9): 36–38 de 60 en el mejor, no compatible. G10 sigue en rojo. |
 
 ## 1. Problema
 
@@ -179,14 +179,15 @@ El prompt se construye con el mismo catálogo que valida el dispatch:
 | `npm test` (todos los workspaces) | 1044/1044: chat-core 445, core 226, mcp-server 359, mediabox-cli 14 |
 | `npm run ci:verify-evidence` | FAIL, esperado: evidencia `local-lab` e incompatible con los umbrales |
 
-No se ha ejecutado ningún experimento G10 con este código.
+Los experimentos G10 3 y 4 midieron este código y sus correcciones (§9).
 
 ## 8. Límites y siguiente paso
 
-- **Pendiente: un experimento G10 nuevo** con este candidato y el corpus v3.
-  Solo ese experimento dirá si el rediseño basta con `qwen2.5:7b`. Si alcanza
-  los umbrales, hay que repetirlo con un controlador confiable (§7.2 del
-  handoff de QA).
+- **G10 no alcanza la calidad exigida** con `qwen2.5:7b` (§9). Hace falta otro
+  modelo, una revisión justificada de oráculos o ambas cosas, y después
+  evidencia de un controlador confiable (§7.2 del handoff de QA).
+- **Carrera de STORAGE-09.** El arnés cancela la conversión cuando ya terminó,
+  y el oráculo lo cuenta como infracción de alcance (§9).
 - **Carpetas grandes.** La compactación muestra al modelo cinco entradas por
   listado y el listado no pagina. El grounding cubre 40 archivos, pero el
   modelo solo ve cinco.
@@ -197,3 +198,30 @@ No se ha ejecutado ningún experimento G10 con este código.
   literal.
 - **Oráculos sin tocar.** Los que rechazan negativas correctas (READ-07,
   ADV-02/04/07) siguen igual.
+
+## 9. Experimentos 3 y 4
+
+El detalle está en los §4.3 y §4.4 de [PR05-QA-HANDOFF.es.md](PR05-QA-HANDOFF.es.md).
+
+| Experimento | Candidato | Éxitos por pasada | STORAGE | DOWNLOAD | Primer evento útil, p95 |
+|---|---|---|---|---|---|
+| 2, diseño anterior | `81c05f6` | 27, 29, 28 | 0/10 | 7–8/10 | infinito |
+| 3, este diseño | `7956db7` | 24, 26, 27 | 3–4/10 | 1–2/10 | 1,1–1,2 s |
+| 4, con correcciones | `25849f4` | 38, 37, 36 | 4–5/10 | 6–7/10 | 1,0–1,1 s |
+
+El experimento 3 destapó defectos del propio cambio, corregidos en `25849f4`:
+- la línea "Next" de descarga pedía el año, y el modelo lo inventaba;
+- el formato de argumentos de un modelo pequeño chocaba con la validación:
+  `null` en parámetros opcionales, mayúsculas en enums y tamaños de página fuera
+  de rango. Ahora se normaliza contra el esquema publicado antes de validar, y
+  las propiedades desconocidas y los tipos erróneos siguen siendo estrictos;
+- los esquemas no mostraban los tipos del catálogo, los límites de página ni
+  los perfiles de conversión;
+- `manage_files list` no aceptaba la ruta de un archivo, que es como Jellyfin
+  informa de una película;
+- las sesiones activas se confundían con el historial, y las peticiones
+  reservadas al owner recibían tarjetas.
+
+El experimento 4 registra 3 infracciones de alcance por pasada, todas de
+STORAGE-09. Las causa una carrera del arnés, no el agente: el trabajo aprobado
+termina antes de la cancelación programada.
