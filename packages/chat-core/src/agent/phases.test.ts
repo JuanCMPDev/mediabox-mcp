@@ -92,12 +92,20 @@ describe('Phased Tool Catalog & Schema Bounds (§2.3 / AGT-11)', () => {
     }
   });
 
-  it('gives every read-only intent the same local reads in every phase but maintain', () => {
-    for (const intentKind of ['queue', 'status', 'library', 'server', 'owner_only'] as const) {
+  it('gives every read-only intent its local reads in every phase but maintain', () => {
+    // READ-14, experiment 6: asked about downloaded episodes, qwen3.5 read the queue
+    // instead of the library. Library and server questions never see the queue.
+    const expected: Record<string, string[]> = {
+      library: ['server_info', 'media_query', 'operations', 'present_choices'],
+      server: ['server_info', 'media_query', 'operations', 'present_choices'],
+      queue: ['server_info', 'media_query', 'downloads', 'operations', 'present_choices'],
+      status: ['server_info', 'media_query', 'downloads', 'operations', 'present_choices'],
       // No card can perform an owner-only action, so owner-only requests get none.
-      const expected = ['server_info', 'media_query', 'downloads', 'operations', ...(intentKind === 'owner_only' ? [] : ['present_choices'])];
+      owner_only: ['server_info', 'media_query', 'downloads', 'operations'],
+    };
+    for (const [intentKind, names] of Object.entries(expected)) {
       for (const phase of ['orient', 'discover', 'select', 'propose', 'monitor'] as const) {
-        expect(getPhaseTools(phase, { intentKind }).map(t => t.name), `${phase}/${intentKind}`).toEqual(expected);
+        expect(getPhaseTools(phase, { intentKind: intentKind as WorkflowIntent['kind'] }).map(t => t.name), `${phase}/${intentKind}`).toEqual(names);
       }
     }
     expect(getPhaseTools('orient', { intentKind: 'maintenance' }).map(t => t.name))
@@ -117,7 +125,11 @@ describe('Phased Tool Catalog & Schema Bounds (§2.3 / AGT-11)', () => {
   it('makes queue reads and library filtering reachable after an earlier proposal', () => {
     for (const phase of ['orient', 'select', 'propose', 'monitor'] as const) {
       expect(actions(phase, 'queue', 'downloads')).toEqual(['status', 'list_queue']);
+      // A status question may still check the queue before calling a download available.
+      expect(actions(phase, 'status', 'downloads')).toEqual(['status', 'list_queue']);
       expect(actions(phase, 'library', 'media_query')).toContain('list');
+      expect(actions(phase, 'library', 'downloads')).toEqual([]);
+      expect(actions(phase, 'server', 'downloads')).toEqual([]);
     }
   });
 });

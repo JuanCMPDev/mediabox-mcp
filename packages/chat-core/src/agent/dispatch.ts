@@ -5,10 +5,18 @@ import _Ajv from 'ajv';
 const AjvClass: any = (_Ajv as any).default ?? _Ajv;
 import type { VirtualToolDef, McpCallFn } from '../types.js';
 import { executeVirtualTool, resolveVirtualCall } from '../tool-router.js';
-import { detectToolFailure, extractToolFailureMessage } from '../result-budget.js';
+import { detectToolFailure, extractToolFailureMessage, safeSlice } from '../result-budget.js';
 import { computeArgsHash, computeResultDigest } from './guards.js';
 import { AgentError } from './errors.js';
-import { canonicalPathKey, observedMediaRefs, observedReleaseRefs, type WorkflowReferences } from './workflow.js';
+import { TOOL_RESULT_STRING_CAP } from './budget.js';
+import {
+  canonicalPathKey,
+  isValidMediaRef,
+  isValidReleaseRef,
+  observedMediaRefs,
+  observedReleaseRefs,
+  type WorkflowReferences,
+} from './workflow.js';
 
 const ajv = new AjvClass({
   strict: false, // schemas may lack draft declaration
@@ -220,9 +228,20 @@ export function validateProposalGrounding(
 
 export const LIBRARY_MATCH_NOTE = 'No catalog match; the local library has the titles listed in `library`. Answer from them.';
 export const NOTHING_FOUND_NOTE = 'No match in the catalog or in the local library.';
+/**
+ * A service that did not answer will not answer the same call later in the turn.
+ * SEARCH-10, experiment 6: with Sonarr down, qwen3.5 repeated the identical catalog
+ * search until ERR_LOOP_DETECTED. Fits the 120 characters compaction keeps of `message`.
+ */
+export const UPSTREAM_UNAVAILABLE_NOTE = 'The service did not answer. Do not repeat this call in this turn; tell the user its results are unavailable.';
 
 const CATALOG_TO_LIBRARY_TYPE: Record<string, string> = { movie: 'Movie', series: 'Series' };
 const LIBRARY_FALLBACK_ITEMS = 5;
+/** Room for each query a retry note quotes, so the note fits TOOL_RESULT_STRING_CAP. */
+const NOTE_QUERY_CAP = 34;
+
+const isRecord = (value: unknown): value is Record<string, any> =>
+  !!value && typeof value === 'object' && !Array.isArray(value);
 
 /** Sources of an envelope that did not answer completely. */
 function incompleteSources(parsed: any): string[] {
@@ -233,14 +252,184 @@ function incompleteSources(parsed: any): string[] {
 }
 
 /**
- * Turns results the model misread in G10 experiment 5 into ones it can answer from.
+ * The note of a partial result: missing is not absent (READ-10, SEARCH-10), and the
+ * call is not repeated. SEARCH-10, experiment 6: with Sonarr down, qwen3.5 repeated
+ * the identical search until ERR_LOOP_DETECTED. Names that would push the note past
+ * the 120 characters compaction keeps become a count.
+ */
+export function incompleteNote(missing: string[]): string {
+  const note = (names: string) => `Incomplete: ${names} did not answer. Say so; do not call its results absent. Do not repeat the call in this turn.`;
+  const named = note(missing.join(', '));
+  if (named.length <= TOOL_RESULT_STRING_CAP) return named;
+  return note(missing.length === 1 ? 'a source' : `${missing.length} sources`);
+}
+
+/** A leading type word ("película", "the movie", "la serie"), with its article if any. */
+const TYPE_WORD = /^(?:(la|el|los|las|un|una|the|a|an)\s+)?(?:pel[ií]culas?|films?|movies?|series?|shows?|documental(?:es)?|documentar(?:y|ies)|animes?)(?=[\s:]|$)/iu;
+/** A linking word after the type word: "película del …", "a film called …". */
+const TYPE_LINK = /^\s+(del|de|of|called|llamad[ao]s?|titulad[ao]s?)\s+(?=\S)/iu;
+/**
+ * The article after "de"/"of" when it is lowercase. Case-sensitive on purpose (review
+ * finding D1): "la serie de Los Guardianes del Puerto" keeps "Los", the title's own
+ * article, while "Pelicula de la Tierra Media" drops "la". Trade-off: in an all-
+ * lowercase "película de las estrellas" the article is dropped even if the title is
+ * "Las estrellas"; the shorter query still matches it as a substring in Jellyfin.
+ */
+const LINK_ARTICLE = /^(?:la|los|las|el|the)\s+(?=\S)/u;
+/** A separator between the type word and the title: "película: Eclipse", "película - Eclipse". */
+const TYPE_SEPARATOR = /^\s*:\s*|^\s+[-–—]\s+/u;
+const QUOTE_CHARS = `"'“”‘’«»„`;
+const OPENING_QUOTE = new RegExp(`^\\s+(?=[${QUOTE_CHARS}])`, 'u');
+const STARTS_WITH_QUOTE = new RegExp(`^[${QUOTE_CHARS}]`, 'u');
+const EDGE_QUOTE = new RegExp(`^[${QUOTE_CHARS}]|[${QUOTE_CHARS}]$`, 'u');
+/**
+ * A quoted title, optionally followed by its year, bare or in parentheses, after an
+ * optional comma and "de", "del", "from" or "of": '"Eclipse"', '"Eclipse" (2017)',
+ * '«Eclipse» 2017', '"Eclipse", de 2017' (review findings D1 and F5).
+ */
+const QUOTED_TITLE = new RegExp(
+  `^[${QUOTE_CHARS}]+(.+?)[${QUOTE_CHARS}]+(?:\\s*[,;:]?\\s*(?:(?:de|del|from|of)\\s+)?(?:\\(((?:19|20)\\d{2})\\)|((?:19|20)\\d{2})))?$`,
+  'iu',
+);
+/** Sentence punctuation after the query: '"Eclipse" (2017).' (review finding F5). */
+const TRAILING_PUNCTUATION = /\s*[.,;!?]+$/u;
+
+/**
+ * Drops the quotes around a title that opens with one. A quoted title followed by its
+ * year becomes "Title (YYYY)", the form splitTitleYear (tool-router.ts) splits: review
+ * finding F5 saw '«Eclipse» 2017' become "Eclipse 2017", which lost the year, and
+ * 'Película "Eclipse", de 2017' become 'Eclipse", de 2017'. Only a quoted title gets
+ * its year this way, so "Blade Runner 2049" keeps its number. An opening quote without
+ * its closing one gives undefined rather than a title with one quote stripped.
+ */
+function unquoteTitle(text: string): string | undefined {
+  const trimmed = text.trim();
+  if (!STARTS_WITH_QUOTE.test(trimmed)) return trimmed;
+  const quoted = QUOTED_TITLE.exec(trimmed);
+  const title = quoted?.[1].trim();
+  if (!quoted || !title) return undefined;
+  const year = quoted[2] ?? quoted[3];
+  return year ? `${title} (${year})` : title;
+}
+
+/**
+ * Drops a leading type phrase only when something marks the type word as not part of
+ * the title (review finding D1): an article before it ("la serie Marea Alta"), a
+ * linking word after it ("película del colibrí azul"), a separator ("película:
+ * Eclipse") or a quoted title ('película "Eclipse"'). A bare type word may be the
+ * title's own first word: "Serie Ñandú", "Movie 43" and "Show Me Love" stay whole.
+ */
+function stripTypePhrase(text: string): string {
+  const head = TYPE_WORD.exec(text);
+  if (!head) return text;
+  let rest = text.slice(head[0].length);
+  const link = TYPE_LINK.exec(rest);
+  if (link) {
+    rest = rest.slice(link[0].length);
+    if (/^(?:de|of)$/i.test(link[1])) rest = rest.replace(LINK_ARTICLE, '');
+  } else if (TYPE_SEPARATOR.test(rest)) {
+    rest = rest.replace(TYPE_SEPARATOR, '');
+  } else if (head[1] === undefined && !OPENING_QUOTE.test(rest)) {
+    return text;
+  }
+  rest = rest.trim();
+  return rest.length > 0 ? rest : text;
+}
+
+/**
+ * The title inside a query that wraps it in a type phrase or in quotes. READ-13,
+ * experiments 5 and 6: "Busca la película del colibrí azul" was searched as
+ * "película del colibrí azul", which matches no title, and the answer was that the
+ * film did not exist. Undefined when nothing changes or nothing is left, so a plain
+ * title ("El Señor de los Anillos") is never searched twice. Undefined too when a quote
+ * is unbalanced: the query stays as the model wrote it (review finding F5).
+ */
+export function normalizeTitleQuery(query: unknown): string | undefined {
+  if (typeof query !== 'string') return undefined;
+  // Trailing sentence punctuation is not part of the title, but dropping it alone is
+  // no new query: "Airplane!" is still searched once (F5).
+  const sentence = query.normalize('NFC').trim().replace(TRAILING_PUNCTUATION, '');
+  const outer = unquoteTitle(sentence);
+  const title = outer === undefined ? undefined : unquoteTitle(stripTypePhrase(outer));
+  // A quote left at either edge lost its pair.
+  if (!title || EDGE_QUOTE.test(title) || title === sentence) return undefined;
+  return title;
+}
+
+function clipForNote(text: string): string {
+  return text.length > NOTE_QUERY_CAP ? `${safeSlice(text, NOTE_QUERY_CAP - 1)}…` : text;
+}
+
+/** Says that the results answer the normalized query, not the one the model wrote. */
+export function retryNote(original: string, normalized: string): string {
+  return `No match for "${clipForNote(original)}"; these results are for "${clipForNote(normalized)}".`;
+}
+
+/**
+ * The normalized title a search result answers when it is the retry of an empty search,
+ * which the result's message says with retryNote. Undefined for every other result: a
+ * search that found items as written answers its own query. Review finding F3: a
+ * search for "El Show de Truman" is not a search for "Truman".
+ */
+export function retriedTitle(query: unknown, message: unknown): string | undefined {
+  if (typeof query !== 'string' || typeof message !== 'string') return undefined;
+  const normalized = normalizeTitleQuery(query);
+  return normalized !== undefined && message === retryNote(query.trim(), normalized) ? normalized : undefined;
+}
+
+/** An extra read made on behalf of a result. It goes through mcpCall, so it is audited like any call. */
+async function readJson(mcpCall: McpCallFn, tool: string, toolArgs: Record<string, unknown>, signal?: AbortSignal): Promise<any> {
+  try {
+    return JSON.parse(await mcpCall(tool, toolArgs, { signal }));
+  } catch {
+    return undefined;
+  }
+}
+
+interface TitleRetry {
+  /** The retried result with its note, when the retry found items. */
+  result?: string;
+  /** Sources the retry reported as incomplete. */
+  missing: string[];
+}
+
+/**
+ * Repeats an empty search once with the normalized title (READ-13). The first call
+ * always goes as the model wrote it. The retry is resolved by the same router, so
+ * type, year and page size keep their handling, and its note says which query the
+ * results answer. A retry with incomplete sources carries incompleteNote instead
+ * (review finding D2): the model must hear that a source did not answer, as it does
+ * for a first result.
+ */
+async function retryWithTitle(
+  toolName: 'catalog' | 'media_query',
+  args: Record<string, unknown>,
+  normalized: string,
+  mcpCall: McpCallFn,
+  signal?: AbortSignal,
+): Promise<TitleRetry> {
+  const call = resolveVirtualCall(toolName, { action: 'search', query: normalized, type: args.type, year: args.year, pageSize: args.pageSize });
+  const retried = await readJson(mcpCall, call.tool, call.args, signal);
+  if (!isRecord(retried) || retried.status === 'error' || retried.error !== undefined) return { missing: [] };
+  const missing = incompleteSources(retried);
+  const items = toolName === 'catalog' ? retried.data : retried.results;
+  if (!Array.isArray(items) || items.length === 0) return { missing };
+  const message = missing.length > 0 ? incompleteNote(missing) : retryNote(String(args.query).trim(), normalized);
+  return { result: JSON.stringify({ ...retried, message }), missing };
+}
+
+/**
+ * Turns results the model misread in G10 into ones it can answer from.
  * - A partial result names the sources that did not answer, so missing data is
- *   not reported as absent (READ-10, SEARCH-10).
+ *   not reported as absent (READ-10, SEARCH-10), and says not to repeat the call.
+ * - An empty search whose query wraps the title in a type phrase is repeated once
+ *   with the title alone (READ-13, experiments 5 and 6).
  * - An empty, complete catalog search is completed with a library search. The
  *   catalog covers Radarr/Sonarr, and a title that only exists in the library
  *   was reported as missing (READ-13). A hint alone made the model invent
  *   library results instead of searching, so the runtime searches itself.
- * Notes go in `message` and matches in `library`, which compaction keeps.
+ * At most two extra MCP calls per result. Notes go in `message` and matches in
+ * `library`, which compaction keeps.
  */
 async function annotateResult(
   toolName: string,
@@ -256,31 +445,118 @@ async function annotateResult(
   } catch {
     return raw;
   }
-  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed) || parsed.message !== undefined) return raw;
+  if (!isRecord(parsed) || parsed.message !== undefined) return raw;
 
   const missing = incompleteSources(parsed);
   if (missing.length > 0) {
-    return JSON.stringify({ ...parsed, message: `Incomplete: ${missing.join(', ')} did not answer, so its results are missing. Say so; do not call them absent.` });
+    return JSON.stringify({ ...parsed, message: incompleteNote(missing) });
   }
-  if (toolName !== 'catalog' || args.action !== 'search' || !Array.isArray(parsed.data) || parsed.data.length > 0) return raw;
-  if (!exposedTools.some(t => t.name === 'media_query')) return raw;
+  if (args.action !== 'search') return raw;
+  const normalized = normalizeTitleQuery(args.query);
+  if (toolName === 'media_query') {
+    if (!normalized || !Array.isArray(parsed.results) || parsed.results.length > 0) return raw;
+    return (await retryWithTitle('media_query', args, normalized, mcpCall, signal)).result ?? raw;
+  }
+  if (toolName !== 'catalog' || !Array.isArray(parsed.data) || parsed.data.length > 0) return raw;
   // Only a result that declares its sources complete is known to be empty.
   if (!Array.isArray(parsed.sources) || !parsed.sources.some((s: any) => s?.completeness === 'complete')) return raw;
 
+  // Sources the title retry reported as incomplete. With them, "no match" is not
+  // known for the title, so the no-match note gives way to incompleteNote (D2).
+  let retryMissing: string[] = [];
+  if (normalized) {
+    const retry = await retryWithTitle('catalog', args, normalized, mcpCall, signal);
+    if (retry.result) return retry.result;
+    retryMissing = retry.missing;
+  }
+  const retryIncomplete = retryMissing.length > 0 ? incompleteNote(retryMissing) : undefined;
+  if (!exposedTools.some(t => t.name === 'media_query')) {
+    return retryIncomplete ? JSON.stringify({ ...parsed, message: retryIncomplete }) : raw;
+  }
+
   const { args: libraryArgs } = resolveVirtualCall('media_query', {
     action: 'search',
-    query: args.query,
+    query: normalized ?? args.query,
     type: CATALOG_TO_LIBRARY_TYPE[String(args.type ?? '')],
     year: args.year,
   });
+  const library = await readJson(mcpCall, 'jellyfin_search', { ...libraryArgs, pageSize: LIBRARY_FALLBACK_ITEMS }, signal);
+  if (!Array.isArray(library?.results)) return raw;
+  const matches = library.results.slice(0, LIBRARY_FALLBACK_ITEMS).map((r: any) => ({ name: r?.name, type: r?.type, year: r?.year, id: r?.id }));
+  const emptyNote = retryIncomplete ?? NOTHING_FOUND_NOTE;
+  return JSON.stringify({ ...parsed, message: matches.length > 0 ? LIBRARY_MATCH_NOTE : emptyNote, library: matches });
+}
+
+/**
+ * A failed result from a service that did not answer (ERR_UPSTREAM_UNAVAILABLE) says
+ * not to repeat the call (SEARCH-10, experiment 6). The `error` object stays;
+ * validation rejections and every other code are left as they are.
+ */
+function annotateFailure(raw: string): string {
+  let parsed: unknown;
   try {
-    const library = JSON.parse(await mcpCall('jellyfin_search', { ...libraryArgs, pageSize: LIBRARY_FALLBACK_ITEMS }, { signal }));
-    if (!Array.isArray(library?.results)) return raw;
-    const matches = library.results.slice(0, LIBRARY_FALLBACK_ITEMS).map((r: any) => ({ name: r?.name, type: r?.type, year: r?.year, id: r?.id }));
-    return JSON.stringify({ ...parsed, message: matches.length > 0 ? LIBRARY_MATCH_NOTE : NOTHING_FOUND_NOTE, library: matches });
+    parsed = JSON.parse(raw);
   } catch {
     return raw;
   }
+  if (!isRecord(parsed) || parsed.message !== undefined) return raw;
+  if (!isRecord(parsed.error) || parsed.error.code !== 'ERR_UPSTREAM_UNAVAILABLE') return raw;
+  return JSON.stringify({ ...parsed, message: UPSTREAM_UNAVAILABLE_NOTE });
+}
+
+/**
+ * `path` for `paths` in a deletion proposal. STORAGE-02, experiment 6: qwen3.5 called
+ * library_ops({"action":"propose_delete","path":"media:movies/…"}) in three passes of
+ * three; the router reads only `paths`, so the call failed until the loop guard. Only
+ * the name of the argument changes: grounding still checks the path against the
+ * listing, and DispatchResult.args carries the renamed form the runtime derives the
+ * proposal targets from.
+ */
+function aliasDeletePath(toolName: string, args: Record<string, unknown>): Record<string, unknown> {
+  if (toolName !== 'library_ops' || !isRecord(args) || args.action !== 'propose_delete' || args.paths !== undefined) return args;
+  if (typeof args.path !== 'string' || args.path.trim().length === 0) return args;
+  const { path, ...rest } = args;
+  return { ...rest, paths: [path] };
+}
+
+/** The reference arguments each catalog action forwards to the MCP server. */
+const CATALOG_REF_FIELDS: Record<string, Array<'mediaRef' | 'releaseRef'>> = {
+  details: ['mediaRef'],
+  releases: ['mediaRef'],
+  propose_download: ['releaseRef', 'mediaRef'],
+};
+/** Room for the value a reference error quotes, so two errors fit the 300-character error cap. */
+const REF_ECHO_CAP = 24;
+
+function describeRef(field: 'mediaRef' | 'releaseRef', value: unknown): string {
+  const text = typeof value === 'string' ? value.trim() : String(value);
+  const shown = `'${text.length > REF_ECHO_CAP ? `${safeSlice(text, REF_ECHO_CAP - 1)}…` : text}'`;
+  if (field === 'mediaRef') {
+    return text.startsWith('rref_')
+      ? `mediaRef ${shown} is a releaseRef. Use the mediaRef (mref_...) of a catalog(action:"search") result.`
+      : `mediaRef ${shown} is not a catalog reference (media_query ids are not). Use the mediaRef (mref_...) of a catalog(action:"search") result.`;
+  }
+  return text.startsWith('mref_')
+    ? `releaseRef ${shown} is a mediaRef. Use a releaseRef (rref_...) from a catalog(action:"releases") result.`
+    : `releaseRef ${shown} is not a release reference. Use a releaseRef (rref_...) from a catalog(action:"releases") result.`;
+}
+
+/**
+ * Names a catalog reference of the wrong kind before it reaches the MCP server.
+ * SEARCH-10, experiment 5: qwen2.5 sent mediaRef "jf-series-guard", a media_query id,
+ * to releases and details; ADV-02, experiment 5: it sent rref_7f3a9c2e1b4d as the
+ * mediaRef of details. The server's refusal did not say which token to use instead.
+ */
+function describeInvalidRefs(toolName: string, args: Record<string, unknown>): string | undefined {
+  if (toolName !== 'catalog' || !isRecord(args)) return undefined;
+  const problems: string[] = [];
+  for (const field of CATALOG_REF_FIELDS[String(args.action)] ?? []) {
+    const value = args[field];
+    if (value === undefined) continue;
+    const valid = field === 'mediaRef' ? isValidMediaRef(value) : isValidReleaseRef(value);
+    if (!valid) problems.push(describeRef(field, value));
+  }
+  return problems.length > 0 ? problems.join(' ') : undefined;
 }
 
 export async function dispatchToolCall(opts: {
@@ -296,10 +572,28 @@ export async function dispatchToolCall(opts: {
   const { toolName, exposedTools, mcpCall, timeoutMs = 150_000, signal } = opts;
   const argsHash = computeArgsHash(opts.args);
   const t0 = Date.now();
-  const args = normalizeArgs(opts.args, exposedTools.find(t => t.name === toolName)?.parameters);
+  const args = aliasDeletePath(toolName, normalizeArgs(opts.args, exposedTools.find(t => t.name === toolName)?.parameters));
 
   // 1. Validation before dispatch (§2.5 / AGT-01)
   const schemaValidation = validateToolCall(toolName, args, exposedTools);
+  // A catalog reference of the wrong kind never reaches the MCP server. The call
+  // failed rather than being rejected, so it never consumes the single schema repair.
+  const refError = schemaValidation.valid ? describeInvalidRefs(toolName, args) : undefined;
+  if (refError) {
+    const errorPayload = JSON.stringify({ status: 'error', error: { code: 'ERR_REF_INVALID', message: refError } });
+    return {
+      tool: toolName,
+      args,
+      argsHash,
+      result: errorPayload,
+      resultDigest: computeResultDigest(errorPayload),
+      ok: false,
+      rejected: false,
+      errorCode: 'ERR_REF_INVALID',
+      errorMessage: refError,
+      durationMs: Date.now() - t0,
+    };
+  }
   const validation = schemaValidation.valid
     ? validateProposalGrounding(toolName, args, opts.references, opts.referenceTime)
     : schemaValidation;
@@ -381,7 +675,7 @@ export async function dispatchToolCall(opts: {
   const durationMs = Date.now() - t0;
   const failed = detectToolFailure(rawResult);
   const ok = !failed && !errorMessage;
-  const resultText = ok ? await annotateResult(toolName, args, rawResult, exposedTools, mcpCall, signal) : rawResult;
+  const resultText = ok ? await annotateResult(toolName, args, rawResult, exposedTools, mcpCall, signal) : annotateFailure(rawResult);
 
   return {
     tool: toolName,

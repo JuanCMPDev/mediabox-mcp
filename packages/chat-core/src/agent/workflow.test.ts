@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  INTENT_SUMMARY_MAX_CHARS,
   REFERENCE_LIMITS,
   canonicalPathKey,
   createInitialWorkflowState,
@@ -131,6 +132,43 @@ describe('Intent and prerequisite based workflow', () => {
     }
   });
 
+  describe('a media selection without a release drops derived references, even for the media in focus (D4)', () => {
+    const E2004 = 'mref_e0c1a5e02004';
+    const E2017 = 'mref_e0c1a5e02017';
+    const R2017 = 'rref_e0c1a5e02017';
+    const eclipse = { kind: 'download' as const, summary: 'Quiero descargar la película Eclipse', subjects: ['eclipse'] };
+    // One search returned both films (cards for 2004 and 2017); the focus is the first.
+    const searched = result(seed('download', { intent: eclipse }), 'catalog', { mediaRef: E2004, mediaRefs: [E2004, E2017] });
+    // The model read the releases of 2017; that read left the focus on 2004.
+    const read = result(searched, 'catalog', { releaseRef: R2017, releaseRefs: [R2017] });
+
+    it('a click on the card in focus leaves no release of the other film grounded', () => {
+      expect(read.references.mediaRef).toBe(E2004);
+      expect(read.phase).toBe('propose');
+
+      const clicked = reduce(read, { type: 'typed_selection', selection: { type: 'select_candidate', value: 'Eclipse (2004)', mediaRef: E2004 } }, clock);
+      expect(clicked.references.mediaRef).toBe(E2004);
+      expect(clicked.references.releaseRef).toBeUndefined();
+      expect(clicked.references.releaseRefs).toBeUndefined();
+      expect(hasProposalGrounding('download', clicked.references)).toBe(false);
+      expect(clicked.phase).toBe('select');
+      const proposal = validateProposalGrounding('catalog', { action: 'propose_download', releaseRef: R2017, mediaRef: E2017 }, clicked.references, clock());
+      expect(proposal.valid).toBe(false);
+      // The other film stays observed: reading its releases again would ground them again.
+      expect(clicked.references.mediaRefs).toEqual([E2017, E2004]);
+    });
+
+    it('a select_release keeps the release it carries', () => {
+      const chosen = reduce(read, {
+        type: 'typed_selection',
+        selection: { type: 'select_release', value: 'Eclipse (2017) 1080p', mediaRef: E2017, releaseRef: R2017 },
+      }, clock);
+      expect(chosen.references).toMatchObject({ mediaRef: E2017, releaseRef: R2017, releaseRefs: [R2017] });
+      expect(chosen.phase).toBe('propose');
+      expect(validateProposalGrounding('catalog', { action: 'propose_download', releaseRef: R2017 }, chosen.references, clock()).valid).toBe(true);
+    });
+  });
+
   it('keeps each analysis per file: a listed but unanalyzed file cannot be proposed', () => {
     const changed = result(seed('convert', { phase: 'propose', references: { paths, inspectedPaths: paths } }), 'library_ops', { paths: ['films/Amelie.mkv'] });
     expect(changed.references.inspectedPaths).toEqual(paths);
@@ -182,6 +220,40 @@ describe('Intent and prerequisite based workflow', () => {
     expect(refined.phase).toBe('monitor');
     expect(result(refined, 'catalog', { releaseRef: 'rref_arrival' }).phase).toBe('monitor');
     expect(refined.proposals).toEqual(monitoring.proposals);
+  });
+});
+
+describe('A same-kind follow-up keeps the summary of the request it continues (review F2)', () => {
+  const japanese: WorkflowIntent = { kind: 'download', summary: 'Descarga Río Quieto con audio en japonés.', subjects: ['quieto', 'japones'] };
+  const first = reduce(seed('download', { intent: undefined, phase: 'orient' }), {
+    type: 'user_message', text: japanese.summary, intent: japanese, suggestedPhase: 'discover',
+  }, clock);
+  const follow = (state: WorkflowState, text: string, kind: WorkflowIntent['kind'] = 'download', subjects: string[] = []) =>
+    reduce(state, { type: 'user_message', text, intent: { kind, summary: text, subjects }, suggestedPhase: 'discover' }, clock);
+
+  it('appends a follow-up without subject words ("Sí, descárgala.")', () => {
+    expect(first.intent?.summary).toBe(japanese.summary);
+    const next = follow(first, 'Sí, descárgala.');
+    expect(next.intent?.kind).toBe('download');
+    expect(next.intent?.summary).toBe('Descarga Río Quieto con audio en japonés. Sí, descárgala.');
+  });
+
+  it('appends a follow-up that names the same subject', () => {
+    expect(follow(first, 'Descarga Río Quieto en 1080p.', 'download', ['quieto']).intent?.summary)
+      .toBe('Descarga Río Quieto con audio en japonés. Descarga Río Quieto en 1080p.');
+  });
+
+  it('replaces the summary for a new subject or another kind', () => {
+    expect(follow(first, 'Descarga Eclipse.', 'download', ['eclipse']).intent?.summary).toBe('Descarga Eclipse.');
+    expect(follow(first, '¿Qué hay en la cola?', 'queue').intent?.summary).toBe('¿Qué hay en la cola?');
+  });
+
+  it('does not repeat a message and stays within the summary bound', () => {
+    expect(follow(first, japanese.summary, 'download', ['quieto']).intent?.summary).toBe(japanese.summary);
+    let state = first;
+    for (let i = 0; i < 40; i++) state = follow(state, `Sí, descárgala ya, número ${i}.`);
+    expect(state.intent!.summary.length).toBeLessThanOrEqual(INTENT_SUMMARY_MAX_CHARS + 1);
+    expect(state.intent!.summary.startsWith(japanese.summary)).toBe(true);
   });
 });
 

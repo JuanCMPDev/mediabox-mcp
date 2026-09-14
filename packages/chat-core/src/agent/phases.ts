@@ -87,11 +87,23 @@ const PHASE_SPECS: Record<Phase, CatalogEntry[]> = {
   ],
 };
 
-/** Local reads shared by every read-only intent: queue, status, library, server, owner_only. */
+/** Local reads of the queue, status and owner_only intents. */
 const READ_CATALOG: CatalogEntry[] = [
   { name: 'server_info', allowedActions: ['status', 'activity'] },
   { name: 'media_query', allowedActions: LOCAL_READS },
   { name: 'downloads',   allowedActions: ['status', 'list_queue'] },
+  PLAN_STATUS,
+];
+
+/**
+ * Library and server questions are answered without the download queue. READ-14,
+ * experiment 6: asked how many episodes of a series it had "descargados", qwen3.5
+ * read the queue in two passes of three instead of the library. No library or server
+ * scenario of the corpus requires download_queue.
+ */
+const LOCAL_CATALOG: CatalogEntry[] = [
+  { name: 'server_info', allowedActions: ['status', 'activity'] },
+  { name: 'media_query', allowedActions: LOCAL_READS },
   PLAN_STATUS,
 ];
 
@@ -132,10 +144,11 @@ function catalogFor(phase: Phase, intentKind: IntentKind | undefined): CatalogEn
         { name: 'media_query', allowedActions: LOCAL_READS },
         PLAN_STATUS,
       ];
-    case 'queue':
-    case 'status':
     case 'library':
     case 'server':
+      return LOCAL_CATALOG;
+    case 'queue':
+    case 'status':
     case 'owner_only':
       return READ_CATALOG;
     default:

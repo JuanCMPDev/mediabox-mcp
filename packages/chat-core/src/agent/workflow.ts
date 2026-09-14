@@ -221,6 +221,15 @@ function clampSummary(summary: string): string {
     : clean;
 }
 
+/**
+ * The summary of a request that a message continues: the earlier summary, then the
+ * message, bounded like any summary. A message already in it is not repeated.
+ */
+function appendSummary(previous: string, next: string): string {
+  if (!next || previous.includes(next)) return previous;
+  return clampSummary(`${previous} ${next}`);
+}
+
 function normalizeIntent(intent: WorkflowIntent): WorkflowIntent {
   return {
     ...intent,
@@ -467,9 +476,17 @@ export function reduce(
       // A read without subject words ("show the queue") keeps the subjects of the
       // request it interrupts, and with them its references, so that request can
       // resume afterwards ("ok, download it").
-      const intent = incoming && reads && !incoming.subjects?.length && previous?.subjects?.length
+      const carried = incoming && reads && !incoming.subjects?.length && previous?.subjects?.length
         ? { ...incoming, subjects: previous.subjects }
         : incoming ?? previous;
+      // A message of the same kind that names no new subject continues the request, so
+      // its summary keeps the earlier messages (review finding F2). After "Descarga Río
+      // Quieto con audio en japonés." and "Sí, descárgala." the summary had lost
+      // "japonés", and the runtime, which reads the language and resolution of the
+      // request from it, took a releases read without audioLanguage for the target.
+      const intent = carried && incoming && previous && !startsNewRequest && incoming.kind === previous.kind
+        ? { ...carried, summary: appendSummary(previous.summary, incoming.summary) }
+        : carried;
       const grounded = { references, candidates, proposals: state.proposals, intent };
       let nextPhase = state.phase;
       if (reads) {
@@ -524,8 +541,13 @@ export function reduce(
 
       if (isValidMediaRef(sel.mediaRef)) {
         const media = sel.mediaRef!.trim();
-        // Choosing another entity drops what was derived for the previous one.
-        if (newRefs.mediaRef !== media) clearDerived(newRefs);
+        // Choosing another entity drops what was derived for the previous one. So does
+        // choosing a media without a release (select_candidate), even the one in focus
+        // (review finding D4): after cards for Eclipse 2004 and 2017, a read of the 2017
+        // releases left the focus on 2004, and a click on 2004 kept the 2017 releaseRef
+        // grounded, so propose_download stayed reachable for the film not chosen. A
+        // select_release keeps its releaseRef: it is set again just below.
+        if (newRefs.mediaRef !== media || !isValidReleaseRef(sel.releaseRef)) clearDerived(newRefs);
         newRefs.mediaRef = media;
         newRefs.mediaRefs = mergeBounded(newRefs.mediaRefs, [media], REFERENCE_LIMITS.mediaRefs);
         touched = true;
