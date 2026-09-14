@@ -24,6 +24,7 @@ y [P11-HANDOFF.es.md](P11-HANDOFF.es.md).
 | Experimento G10 n.º 5 | candidato `b041854`, evidencia en `cf14341` (§4.6) |
 | Corpus v5, correcciones y perfil lab3 | `37996bb` corpus v5 (§4.7); `025ea7a` producto (§5); `6349bb9` perfil lab3 con `qwen3.5:9b` (§6) |
 | Experimento G10 n.º 6 | candidato `1624dd8`, evidencia en `3bcdf9b` (§4.8) |
+| Pasos que completa el runtime | `6f0d035` datos del servidor MCP; `7c6b9a7` dispatch, catálogos y reducer; `88831c7` runtime y prompt (§5, §6; [PR05-AGENT-FLOW-HANDOFF.es.md](PR05-AGENT-FLOW-HANDOFF.es.md) §2.4) |
 | Fecha | 2026-09-12; experimentos 3, 4 y 5 el 2026-09-13; experimento 6 el 2026-09-14 |
 | Veredicto | ver §1 |
 
@@ -702,6 +703,51 @@ Defectos del experimento 5 (§4.6), corregidos a continuación:
 | Una propuesta correcta en la última inferencia dejaba el turno sin respuesta y terminaba en la guarda de presupuesto (STORAGE-01). | La respuesta se construye a partir del resultado de la propuesta, con sus avisos. | `runtime-liveness.test.ts` |
 | El runtime descartaba una completación de 30 tokens, también en el reintento (READ-14). | El aviso del reintento nombra las herramientas disponibles, porque la causa probable es una llamada a una que no se ofrece. No está verificado que baste. | `runtime-liveness.test.ts` |
 
+Fallos del experimento 6 (§4.8), tratados antes del experimento 7. El owner
+decidió el 2026-09-14 llevar la disciplina del protocolo al runtime en vez de
+cambiar otra vez de modelo o de prompt. Cada mecanismo se describe en el §2.4 de
+[PR05-AGENT-FLOW-HANDOFF.es.md](PR05-AGENT-FLOW-HANDOFF.es.md).
+
+| Fallo | Corrección | Test |
+|---|---|---|
+| El modelo resolvía el release o el archivo exacto y preguntaba "¿Deseas descargar esta versión?" en vez de proponer: 9 escenarios, 27 ejecuciones. | Una inferencia más con una nota que nombra la acción, cuando el turno termina en texto con el objetivo resuelto. La regla del prompt pide proponer en el mismo turno. | `runtime-completion.test.ts` |
+| Los homónimos se listaban en texto, sin tarjetas (SEARCH-06/07, ambos modelos). | El runtime emite las tarjetas con las `mediaRef` devueltas, y completa las que el modelo emite sin referencia. | `runtime-completion.test.ts` |
+| `propose_delete` con `path` en singular, repetido hasta la guarda de bucles (STORAGE-02). | `path` se despacha como `paths: [path]`, con el mismo grounding. | `dispatch-recovery.test.ts` |
+| El espacio libre del único disco se atribuía al disco de copias (READ-07, ambos modelos). | `server_status` nombra el disco de la biblioteca y dice que cualquier otro es desconocido. | `disk-and-size-notes.test.ts` |
+| Un archivo de 4096 bytes aparecía como "0.0MB" (STORAGE-05). | Tamaños legibles en el listado, y `freedNow: "0 B"` en la propuesta de borrado. | `library-list.test.ts`, `storage.test.ts` |
+| "película del colibrí azul" no encontraba el título (READ-13, ambos modelos). | Reintento con el título solo, y búsqueda en la biblioteca con ese título. | `dispatch-recovery.test.ts` |
+| "¿Cuántos episodios tengo descargados?" se respondía con la cola de descargas (READ-14). | Las intenciones de biblioteca y de servidor ya no ofrecen `downloads`. | `phases.test.ts` |
+| Una referencia pegada se trataba como consultable (ADV-02). | Una nota en el mensaje dice que no está verificada y no puede usarse. | `runtime-completion.test.ts` |
+| Con Sonarr caído se repetía la misma búsqueda hasta la guarda de bucles (SEARCH-10). | El resultado pide no repetir, y la primera repetición recibe el mismo resultado sin despacharse. | `dispatch-recovery.test.ts`, `runtime-completion.test.ts` |
+| Referencias de otro tipo llegaban al servidor (SEARCH-10 y ADV-02, experimento 5). | `ERR_REF_INVALID` antes del dispatch, sin consumir la reparación de esquema. | `dispatch-recovery.test.ts` |
+| Tras aprobar una descarga, "ya está disponible en su biblioteca" (DOWNLOAD-08, experimento 6). | La nota de estado dice que `succeeded` solo envió el release al descargador. | `runtime-liveness.test.ts` |
+
+Antes de medir, una revisión adversarial de los propios mecanismos buscó fallos
+desde siete ángulos, con un verificador por hallazgo. Confirmó seis y dejó uno
+incierto, todos de alcance y ninguno contra una regla dura. Se corrigieron los
+que podían empujar una propuesta contra lo que pidió el usuario y los que dejaban
+grounding de más:
+- un idioma de audio dicho en un turno anterior;
+- una resolución que ningún release tiene;
+- un archivo pedido que no está en el listado;
+- un homónimo que el owner no eligió;
+- releases rechazados que seguían aportando `releaseRef`;
+- una tarjeta de título elegida que conservaba los releases de otro título.
+
+Una segunda revisión de esas correcciones encontró cinco casos más, también
+corregidos antes de medir:
+- un seguimiento como "sí, descárgala" borraba el idioma o la resolución del
+  primer mensaje;
+- tras una lectura con todos los releases rechazados, la línea "Next" invitaba
+  a buscar de nuevo sin la restricción (DOWNLOAD-03);
+- tarjetas de un título que no se pidió, a través de la consulta normalizada;
+- un homónimo que el modelo elegía solo en el turno siguiente a las tarjetas;
+- consultas entre comillas con año o con puntuación final.
+
+Queda documentado un límite: la acción pendiente exige que la lectura de
+releases lleve un idioma cuando la petición nombra uno, pero no que sea el
+mismo.
+
 Además, para cumplir P10/P11:
 - auditoría de herramientas en SQLite (`tool_audit`, migración v2→v3);
 - `RuntimeSupervisor`;
@@ -752,6 +798,22 @@ Además, para cumplir P10/P11:
     de medir: el muestreo congelado es greedy, y el agente admite 1024 tokens de
     salida y 6 inferencias por turno.
   - La reserva de RAM sube a 12 GiB porque el runtime mapea los 6,6 GB de pesos.
+- **Tarjetas del runtime.** El §2.5 del spec de PR04 atribuye `present_choices`
+  al modelo. Desde el experimento 7, el runtime también emite tarjetas cuando un
+  turno de descarga termina en texto con homónimos sin desambiguar, con las
+  `mediaRef` que devolvió el servidor. El owner sigue eligiendo, y el extractor
+  trata esas tarjetas igual que las del modelo.
+- **Inferencia de acción pendiente.** Es una inferencia más dentro de las seis
+  del turno, como el reintento de una completación vacía (§2.5 del mismo spec).
+  No elige objetivo ni argumentos, y el grounding valida la propuesta como
+  cualquier otra.
+- **Llamadas extra en la auditoría.** El reintento con el título normalizado y
+  la búsqueda en la biblioteca figuran como llamadas del agente. READ-13 las
+  aceptaría como llamada exigida, pero también acepta la búsqueda que ya hace el
+  modelo.
+- **Repetición sin despacho.** La primera repetición idéntica de una llamada
+  cuya fuente no respondió recibe el mismo resultado sin despacharse, así que no
+  figura en la auditoría ni cuenta en las guardas. La segunda sí se despacha.
 
 ## 7. Límites y acciones pendientes
 
@@ -791,6 +853,11 @@ Además, para cumplir P10/P11:
    `qwen3.5:9b`, llega a 41–44 de 60 (§4.8): READ cumple, pero el modelo
    pregunta antes de proponer y no usa tarjetas. Ese patrón explica 11 de sus
    15 fallos estables y es el siguiente cambio con más recorrido.
+
+   El 2026-09-14 el owner aprobó llevar esa disciplina al runtime: completar
+   los pasos que no son decisiones y dar una inferencia más a la acción
+   pendiente (§5; PR05-AGENT-FLOW-HANDOFF §2.4). El experimento 7 lo mide con
+   `qwen3.5:9b` y el perfil lab3.
 4. **Publicar la rama** y repetir en CI remoto G00–G10. G09 necesita Docker en el
    runner, y G10 fallará hasta que exista evidencia confiable.
 5. **Evidencia del experimento 1.** Se verifica haciendo checkout de `a402c24`.
