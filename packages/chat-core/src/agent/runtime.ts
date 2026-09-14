@@ -737,18 +737,20 @@ export class AgentRuntime {
             let references: Partial<WorkflowReferences> | undefined;
             try {
               const parsed = JSON.parse(dispatchRes.result);
+              // The arguments that were validated and dispatched, after normalization.
+              const effectiveArgs = dispatchRes.args ?? tc.args;
               // A failed or partial observation must not unlock a mutation.
               // It can still be reported to the user as a partial read.
               const completeResult = dispatchRes.ok && parsed?.status !== 'partial' &&
                 !parsed?.sources?.some((source: any) => source.completeness !== 'complete');
-              if (completeResult) references = extractEntitledReferences(tc.name, tc.args, parsed);
+              if (completeResult) references = extractEntitledReferences(tc.name, effectiveArgs, parsed);
 
               const plan = (parsed?.planId ? parsed : parsed?.data?.planId ? parsed.data : undefined) as
                 | Record<string, any>
                 | undefined;
 
               if (plan && dispatchRes.ok) {
-                if (isProposalCall(tc.name, tc.args)) {
+                if (isProposalCall(tc.name, effectiveArgs)) {
                   // Only a proposal call creates a proposal record; a status read may
                   // update one it already knows, never invent one.
                   if (plan.status === 'awaiting_approval' || plan.status === 'planned') {
@@ -761,7 +763,7 @@ export class AgentRuntime {
                         status: plan.status,
                         manifestHash: plan.manifestHash || '',
                         proposalKey: plan.proposalKey || plan.planId,
-                        targets: proposalTargets(tc.name, tc.args),
+                        targets: proposalTargets(tc.name, effectiveArgs),
                       },
                       clock,
                     );

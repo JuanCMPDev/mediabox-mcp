@@ -26,19 +26,19 @@ const CORE_PRINCIPLES = `
 
 /** Each instruction is included only when its action is in the published schema. */
 const ACTION_GUIDANCE: Record<string, string> = {
-  'server_info.status': 'Read server health, library totals, configured disk space and active playback sessions.',
-  'server_info.activity': 'Read recent playback history.',
-  'media_query.search': 'Find local media: query is the title only; type and year are separate filters.',
+  'server_info.status': 'Read server health, library totals, configured disk space and the active sessions: who is watching now.',
+  'server_info.activity': 'Read past playback history; it does not say who is watching now.',
+  'media_query.search': 'Find local media: query is the title only. Add type or year only when the user states them.',
   'media_query.list': 'List local media with type/year filters and page/pageSize, without a title query. Use total counts, not the size of one page.',
-  'media_query.details': 'Use a returned showId to read seasons/episodes; use seasonNumber and page/pageSize to reach the requested episode.',
-  'catalog.search': 'Find catalog titles: query is the title only; type and year are separate filters, not search words.',
+  'media_query.details': 'Read the seasons and episodes of a returned showId; add seasonNumber only to read one season, and page/pageSize to reach a later episode.',
+  'catalog.search': 'Find catalog titles, including ones not in the library: query is the title only. Add type or year only when the user states them; if nothing matches, search again without them before saying it does not exist.',
   'catalog.details': 'Read details using the exact returned mediaRef.',
-  'catalog.releases': 'Find releases using the exact mediaRef; respect requested resolution/language and disclose unknown release attributes.',
+  'catalog.releases': 'Find the releases of the exact mediaRef. Pass the resolution and audioLanguage the user asked for, with strictLanguage when that language is required, and search again when the user adds a constraint. If no release meets a stated constraint, say so and do not propose.',
   'catalog.propose_download': 'Propose one returned release with its exact releaseRef and mediaRef; the owner reviews the resulting plan in the app.',
-  'library_ops.list': 'List a folder with path; a path returned by media_query works. Each file comes with its exact path: take the requested episode or movie and leave extras and neighbors out.',
-  'library_ops.propose_delete': 'Propose quarantine with paths holding only the exact requested files, copied from the listing. Quarantine does not free disk space; do not promise reclaimed bytes.',
+  'library_ops.list': 'List a folder with path; any path returned by media_query works, even a file path. Each file comes with its exact path: take the requested episode or movie and leave extras and neighbors out.',
+  'library_ops.propose_delete': 'Propose quarantine with paths holding only the exact requested files, copied from the listing. Quarantine frees no disk space until the owner purges it; never promise freed bytes.',
   'media_format.analyze': 'Inspect one exact file path from a listing before any conversion; read streams, codecs, supported profiles and warnings.',
-  'media_format.propose': 'Propose an analyzed path with job remux, subtitle-convert or transcode. Choose a supported profileName matching the requested codec; disclose subtitle style loss when reported.',
+  'media_format.propose': 'Propose an analyzed path with job remux, subtitle-convert or transcode. Omit profileName for the job default, or pick a supported profileName from the schema; disclose subtitle style loss when reported.',
   'downloads.status': 'Read current queues by source. source=all is the default; use page/pageSize. Keep sources distinct and disclose unavailable sources.',
   'downloads.list_queue': 'Read queue entries with source=all|sonarr|radarr|qbittorrent and page/pageSize. Never sum duplicated client/manager entries or treat an unavailable queue as empty.',
   'operations.status': 'Read the actual plan state using its returned planId; submitted or queued does not mean media is available.',
@@ -55,7 +55,7 @@ function nextRequirement(options: PhasePromptOptions, available: Set<string>): s
   const refs = options.references ?? {};
   switch (options.intentKind) {
     case 'delete':
-      if (has('library_ops.propose_delete')) return 'Next: propose quarantine of only the exact requested files, copying each path from the listing, then report the returned approval state.';
+      if (has('library_ops.propose_delete')) return 'Next: propose quarantine of only the exact requested files, copying each path from the listing, then report the returned approval state. Quarantine frees no disk space until the owner purges it.';
       if (has('media_query.search', 'library_ops.list')) return 'Next: find the title with media_query(action:"search"), call library_ops(action:"list") on its folder (a returned path works) and pick the exact files. A deletion can be proposed only after that listing.';
       break;
     case 'convert':
@@ -78,24 +78,27 @@ function nextRequirement(options: PhasePromptOptions, available: Set<string>): s
       }
       break;
     case 'library':
-      if (has('media_query.list', 'media_query.search')) return 'Next: for types or years call media_query(action:"list") with type/year filters, never as a title; for a title call media_query(action:"search"), then details with showId, seasonNumber and page/pageSize. Use the reported total, not page length.';
+      if (has('media_query.list', 'media_query.search')) return 'Next: for types or years call media_query(action:"list") with type/year filters, never as a title; for a title call media_query(action:"search"), then details with its showId. Use the reported total, not page length.';
       break;
     case 'server':
       if (has('server_info.status')) {
-        const history = has('server_info.activity') ? ', or server_info(action:"activity") for playback history' : '';
-        return `Next: call server_info(action:"status") for health, library totals, disks and active sessions${history}. A disk that is not reported is unknown.`;
+        const history = has('server_info.activity') ? '; use server_info(action:"activity") only for past playback' : '';
+        return `Next: call server_info(action:"status") for health, library totals, disks and who is watching now${history}. A disk that is not reported is unknown.`;
       }
       break;
     case 'owner_only':
       return 'Next: approving plans, restoring from quarantine and permanent purge are done only by the owner in the Mediabox app. Say you cannot do it here and point to the app; do not propose or claim a plan.';
     case 'maintenance':
-      if (has('maintenance.cleanup', 'maintenance.check_jobs')) return 'Next: call maintenance(action:"cleanup") for a preview or maintenance(action:"check_jobs") for a job; report a preview as a preview, never as a completed cleanup.';
+      if (has('maintenance.cleanup', 'maintenance.check_jobs')) return 'Next: call maintenance(action:"cleanup") once for a preview or maintenance(action:"check_jobs") for a job; report a preview as a preview, never as a completed cleanup.';
       break;
     case 'download':
       if (has('catalog.propose_download')) return 'Next: propose the selected release and report its actual approval state.';
       if (refs.mediaRef && has('catalog.releases')) return 'Next: retrieve releases for the resolved media and resolve any remaining ambiguity before proposing.';
-      if (has('catalog.search')) return 'Next: resolve the requested title and year through catalog(action:"search") before selecting a release.';
+      if (has('catalog.search')) return 'Next: search the requested title with catalog(action:"search"), adding a year only if the user gave one, then read its releases before proposing.';
       break;
+  }
+  if ((!options.intentKind || options.intentKind === 'other') && has('catalog.search')) {
+    return 'Next: to find a title, search with catalog(action:"search"), which also covers titles not in the library; media_query only covers the local library. Ask when the exact target is unclear.';
   }
   return 'Next: use the relevant available read to establish the requested facts. Ask for clarification when the exact target cannot be determined.';
 }

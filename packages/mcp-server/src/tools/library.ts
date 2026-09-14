@@ -88,7 +88,7 @@ export function registerLibraryTools(server: McpServer, context: McpToolContext 
 
   // 6. MANAGE FILES
   server.registerTool("manage_files", {
-    description: "List or move files and folders. Paths starting with 'downloads/' access the downloads folder; other paths are relative to the media volume. list also accepts 'media:…' or 'downloads:…' paths and container paths such as '/data/tv/Show', and reports every entry with its exact '<root>:<path>'.",
+    description: "List or move files and folders. Paths starting with 'downloads/' access the downloads folder; other paths are relative to the media volume. list also accepts 'media:…' or 'downloads:…' paths, container paths such as '/data/tv/Show' and file paths (it lists the folder that holds the file), and reports every entry with its exact '<root>:<path>'.",
     inputSchema: {
       action: z.enum(["list", "move"]).describe("Action to perform"),
       path: z.string().optional().describe("Path (e.g. 'anime/Show', 'downloads/', 'movies/')"),
@@ -97,7 +97,15 @@ export function registerLibraryTools(server: McpServer, context: McpToolContext 
     },
   }, async ({ action, path: filePath, sourcePaths, destFolder }) => {
     if (action === "list") {
-      const target = resolveListTarget(filePath);
+      let target = resolveListTarget(filePath);
+      // Jellyfin reports a movie by its file path: list the folder that holds it
+      // and name the requested file, so its neighbours and extras stay visible.
+      let requestedFile: string | undefined;
+      const requested = await fs.stat(target.full).catch(() => null);
+      if (requested?.isFile() && target.relativePath) {
+        requestedFile = `${target.rootId}:${target.relativePath}`;
+        target = { rootId: target.rootId, relativePath: target.relativePath.split("/").slice(0, -1).join("/"), full: path.dirname(target.full) };
+      }
       const entries = await fs.readdir(target.full, { withFileTypes: true });
       entries.sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
       const prefix = `${target.rootId}:${target.relativePath ? `${target.relativePath}/` : ""}`;
@@ -111,7 +119,7 @@ export function registerLibraryTools(server: McpServer, context: McpToolContext 
           path: `${prefix}${e.name}`,
         };
       }));
-      return textResult({ path: `${target.rootId}:${target.relativePath}`, items });
+      return textResult({ path: `${target.rootId}:${target.relativePath}`, ...(requestedFile ? { file: requestedFile } : {}), items });
     }
     if (action === "move") {
       if (!sourcePaths?.length || !destFolder) throw new Error("sourcePaths and destFolder required");

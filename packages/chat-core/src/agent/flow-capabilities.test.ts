@@ -270,6 +270,39 @@ describe('Downloads propose any verified release', () => {
   });
 });
 
+describe('Argument formatting of small models is normalized against the published schema', () => {
+  it('treats null as omitted, matches enum case and clamps page sizes before the MCP call', async () => {
+    const result = await run('¿Qué episodios de Órbita tengo?', [
+      call('d', 'media_query', { action: 'details', showId: 'orbita', seasonNumber: null, page: 0, pageSize: 500 }),
+      call('l', 'media_query', { action: 'List', type: 'movie', pageSize: 1000 }), done,
+    ], {
+      show_details: { name: 'Órbita', seasons: [] },
+      jellyfin_search: { results: [], total: 10005 },
+    });
+    expect(result.mcp.ledger).toMatchObject([
+      { tool: 'show_details', args: { showId: 'orbita', page: 1, pageSize: 50 } },
+      { tool: 'jellyfin_search', args: { type: 'Movie', pageSize: 50 } },
+    ]);
+    expect(result.mcp.ledger[0].args).not.toHaveProperty('seasonNumber');
+    expect(result.events.filter(e => e.type === 'tool-end').every(e => (e as { ok?: boolean }).ok)).toBe(true);
+  });
+
+  it('matches the catalog type case as well', async () => {
+    const result = await run('Descarga la serie Órbita', [call('s', 'catalog', { action: 'search', query: 'Órbita', type: 'Series' }), done], {
+      search_media: { status: 'ok', data: [] },
+    });
+    expect(result.mcp.ledger).toMatchObject([{ tool: 'search_media', args: { query: 'Órbita', type: 'series' } }]);
+  });
+
+  it('keeps unknown properties strict', async () => {
+    const result = await run('¿Qué episodios de Órbita tengo?', [
+      call('bad', 'media_query', { action: 'details', showId: 'orbita', bogus: true }), done,
+    ], {});
+    expect(result.mcp.ledger).toEqual([]);
+    expect(result.events).toContainEqual(expect.objectContaining({ type: 'tool-end', name: 'media_query', ok: false }));
+  });
+});
+
 describe('Proposal scope is checked before MCP dispatch', () => {
   it('rejects unlisted paths, different releases, and expired observations', () => {
     expect(validateProposalGrounding('library_ops', { action: 'propose_delete', paths: [neighbor] }, { paths: [file] }, clock()).valid).toBe(false);

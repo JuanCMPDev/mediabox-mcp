@@ -111,6 +111,8 @@ export function validateToolCall(
 
 export interface DispatchResult {
   tool: string;
+  /** Arguments after normalizeArgs: what was validated and dispatched. */
+  args?: Record<string, unknown>;
   /** Concrete MCP tool the virtual call resolved to — surfaced as `source=` in the envelope. */
   mcpTool?: string;
   argsHash: string;
@@ -121,6 +123,35 @@ export interface DispatchResult {
   errorCode?: string;
   errorMessage?: string;
   durationMs: number;
+}
+
+/**
+ * Normalizes benign formatting variance of small models against the published
+ * schema, before validation: a null value means the property was omitted, an enum
+ * string matches case-insensitively, and a number outside a declared bound is
+ * clamped to it. Unknown properties, wrong types and missing required values are
+ * left untouched for the strict validator (AGT-01).
+ */
+export function normalizeArgs(args: Record<string, unknown>, parameters?: Record<string, any>): Record<string, unknown> {
+  if (!args || typeof args !== 'object' || Array.isArray(args)) return args;
+  const properties: Record<string, any> = parameters?.properties ?? {};
+  const out: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(args)) {
+    if (value === null || value === undefined) continue;
+    const schema = properties[key];
+    if (schema && typeof value === 'string' && Array.isArray(schema.enum)) {
+      const wanted = value.trim().toLowerCase();
+      out[key] = schema.enum.find((option: unknown) => typeof option === 'string' && option.toLowerCase() === wanted) ?? value;
+    } else if (schema && typeof value === 'number' && Number.isFinite(value) && (schema.type === 'number' || schema.type === 'integer')) {
+      let clamped = value;
+      if (typeof schema.minimum === 'number' && clamped < schema.minimum) clamped = schema.minimum;
+      if (typeof schema.maximum === 'number' && clamped > schema.maximum) clamped = schema.maximum;
+      out[key] = clamped;
+    } else {
+      out[key] = value;
+    }
+  }
+  return out;
 }
 
 /**
@@ -178,9 +209,10 @@ export async function dispatchToolCall(opts: {
   timeoutMs?: number;
   signal?: AbortSignal;
 }): Promise<DispatchResult> {
-  const { toolName, args, exposedTools, mcpCall, timeoutMs = 150_000, signal } = opts;
-  const argsHash = computeArgsHash(args);
+  const { toolName, exposedTools, mcpCall, timeoutMs = 150_000, signal } = opts;
+  const argsHash = computeArgsHash(opts.args);
   const t0 = Date.now();
+  const args = normalizeArgs(opts.args, exposedTools.find(t => t.name === toolName)?.parameters);
 
   // 1. Validation before dispatch (§2.5 / AGT-01)
   const schemaValidation = validateToolCall(toolName, args, exposedTools);
@@ -198,6 +230,7 @@ export async function dispatchToolCall(opts: {
     });
     return {
       tool: toolName,
+      args,
       argsHash,
       result: errorPayload,
       resultDigest: computeResultDigest(errorPayload),
@@ -267,6 +300,7 @@ export async function dispatchToolCall(opts: {
 
   return {
     tool: toolName,
+    args,
     mcpTool,
     argsHash,
     result: rawResult,

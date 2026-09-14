@@ -79,6 +79,14 @@ describe("manage_files list", () => {
     }
   });
 
+  it("lists the folder of a file path and names the requested file", async () => {
+    for (const form of [`/data/${SEASON}/Serie Ñandú - S01E01.mkv`, `media:${SEASON}/Serie Ñandú - S01E01.mkv`]) {
+      const listing = await list(form);
+      expect(listing, form).toMatchObject({ path: `media:${SEASON}`, file: `media:${SEASON}/Serie Ñandú - S01E01.mkv` });
+      expect(listing.items.map((item: { name: string }) => item.name), form).toEqual(["Extras", "Serie Ñandú - S01E01.mkv", "Serie Ñandú - S01E02.mkv"]);
+    }
+  });
+
   it("lists both roots and the downloads namespace", async () => {
     expect(await list("downloads/")).toMatchObject({ path: "downloads:", items: [{ name: "Paquete", type: "dir", path: "downloads:Paquete" }] });
     expect(await list("downloads:Paquete")).toMatchObject({

@@ -110,7 +110,8 @@ describe('Prompt follows the capabilities of the active request', () => {
 
   it('resolves a download title before suggesting a release lookup even when both reads are exposed', () => {
     const initial = buildSystemPromptForPhase('en', 'discover', { intentKind: 'download' });
-    expect(initial).toContain('Next: resolve the requested title and year');
+    expect(initial).toContain('Next: search the requested title with catalog(action:"search")');
+    expect(initial).toContain('adding a year only if the user gave one');
     const resolved = buildSystemPromptForPhase('en', 'select', { intentKind: 'download', references: { mediaRef: 'mref_000000000001' } });
     expect(resolved).toContain('Next: retrieve releases for the resolved media');
     expect(resolved).not.toContain('propose_download');
@@ -129,6 +130,18 @@ describe('Prompt follows the capabilities of the active request', () => {
     const maintenance = buildSystemPromptForPhase('en', 'maintain', { intentKind: 'maintenance' });
     expect(maintenance).toContain('maintenance(action:"cleanup")');
     expect(maintenance).toContain('never as a completed cleanup');
+  });
+
+  it('keeps optional filters optional and separates sessions from history', () => {
+    const search = buildSystemPromptForPhase('es', 'discover', { intentKind: 'other' });
+    expect(search).toContain('Add type or year only when the user states them');
+    expect(search).toContain('search again without them before saying it does not exist');
+    expect(search).toContain('Next: to find a title, search with catalog(action:"search")');
+    const server = buildSystemPromptForPhase('es', 'orient', { intentKind: 'server' });
+    expect(server).toContain('who is watching now');
+    expect(server).toContain('only for past playback');
+    const releases = buildSystemPromptForPhase('es', 'select', { intentKind: 'download', references: { mediaRef: 'mref_000000000001' } });
+    expect(releases).toContain('If no release meets a stated constraint, say so and do not propose');
   });
 
   it('says that an operation without a tool is not supported', () => {

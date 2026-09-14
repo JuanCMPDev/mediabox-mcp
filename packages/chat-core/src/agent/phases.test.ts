@@ -94,9 +94,10 @@ describe('Phased Tool Catalog & Schema Bounds (§2.3 / AGT-11)', () => {
 
   it('gives every read-only intent the same local reads in every phase but maintain', () => {
     for (const intentKind of ['queue', 'status', 'library', 'server', 'owner_only'] as const) {
+      // No card can perform an owner-only action, so owner-only requests get none.
+      const expected = ['server_info', 'media_query', 'downloads', 'operations', ...(intentKind === 'owner_only' ? [] : ['present_choices'])];
       for (const phase of ['orient', 'discover', 'select', 'propose', 'monitor'] as const) {
-        expect(getPhaseTools(phase, { intentKind }).map(t => t.name), `${phase}/${intentKind}`)
-          .toEqual(['server_info', 'media_query', 'downloads', 'operations', 'present_choices']);
+        expect(getPhaseTools(phase, { intentKind }).map(t => t.name), `${phase}/${intentKind}`).toEqual(expected);
       }
     }
     expect(getPhaseTools('orient', { intentKind: 'maintenance' }).map(t => t.name))

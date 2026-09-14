@@ -184,9 +184,10 @@ export function getPhaseTools(phase: Phase, opts: PhaseToolOptions = {}): Virtua
     result.push({ name: base.name, description, parameters });
   }
 
-  // UI tool present_choices is always exposed as companion
+  // present_choices is exposed as companion, except for owner-only requests:
+  // no card can perform an approval, a restore or a purge.
   const choiceTool = VIRTUAL_TOOLS[PRESENT_CHOICES_TOOL];
-  if (choiceTool) {
+  if (choiceTool && opts.intentKind !== 'owner_only') {
     result.push({
       name: choiceTool.name,
       description: choiceTool.description,
