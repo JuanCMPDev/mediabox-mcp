@@ -12,10 +12,18 @@ import { assertSafeSegment } from "../helpers/sandbox.js";
 import { validateUrl, resolveAndCheck } from "../helpers/url-allowlist.js";
 import { assertMutationAllowed } from "../helpers/containment.js";
 import { MEDIA_PATH, DOWNLOADS_PATH } from "../config.js";
+import { downloadQueueInput, readDownloadQueue } from "../queries/download-queue.js";
+import { runEnvelopeTool } from "../queries/tool-result.js";
 
 export const SUBTITLE_EXT = new Set([".srt", ".ass", ".ssa", ".vtt", ".sub", ".idx"]);
 
 export function registerDownloadTools(server: McpServer): void {
+  server.registerTool("download_queue", {
+    description: "Read live Sonarr, Radarr and qBittorrent queues. Paginated per source, with unknown/unavailable distinguished from empty. This tool cannot change downloads.",
+    inputSchema: downloadQueueInput,
+  }, async (input, extra: { signal?: AbortSignal } | undefined) =>
+    runEnvelopeTool(() => readDownloadQueue(input, { signal: extra?.signal })));
+
   // -------------------------------------------------------------------------
   // DOWNLOAD ADD — Add URLs to PyLoad
   // -------------------------------------------------------------------------

@@ -5,6 +5,9 @@ dist/
 
 # Environment
 .env
+# Local overrides may hold owner keys; only the *.example files are versioned.
+.env.local
+*.env.local
 
 # Media & runtime data (local only)
 /media/

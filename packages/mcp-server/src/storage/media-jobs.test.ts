@@ -15,6 +15,7 @@ import {
   resolveProfile,
   parseProbe,
   executeMediaJob,
+  execCommandRunner,
   inspectMedia,
   setDefaultCommandRunner,
   MediaJobError,
@@ -173,7 +174,21 @@ describe("Planner", () => {
     expect(plan.effects[0]).toMatchObject({ serviceAction: "media.remux", tracksProfile: "mkv_remux", destination: "movies/Film/film.mkv", irreversibleLoss: false });
     expect(plan.effects[0].requiredResources).toMatchObject({ selectedBytes: 10, reclaimableBytes: 0, estimatedDiskBytes: 11 });
     expect(summary.hardLinked).toBe(false);
+    expect(summary.warnings).toEqual([]);
     await expect(createMediaFormatPlan({ logicalPath: "movies/Film/film.mp4", action: "transcode", profileName: "bogus", scope })).rejects.toThrowError(MediaJobError);
+  });
+
+  it("states what a lossy profile discards, for the agent to relay before approval", async () => {
+    await write("tv/sub.mkv");
+    const srt = await createMediaFormatPlan({ logicalPath: "tv/sub.mkv", action: "subtitle-convert", scope });
+    expect(srt.summary.warnings).toEqual([MEDIA_PROFILES.srt_subtitles.lossNote]);
+    expect(srt.summary.warnings[0]).toMatch(/styling/);
+    const hevc = await createMediaFormatPlan({ logicalPath: "tv/sub.mkv", action: "transcode", scope });
+    expect(hevc.summary.warnings[0]).toMatch(/quality/);
+    for (const profile of Object.values(MEDIA_PROFILES)) {
+      expect(Boolean(profile.lossNote), profile.name).toBe(profile.irreversible);
+      if (profile.lossNote) expect(profile.lossNote.length, profile.name).toBeLessThanOrEqual(120);
+    }
   });
 });
 
@@ -265,6 +280,7 @@ describe("Recoverable replacement (MED-01 / MED-02 / MED-05)", () => {
     await fs.link(abs, path.join(root, "tv", "hl-link.mkv"));
     const { summary, plan } = await createMediaFormatPlan({ logicalPath: "tv/hl.mkv", action: "remux", scope });
     expect(summary.hardLinked).toBe(true);
+    expect(summary.warnings).toEqual(["The source is a hard link: the conversion writes a new copy and frees no space."]);
     expect(plan.targets[0].fileIdentity?.nlink).toBe(2);
   });
 });
@@ -292,5 +308,35 @@ describe("Cancellation (MED-06)", () => {
     expect(await fs.readFile(abs, "utf8")).toBe("original-bytes");
     expect(await stagingLeftovers()).toEqual([]);
     expect(await listQuarantine("media")).toHaveLength(0);
+  });
+
+  it("an aborted command settles only after the process has exited and released its files", async () => {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "mbx-runner-"));
+    const pidFile = path.join(dir, "pid");
+    const held = path.join(dir, "held.bin");
+    // Stands in for ffmpeg: announces its pid, then keeps an output file open.
+    const script = [
+      "const fs = require('fs');",
+      `const fd = fs.openSync(${JSON.stringify(held)}, 'w');`,
+      `fs.writeFileSync(${JSON.stringify(pidFile)}, String(process.pid));`,
+      "setInterval(() => fs.writeSync(fd, 'x'), 20);",
+    ].join(" ");
+    const ac = new AbortController();
+    const run = execCommandRunner(process.execPath as "ffmpeg", ["-e", script], { signal: ac.signal });
+    try {
+      for (let i = 0; i < 250; i++) {
+        const ready = await fs.readFile(pidFile, "utf8").catch(() => "");
+        if (ready) break;
+        await new Promise((r) => setTimeout(r, 20));
+      }
+      const pid = Number(await fs.readFile(pidFile, "utf8"));
+      ac.abort();
+      await expect(run).rejects.toMatchObject({ name: "AbortError" });
+      expect(() => process.kill(pid, 0)).toThrow();
+      // No retries: the handle is already closed when the promise settles.
+      await fs.rm(held);
+    } finally {
+      await fs.rm(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+    }
   });
 });

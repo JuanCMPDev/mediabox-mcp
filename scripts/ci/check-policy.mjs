@@ -8,6 +8,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { validateImplementedGateScripts } from "./implemented-gates.mjs";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -70,7 +71,18 @@ for (let i = 0; i <= 12; i++) {
   }
 }
 
-// 5. Check all phases P00..P13 and their case IDs
+// 5. Implemented gate scripts and G08 workflow must match the contract.
+try {
+  errors.push(...validateImplementedGateScripts({
+    matrix,
+    packageJson: JSON.parse(fs.readFileSync(path.join(repoRoot, "package.json"), "utf8")),
+    workflow: fs.readFileSync(path.join(repoRoot, ".github/workflows/ci.yml"), "utf8"),
+  }));
+} catch (error) {
+  errors.push(`Cannot validate implemented gate scripts: ${error.message}`);
+}
+
+// 6. Check all phases P00..P13 and their case IDs.
 const EXPECTED_PHASE_CASES = {
   P00: ["HAR-01", "HAR-02", "HAR-03", "HAR-04"],
   P01: ["SEC-01", "SEC-02", "SEC-03", "SEC-04", "SEC-05", "SEC-06"],
@@ -101,7 +113,7 @@ for (const [phase, cases] of Object.entries(EXPECTED_PHASE_CASES)) {
   }
 }
 
-// 6. Check that TestInstallation sandbox exists
+// 7. Check that TestInstallation sandbox exists
 const testInstPath = path.join(repoRoot, "packages/core/src/testing/test-installation.ts");
 if (!fs.existsSync(testInstPath)) {
   errors.push(`TestInstallation utility missing at: ${testInstPath}`);
@@ -112,4 +124,4 @@ if (errors.length > 0) {
   process.exit(1);
 }
 
-console.log("✓ Gate G00 PASSED: Acceptance matrix, invariants, gates, and test sandbox verified.");
+console.log("✓ Gate G00 PASSED: Matrix, invariants, implemented scripts, G08 workflow, and test sandbox verified.");

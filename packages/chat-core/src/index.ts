@@ -9,6 +9,13 @@ export { createMcpCaller }      from './mcp-client.js';
 // Provider resolution
 export { resolveProvider }      from './providers/select.js';
 export type { StreamProvider }  from './providers/types.js';
+// Endpoint policy: the server's runtime supervisor reuses the production transport (§3.2)
+export {
+  safeInferenceFetch,
+  validateInferenceEndpoint,
+  parseHostList,
+  type EndpointPolicyOptions,
+} from './providers/endpoint-policy.js';
 
 // History utilities
 export {

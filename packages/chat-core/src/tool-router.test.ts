@@ -11,7 +11,7 @@ const ALLOWED_MCP_TOOLS = new Set([
   'manage_library', 'manage_files', 'rename_episodes', 'propose_cleanup',
   'series_search', 'series_status', 'series_releases',
   'movie_search', 'movie_status', 'movie_releases',
-  'download_status', 'cancel_downloads',
+  'download_queue',
   'inspect_format', 'propose_media_job',
   'cleanup_server', 'check_jobs',
   'operation_status',
@@ -21,6 +21,7 @@ const ALLOWED_MCP_TOOLS = new Set([
 const BLOCKED_MCP_TOOLS = new Set([
   'series_grab', 'movie_grab', 'series_remove', 'movie_remove', 'series_import', 'movie_import',
   'series_rescan', 'movie_rescan', 'download_add', 'download_direct', 'optimize_media', 'fix_subtitles',
+  'download_status', 'cancel_downloads',
 ]);
 
 /** Parameters that only ever belonged to blocked flows; they must never be forwarded. */
@@ -77,8 +78,8 @@ describe('resolveVirtualCall — allowlist', () => {
     expect(resolveVirtualCall('library_ops', { action: 'rename', showPath: 'a', showName: 'A', dryRun: false }).args.dryRun).toBe(true);
     expect(resolveVirtualCall('maintenance', { action: 'cleanup', dryRun: false, confirmToken: 'tok' }).args).toEqual({ dryRun: true });
     expect(resolveVirtualCall('library_ops', { action: 'list', path: 'tv/', sourcePaths: ['x'], destFolder: 'y' }).args).toEqual({ action: 'list', path: 'tv/' });
-    expect(resolveVirtualCall('downloads', { action: 'status', packageIds: [1] }).args).toEqual({ action: 'status' });
-    expect(resolveVirtualCall('downloads', { action: 'list_queue', source: 'radarr', queueIds: [1] }).args).toEqual({ source: 'radarr', action: 'list' });
+    expect(resolveVirtualCall('downloads', { action: 'status', packageIds: [1] })).toEqual({ tool: 'download_queue', args: { source: 'all' } });
+    expect(resolveVirtualCall('downloads', { action: 'list_queue', source: 'radarr', queueIds: [1] })).toEqual({ tool: 'download_queue', args: { source: 'radarr' } });
     expect(resolveVirtualCall('series', { action: 'search', query: 'Dark', addTvdbId: 123 }).args).toEqual({ query: 'Dark' });
     expect(resolveVirtualCall('movies', { action: 'search', query: 'Heat', addTmdbId: 123 }).args).toEqual({ query: 'Heat' });
   });
@@ -91,9 +92,19 @@ const ROUTING_TABLE: Row[] = [
   ['server_info', { action: 'activity', limit: 5 }, 'activity_log', { limit: 5 }],
 
   ['media_query', { action: 'search', query: 'Dark', type: 'Series', page: 2, pageSize: 20 }, 'jellyfin_search', { query: 'Dark', type: 'Series', page: 2, pageSize: 20 }],
+  ['media_query', { action: 'search', query: 'Arrival', type: 'Movie', year: 2016 }, 'jellyfin_search', { query: 'Arrival', type: 'Movie', year: 2016 }],
+  ['media_query', { action: 'list', type: 'Movie', year: 2020, page: 2, pageSize: 5, query: '2020' }, 'jellyfin_search', { type: 'Movie', year: 2020, page: 2, pageSize: 5 }],
   ['media_query', { action: 'details', showId: 'jf-1', seasonNumber: 1, page: 1, pageSize: 50 }, 'show_details', { showId: 'jf-1', seasonNumber: 1, page: 1, pageSize: 50 }],
 
   ['catalog', { action: 'search', query: 'Dark', type: 'series', year: 2017, cursor: 'c1', pageSize: 10 }, 'search_media', { query: 'Dark', type: 'series', year: 2017, cursor: 'c1', pageSize: 10 }],
+  // "Title (year)": the year becomes the filter; an explicit year leaves the query alone.
+  ['media_query', { action: 'search', query: 'Marea Alta (2012)', type: 'Movie' }, 'jellyfin_search', { query: 'Marea Alta', type: 'Movie', year: 2012 }],
+  ['catalog', { action: 'search', query: 'Eclipse (2017)' }, 'search_media', { query: 'Eclipse', year: 2017 }],
+  ['catalog', { action: 'search', query: '1917 (2019)', year: 2019 }, 'search_media', { query: '1917 (2019)', year: 2019 }],
+  ['catalog', { action: 'search', query: 'Blade Runner 2049' }, 'search_media', { query: 'Blade Runner 2049' }],
+  // A requested language is strict unless the model says otherwise.
+  ['catalog', { action: 'releases', mediaRef: 'mref_1', audioLanguage: 'ja' }, 'find_releases', { mediaRef: 'mref_1', audioLanguage: 'ja', strictLanguage: true }],
+  ['catalog', { action: 'releases', mediaRef: 'mref_1', audioLanguage: 'es', strictLanguage: false }, 'find_releases', { mediaRef: 'mref_1', audioLanguage: 'es', strictLanguage: false }],
   ['catalog', { action: 'details', mediaRef: 'mref_1' }, 'media_details', { mediaRef: 'mref_1' }],
   ['catalog', { action: 'releases', mediaRef: 'mref_1', resolution: '1080p', audioLanguage: 'es', strictLanguage: true, minSeeders: 2 }, 'find_releases', { mediaRef: 'mref_1', resolution: '1080p', audioLanguage: 'es', strictLanguage: true, minSeeders: 2 }],
   ['catalog', { action: 'propose_download', releaseRef: 'rref_1', mediaRef: 'mref_1', replacement: true }, 'propose_download', { releaseRef: 'rref_1', mediaRef: 'mref_1', replacement: true }],
@@ -117,9 +128,10 @@ const ROUTING_TABLE: Row[] = [
   ['movies', { action: 'status' }, 'movie_status', { view: 'movies' }],
   ['movies', { action: 'releases', movieId: 9 }, 'movie_releases', { movieId: 9 }],
 
-  ['downloads', { action: 'status', packageIds: [1] }, 'download_status', { action: 'status' }],
-  ['downloads', { action: 'list_queue', source: 'qbittorrent' }, 'cancel_downloads', { source: 'qbittorrent', action: 'list' }],
-  ['downloads', { action: 'list_queue' }, 'cancel_downloads', { source: 'sonarr', action: 'list' }],
+  ['downloads', { action: 'status', packageIds: [1] }, 'download_queue', { source: 'all' }],
+  ['downloads', { action: 'status', source: 'radarr', page: 2, pageSize: 3 }, 'download_queue', { source: 'radarr', page: 2, pageSize: 3 }],
+  ['downloads', { action: 'list_queue', source: 'qbittorrent' }, 'download_queue', { source: 'qbittorrent' }],
+  ['downloads', { action: 'list_queue' }, 'download_queue', { source: 'all' }],
 
   ['media_format', { action: 'analyze', path: 'tv/x.mkv' }, 'inspect_format', { path: 'tv/x.mkv' }],
   ['media_format', { action: 'propose', path: 'tv/x.mkv', job: 'remux' }, 'propose_media_job', { path: 'tv/x.mkv', action: 'remux', profileName: 'mkv_remux' }],

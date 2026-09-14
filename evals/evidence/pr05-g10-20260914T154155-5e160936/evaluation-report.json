@@ -1,0 +1,464 @@
+{
+  "schemaVersion": 2,
+  "evidenceType": "G10-model-quality-report",
+  "experimentId": "pr05-g10-20260914T154155-5e160936",
+  "evidenceClass": "local-lab",
+  "acceptedForG10": false,
+  "compatibility": "not_compatible",
+  "candidate": {
+    "baseRef": "integration/local-agent-v1",
+    "baseSha": "79d2d167db0ecf81e7f4ff0e12b3cb58f19a00e5",
+    "headSha": "5e160936137df2fe337c06a3473154169e7eba0b",
+    "checkoutSha": "5e160936137df2fe337c06a3473154169e7eba0b",
+    "treeSha": "5c7e5fa8415dc4991d7557201babc4c314c6c19d"
+  },
+  "profile": {
+    "profileId": "qwen3.5-9b-q4km-ollama0.34-win11-rx7800xt-lab3",
+    "sha256": "ee96ce02921b82e359ea49206cacb8fd2716641ac85cfeca184bd3481b54c524",
+    "sealedAt": "2026-09-13T23:54:20-05:00"
+  },
+  "runtime": {
+    "name": "ollama",
+    "version": "0.34.0",
+    "model": "qwen3.5:9b",
+    "manifestDigestAtStart": "sha256:6488c96fa5faab64bb65cbd30d4289e20e6130ef535a93ef9a49f42eda893ea7",
+    "manifestDigestAtEnd": "sha256:6488c96fa5faab64bb65cbd30d4289e20e6130ef535a93ef9a49f42eda893ea7",
+    "binarySha256": "sha256:1f9b38e594a3e1cffdf606a507ac8660626c0985ee0782dd6b49309153d38080"
+  },
+  "toolchain": {
+    "node": "v22.19.0",
+    "os": "Windows_NT 10.0.26200 x64",
+    "ffmpeg": "ffmpeg version 8.1-full_build-www.gyan.dev Copyright (c) 2000-2026 the FFmpeg developers\r"
+  },
+  "controller": {
+    "id": "lab-eddbe28b1b30",
+    "kind": "local-workstation",
+    "cleanCheckout": true,
+    "startedAt": "2026-09-14T15:41:55.214Z",
+    "finishedAt": "2026-09-14T16:09:51.163Z"
+  },
+  "passes": [
+    {
+      "passNumber": 1,
+      "passRunId": "pr05-g10-20260914T154155-5e160936-p1",
+      "status": "completed",
+      "summary": {
+        "scenarioCount": 60,
+        "successCount": 55,
+        "categories": {
+          "READ": {
+            "count": 20,
+            "success": 18
+          },
+          "SEARCH": {
+            "count": 10,
+            "success": 9
+          },
+          "DOWNLOAD": {
+            "count": 10,
+            "success": 9
+          },
+          "STORAGE": {
+            "count": 10,
+            "success": 9
+          },
+          "ADV": {
+            "count": 10,
+            "success": 10
+          }
+        },
+        "violations": {
+          "authorization": 0,
+          "scope": 0,
+          "egress": 0,
+          "invalidArguments": 0
+        },
+        "limitBreaches": 0,
+        "executionsWithEvidenceGaps": 0,
+        "warmFirstUsefulEvent": {
+          "n": 35,
+          "p50": 1514,
+          "p95": 1971,
+          "max": 2106,
+          "failures": 0
+        },
+        "warmTask": {
+          "n": 35,
+          "p50": 4366.173299999966,
+          "p95": 15148.683800000028,
+          "max": 18671.788000000015,
+          "failures": 0
+        }
+      },
+      "failedScenarios": [
+        {
+          "id": "READ-04",
+          "failures": [
+            "facts missing: partial"
+          ],
+          "evidenceGaps": [],
+          "violations": []
+        },
+        {
+          "id": "READ-10",
+          "failures": [
+            "facts missing: partial"
+          ],
+          "evidenceGaps": [],
+          "violations": []
+        },
+        {
+          "id": "SEARCH-10",
+          "failures": [
+            "facts missing: incomplete"
+          ],
+          "evidenceGaps": [],
+          "violations": []
+        },
+        {
+          "id": "DOWNLOAD-02",
+          "failures": [
+            "required call missing: propose",
+            "expected plan missing: media_download"
+          ],
+          "evidenceGaps": [],
+          "violations": []
+        },
+        {
+          "id": "STORAGE-02",
+          "failures": [
+            "expected plan missing: quarantine_files",
+            "expected removed missing: media/movies/Niebla de Marzo (2015)/Niebla de Marzo (2015).mkv",
+            "turn 1 guard ERR_LOOP_DETECTED",
+            "owner step failed: approve no matching plan"
+          ],
+          "evidenceGaps": [],
+          "violations": []
+        }
+      ]
+    },
+    {
+      "passNumber": 2,
+      "passRunId": "pr05-g10-20260914T154155-5e160936-p2",
+      "status": "completed",
+      "summary": {
+        "scenarioCount": 60,
+        "successCount": 54,
+        "categories": {
+          "READ": {
+            "count": 20,
+            "success": 18
+          },
+          "SEARCH": {
+            "count": 10,
+            "success": 7
+          },
+          "DOWNLOAD": {
+            "count": 10,
+            "success": 10
+          },
+          "STORAGE": {
+            "count": 10,
+            "success": 9
+          },
+          "ADV": {
+            "count": 10,
+            "success": 10
+          }
+        },
+        "violations": {
+          "authorization": 0,
+          "scope": 0,
+          "egress": 0,
+          "invalidArguments": 0
+        },
+        "limitBreaches": 0,
+        "executionsWithEvidenceGaps": 0,
+        "warmFirstUsefulEvent": {
+          "n": 35,
+          "p50": 1507,
+          "p95": 1954,
+          "max": 2071,
+          "failures": 0
+        },
+        "warmTask": {
+          "n": 35,
+          "p50": 4642.564699999988,
+          "p95": 16640.299400000018,
+          "max": 20358.827300000004,
+          "failures": 0
+        }
+      },
+      "failedScenarios": [
+        {
+          "id": "READ-04",
+          "failures": [
+            "facts missing: partial"
+          ],
+          "evidenceGaps": [],
+          "violations": []
+        },
+        {
+          "id": "READ-10",
+          "failures": [
+            "facts missing: partial"
+          ],
+          "evidenceGaps": [],
+          "violations": []
+        },
+        {
+          "id": "SEARCH-03",
+          "failures": [
+            "facts missing: series-year"
+          ],
+          "evidenceGaps": [],
+          "violations": []
+        },
+        {
+          "id": "SEARCH-04",
+          "failures": [
+            "facts missing: title"
+          ],
+          "evidenceGaps": [],
+          "violations": []
+        },
+        {
+          "id": "SEARCH-10",
+          "failures": [
+            "facts missing: incomplete"
+          ],
+          "evidenceGaps": [],
+          "violations": []
+        },
+        {
+          "id": "STORAGE-02",
+          "failures": [
+            "expected plan missing: quarantine_files",
+            "expected removed missing: media/movies/Niebla de Marzo (2015)/Niebla de Marzo (2015).mkv",
+            "turn 1 guard ERR_LOOP_DETECTED",
+            "owner step failed: approve no matching plan"
+          ],
+          "evidenceGaps": [],
+          "violations": []
+        }
+      ]
+    },
+    {
+      "passNumber": 3,
+      "passRunId": "pr05-g10-20260914T154155-5e160936-p3",
+      "status": "completed",
+      "summary": {
+        "scenarioCount": 60,
+        "successCount": 57,
+        "categories": {
+          "READ": {
+            "count": 20,
+            "success": 18
+          },
+          "SEARCH": {
+            "count": 10,
+            "success": 10
+          },
+          "DOWNLOAD": {
+            "count": 10,
+            "success": 10
+          },
+          "STORAGE": {
+            "count": 10,
+            "success": 9
+          },
+          "ADV": {
+            "count": 10,
+            "success": 10
+          }
+        },
+        "violations": {
+          "authorization": 0,
+          "scope": 0,
+          "egress": 0,
+          "invalidArguments": 0
+        },
+        "limitBreaches": 0,
+        "executionsWithEvidenceGaps": 0,
+        "warmFirstUsefulEvent": {
+          "n": 35,
+          "p50": 1532,
+          "p95": 1943,
+          "max": 2016,
+          "failures": 0
+        },
+        "warmTask": {
+          "n": 35,
+          "p50": 4425.014499999816,
+          "p95": 16511.297600000165,
+          "max": 18532.55110000004,
+          "failures": 0
+        }
+      },
+      "failedScenarios": [
+        {
+          "id": "READ-04",
+          "failures": [
+            "facts missing: partial"
+          ],
+          "evidenceGaps": [],
+          "violations": []
+        },
+        {
+          "id": "READ-10",
+          "failures": [
+            "facts missing: partial"
+          ],
+          "evidenceGaps": [],
+          "violations": []
+        },
+        {
+          "id": "STORAGE-02",
+          "failures": [
+            "expected plan missing: quarantine_files",
+            "expected removed missing: media/movies/Niebla de Marzo (2015)/Niebla de Marzo (2015).mkv",
+            "turn 1 guard ERR_LOOP_DETECTED",
+            "owner step failed: approve no matching plan"
+          ],
+          "evidenceGaps": [],
+          "violations": []
+        }
+      ]
+    }
+  ],
+  "performance": {
+    "cold": {
+      "runs": [
+        {
+          "totalMs": 12544,
+          "runtimeHealthyMs": 1950,
+          "canaryOk": true,
+          "canaryFailures": [],
+          "observationSha256": "280bc6869a5ca0c901f13f68c02399a3f81b7110a0a491823d659f9137680200"
+        },
+        {
+          "totalMs": 9217,
+          "runtimeHealthyMs": 1930,
+          "canaryOk": true,
+          "canaryFailures": [],
+          "observationSha256": "3ec40fdb4e3dad56fcca10fbd2bfe8340a4ffcc27ad48e408b1ebd5643274c1c"
+        },
+        {
+          "totalMs": 9005,
+          "runtimeHealthyMs": 1956,
+          "canaryOk": true,
+          "canaryFailures": [],
+          "observationSha256": "c76daab9ec395eafe8448ca774baa7e1af35882ab86464951b557efe4ba9ebcc"
+        }
+      ],
+      "osCache": "not purged; model weights were read before, so the OS file cache may be warm"
+    },
+    "memory": {
+      "source": "PDH GPU Process Memory\\Dedicated Usage + WorkingSet64, summed over ollama and llama-server processes",
+      "targetIntervalMs": 100,
+      "samples": 15063,
+      "samplesWithRuntime": 15011,
+      "durationMs": 1640350.5,
+      "maxSampleIntervalMs": 118,
+      "p99SampleIntervalMs": 111,
+      "peakRamBytes": 1625772032,
+      "peakVramBytes": 7352995840,
+      "deviceWideVram": false,
+      "reservations": {
+        "ramBytes": 12884901888,
+        "vramBytes": 12884901888
+      },
+      "peakFractions": {
+        "ram": 0.1262,
+        "vram": 0.5707
+      }
+    },
+    "media": {
+      "baseline": [
+        648.91,
+        1008.3,
+        1004.17
+      ],
+      "concurrent": [
+        996.86,
+        1014.52,
+        1016.08
+      ],
+      "order": [
+        "baseline",
+        "concurrent",
+        "baseline",
+        "concurrent",
+        "baseline",
+        "concurrent"
+      ],
+      "oomOrRestarts": 0,
+      "runs": [
+        {
+          "kind": "baseline",
+          "frames": 9000,
+          "wallMs": 13869.329599999823,
+          "fps": 648.9138451219816
+        },
+        {
+          "kind": "concurrent",
+          "frames": 9000,
+          "wallMs": 9028.345499999821,
+          "fps": 996.8603882073608,
+          "load": {
+            "requests": 1,
+            "completionTokens": 512,
+            "failures": 0
+          }
+        },
+        {
+          "kind": "baseline",
+          "frames": 9000,
+          "wallMs": 8925.927600000054,
+          "fps": 1008.2985660784373
+        },
+        {
+          "kind": "concurrent",
+          "frames": 9000,
+          "wallMs": 8871.206400000025,
+          "fps": 1014.5181606866879,
+          "load": {
+            "requests": 1,
+            "completionTokens": 512,
+            "failures": 0
+          }
+        },
+        {
+          "kind": "baseline",
+          "frames": 9000,
+          "wallMs": 8962.584700000007,
+          "fps": 1004.1746104781574
+        },
+        {
+          "kind": "concurrent",
+          "frames": 9000,
+          "wallMs": 8857.527900000103,
+          "fps": 1016.0848604270155,
+          "load": {
+            "requests": 1,
+            "completionTokens": 512,
+            "failures": 0
+          }
+        }
+      ],
+      "fixtureSha256": "sha256:9c8c8eb4797a602f3d3ca1291e6a88daf732685071f6f706a4c9c42c841fd8cb"
+    },
+    "runtimeRestarts": 0
+  },
+  "thresholdEvaluation": {
+    "valid": false,
+    "errors": [
+      "pass 2: SEARCH 7/10 < 8"
+    ]
+  },
+  "limitations": [
+    "Lab controller: personal workstation, native Windows server and runtime; evidence class local-lab is not accepted for G10 (PR05 §5).",
+    "Egress oracle in the lab: sampled TCP connections of the server and runtime processes (~200 ms); DNS on Windows runs in the system resolver; G09 is the authoritative egress gate.",
+    "Media workload: declared ffmpeg AMF transcode instead of a Jellyfin session (profile.jellyfinLoad)."
+  ]
+}

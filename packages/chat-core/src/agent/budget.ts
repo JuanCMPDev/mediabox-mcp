@@ -6,7 +6,7 @@
  * sees parseable JSON and the envelope can never be corrupted by its payload.
  * ──────────────────────────────────────────────────────────────────────── */
 import type { ChatMessage, VirtualToolDef, ToolResultInfo } from '../types.js';
-import type { WorkflowState } from './workflow.js';
+import { observedMediaRefs, observedReleaseRefs, type WorkflowState } from './workflow.js';
 import { AgentError } from './errors.js';
 
 export interface BudgetConfig {
@@ -83,9 +83,16 @@ export function buildStateSummary(state: WorkflowState, counter: TokenEstimator 
     parts.push(`Intent: ${state.intent.kind} — ${state.intent.summary}`);
   }
   const refParts: string[] = [];
-  if (state.references.mediaRef) refParts.push(`mediaRef=${state.references.mediaRef}`);
-  if (state.references.releaseRef) refParts.push(`releaseRef=${state.references.releaseRef}`);
-  if (state.references.paths?.length) refParts.push(`paths=${state.references.paths.slice(0, 3).join(',')}`);
+  const refs = state.references;
+  if (refs.mediaRef) refParts.push(`mediaRef=${refs.mediaRef}`);
+  const mediaSeen = observedMediaRefs(refs).length;
+  if (mediaSeen > 1) refParts.push(`mediaRefsSeen=${mediaSeen}`);
+  if (refs.releaseRef) refParts.push(`releaseRef=${refs.releaseRef}`);
+  const releasesSeen = observedReleaseRefs(refs).length;
+  if (releasesSeen > 1) refParts.push(`releaseRefsSeen=${releasesSeen}`);
+  // Newest first: the files this conversation listed or analyzed last.
+  if (refs.paths?.length) refParts.push(`listedFiles=${refs.paths.length} [${refs.paths.slice(-3).reverse().join(' | ')}]`);
+  if (refs.inspectedPaths?.length) refParts.push(`analyzedFiles=[${refs.inspectedPaths.slice(-3).reverse().join(' | ')}]`);
   if (refParts.length > 0) {
     parts.push(`ActiveReferences: ${refParts.join(' ')}`);
   }
@@ -121,7 +128,25 @@ const SHORT_ITEM_KEYS = new Set([
   'id', 'title', 'name', 'year', 'mediaRef', 'releaseRef', 'score', 'status', 'resolution',
   'size', 'sizeBytes', 'seeders', 'quality', 'language', 'indexer', 'reason', 'reasons',
   'season', 'episode', 'path', 'planId', 'operation', 'state',
+  // Release verdicts: without them the model could not see that a release was
+  // rejected, or in which language it is.
+  'rejected', 'rejections', 'languages',
 ]);
+
+/** Error messages carry the reason the model must act on; they get more room than data strings. */
+const TOOL_ERROR_STRING_CAP = 300;
+
+function compactError(error: unknown): unknown {
+  if (typeof error === 'string') return truncateString(error, TOOL_ERROR_STRING_CAP);
+  if (error && typeof error === 'object' && !Array.isArray(error)) {
+    const out: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(error as Record<string, unknown>)) {
+      out[k] = typeof v === 'string' ? truncateString(v, TOOL_ERROR_STRING_CAP) : shortenValue(v, 1);
+    }
+    return out;
+  }
+  return shortenValue(error);
+}
 
 function truncateString(val: unknown, maxLen: number): string {
   if (typeof val !== 'string') return String(val ?? '');
@@ -129,17 +154,37 @@ function truncateString(val: unknown, maxLen: number): string {
   return clean.length > maxLen ? `${clean.slice(0, maxLen)}...` : clean;
 }
 
-function shortenValue(value: unknown, depth = 0): unknown {
+/**
+ * Nesting kept by compaction. Real results nest their ids and names deeper than
+ * two levels (`results[].id`, `libraries[].name`, `seasons[].episodes[].name`);
+ * cutting there left the model with `[object]` and it passed that string back as an id.
+ */
+const TOOL_RESULT_MAX_DEPTH = 4;
+
+/** Past the depth cap a record keeps its scalar fields, never a bare placeholder. */
+function scalarFields(value: Record<string, unknown>): Record<string, unknown> | string {
+  const out: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(value)) {
+    if (typeof v === 'string') out[k] = truncateString(v, TOOL_RESULT_STRING_CAP);
+    else if (typeof v === 'number' || typeof v === 'boolean') out[k] = v;
+  }
+  return Object.keys(out).length > 0 ? out : '[object]';
+}
+
+function shortenValue(value: unknown, depth = 0, itemLimit = TOOL_RESULT_ITEM_CAP): unknown {
   if (typeof value === 'string') return truncateString(value, TOOL_RESULT_STRING_CAP);
   if (Array.isArray(value)) {
-    if (depth >= 2) return `[${value.length} items]`;
-    return value.slice(0, TOOL_RESULT_ITEM_CAP).map(v => shortenValue(v, depth + 1));
+    if (depth >= TOOL_RESULT_MAX_DEPTH) return `[${value.length} items]`;
+    const items = value.slice(0, itemLimit).map(v => shortenValue(v, depth + 1, itemLimit));
+    // Say that the list goes on, or the model reports the first items as all of them.
+    if (value.length > itemLimit) items.push(`[+${value.length - itemLimit} more]`);
+    return items;
   }
   if (value && typeof value === 'object') {
-    if (depth >= 2) return '[object]';
+    if (depth >= TOOL_RESULT_MAX_DEPTH) return scalarFields(value as Record<string, unknown>);
     const out: Record<string, unknown> = {};
     for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
-      out[k] = shortenValue(v, depth + 1);
+      out[k] = shortenValue(v, depth + 1, itemLimit);
     }
     return out;
   }
@@ -147,18 +192,24 @@ function shortenValue(value: unknown, depth = 0): unknown {
 }
 
 function compactEnvelope(parsed: Record<string, unknown>, itemLimit: number): Record<string, unknown> {
+  // A bare JSON array (activity_log) is a list like `data`: bound it and keep its length.
+  if (Array.isArray(parsed)) {
+    return { items: shortenValue(parsed, 1, itemLimit), totalCount: parsed.length };
+  }
   const compacted: Record<string, unknown> = {};
 
   if ('status' in parsed) compacted.status = parsed.status;
   if ('sources' in parsed) compacted.sources = shortenValue(parsed.sources);
   if ('page' in parsed) compacted.page = parsed.page;
-  if ('error' in parsed) compacted.error = shortenValue(parsed.error);
+  if ('error' in parsed) compacted.error = compactError(parsed.error);
   if ('message' in parsed) compacted.message = truncateString(parsed.message, TOOL_RESULT_STRING_CAP);
   if ('planId' in parsed) compacted.planId = parsed.planId;
   if ('operation' in parsed) compacted.operation = parsed.operation;
   if ('proposalKey' in parsed) compacted.proposalKey = parsed.proposalKey;
   if ('expiresAt' in parsed) compacted.expiresAt = parsed.expiresAt;
   if ('manifestHash' in parsed) compacted.manifestHash = parsed.manifestHash;
+  // Library matches the runtime adds to an empty catalog search (dispatch.ts).
+  if ('library' in parsed) compacted.library = shortenValue(parsed.library, 1, itemLimit);
 
   const data = parsed.data;
   if (Array.isArray(data)) {
@@ -166,18 +217,19 @@ function compactEnvelope(parsed: Record<string, unknown>, itemLimit: number): Re
       if (typeof item !== 'object' || item === null) return shortenValue(item);
       const shortItem: Record<string, unknown> = {};
       for (const [k, v] of Object.entries(item as Record<string, unknown>)) {
-        if (SHORT_ITEM_KEYS.has(k)) shortItem[k] = shortenValue(v, 1);
+        if (SHORT_ITEM_KEYS.has(k)) shortItem[k] = shortenValue(v, 1, itemLimit);
       }
       return shortItem;
     });
     compacted.totalCount = data.length;
     if (data.length > itemLimit) compacted.truncated = true;
   } else if (data !== undefined) {
-    compacted.data = shortenValue(data);
+    compacted.data = shortenValue(data, 0, itemLimit);
   } else {
-    // Non-envelope payload: keep its own short keys so simple tools still say something.
+    // Non-envelope payload (jellyfin_search, server_status, show_details): keep its
+    // fields, with nested lists bounded by the same item limit.
     for (const [k, v] of Object.entries(parsed)) {
-      if (!(k in compacted)) compacted[k] = shortenValue(v, 1);
+      if (!(k in compacted)) compacted[k] = shortenValue(v, 1, itemLimit);
     }
   }
 

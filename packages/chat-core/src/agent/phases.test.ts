@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { getPhaseTools } from './phases.js';
+import { FORBIDDEN_ACTIONS, getPhaseTools } from './phases.js';
+import type { WorkflowIntent, WorkflowReferences } from './workflow.js';
 import { VIRTUAL_TOOLS } from '../virtual-tools.js';
 import type { Phase } from '@mediabox/contracts';
 
@@ -8,6 +9,13 @@ function estimateTokens(text: string): number {
 }
 
 const PHASES: Phase[] = ['orient', 'discover', 'select', 'propose', 'monitor', 'maintain'];
+const INTENTS: Array<WorkflowIntent['kind']> = [
+  'download', 'delete', 'convert', 'inspect', 'maintenance', 'status', 'queue', 'library', 'server', 'owner_only', 'other',
+];
+
+function actions(phase: Phase, intentKind: WorkflowIntent['kind'], tool: string, references: WorkflowReferences = {}): string[] {
+  return (getPhaseTools(phase, { intentKind, references }).find(t => t.name === tool)?.parameters as any)?.properties.action.enum ?? [];
+}
 
 describe('Phased Tool Catalog & Schema Bounds (§2.3 / AGT-11)', () => {
   for (const phase of PHASES) {
@@ -38,5 +46,90 @@ describe('Phased Tool Catalog & Schema Bounds (§2.3 / AGT-11)', () => {
 
     // Original VIRTUAL_TOOLS must be unchanged!
     expect((VIRTUAL_TOOLS.library_ops.parameters as any).properties.action.enum).toEqual(originalEnum);
+  });
+
+  it('preserves bounds and owner-only actions for every intent and grounding state', () => {
+    const referenceSets: WorkflowReferences[] = [{}, { mediaRef: 'mref_item', releaseRef: 'rref_release', paths: ['films/Arrival.mkv'], inspectedPaths: ['films/Arrival.mkv'] }];
+    for (const phase of PHASES) {
+      for (const intentKind of INTENTS) {
+        for (const references of referenceSets) {
+          const tools = getPhaseTools(phase, { intentKind, references });
+          expect(tools.filter(t => t.name !== 'present_choices').length, `${phase}/${intentKind}`).toBeLessThanOrEqual(4);
+          expect(estimateTokens(JSON.stringify(tools)), `${phase}/${intentKind}`).toBeLessThanOrEqual(1200);
+          const offered = tools.flatMap(t => (t.parameters as any).properties.action?.enum ?? []);
+          expect(offered.filter(action => FORBIDDEN_ACTIONS.has(action))).toEqual([]);
+        }
+      }
+    }
+  });
+
+  it('keeps local search and listing reachable through the entire storage request', () => {
+    for (const phase of ['orient', 'discover', 'select', 'propose', 'monitor'] as const) {
+      expect(actions(phase, 'delete', 'media_query')).toContain('search');
+      expect(actions(phase, 'delete', 'library_ops')).toContain('list');
+      expect(actions(phase, 'convert', 'library_ops')).toContain('list');
+      expect(actions(phase, 'convert', 'media_format')).toContain('analyze');
+    }
+  });
+
+  it('offers deletion only after listing, and conversion only after a successful analysis', () => {
+    expect(actions('propose', 'delete', 'library_ops')).toEqual(['list']);
+    expect(actions('propose', 'delete', 'library_ops', { paths: ['films/Arrival.mkv'] })).toEqual(['list', 'propose_delete']);
+    expect(actions('propose', 'convert', 'media_format', { paths: ['films/Arrival.mkv'] })).toEqual(['analyze']);
+    expect(actions('propose', 'convert', 'media_format', { inspectedPaths: ['films/Arrival.mkv'] })).toEqual(['analyze', 'propose']);
+    expect(actions('propose', 'download', 'catalog')).not.toContain('propose_download');
+    expect(actions('propose', 'download', 'catalog', { releaseRef: 'rref_release' })).toContain('propose_download');
+    expect(actions('propose', 'download', 'catalog', { releaseRef: 'untrusted prose' })).not.toContain('propose_download');
+  });
+
+  it('never turns inspection, browsing or status into a proposal', () => {
+    const references = { releaseRef: 'rref_release', paths: ['films/Arrival.mkv'], inspectedPaths: ['films/Arrival.mkv'] };
+    for (const intentKind of ['inspect', 'library', 'queue', 'status', 'server', 'owner_only', 'maintenance', 'other'] as const) {
+      const tools = getPhaseTools('propose', { intentKind, references });
+      const offered: string[] = tools.flatMap(t => (t.parameters as any).properties.action?.enum ?? []);
+      expect(offered.filter(a => ['propose_download', 'propose_delete', 'propose'].includes(a))).toEqual([]);
+      for (const tool of tools) expect(tool.description).not.toMatch(/propose|approve|purge|restore/);
+    }
+  });
+
+  it('gives every read-only intent its local reads in every phase but maintain', () => {
+    // READ-14, experiment 6: asked about downloaded episodes, qwen3.5 read the queue
+    // instead of the library. Library and server questions never see the queue.
+    const expected: Record<string, string[]> = {
+      library: ['server_info', 'media_query', 'operations', 'present_choices'],
+      server: ['server_info', 'media_query', 'operations', 'present_choices'],
+      queue: ['server_info', 'media_query', 'downloads', 'operations', 'present_choices'],
+      status: ['server_info', 'media_query', 'downloads', 'operations', 'present_choices'],
+      // No card can perform an owner-only action, so owner-only requests get none.
+      owner_only: ['server_info', 'media_query', 'downloads', 'operations'],
+    };
+    for (const [intentKind, names] of Object.entries(expected)) {
+      for (const phase of ['orient', 'discover', 'select', 'propose', 'monitor'] as const) {
+        expect(getPhaseTools(phase, { intentKind: intentKind as WorkflowIntent['kind'] }).map(t => t.name), `${phase}/${intentKind}`).toEqual(names);
+      }
+    }
+    expect(getPhaseTools('orient', { intentKind: 'maintenance' }).map(t => t.name))
+      .toEqual(['maintenance', 'server_info', 'library_ops', 'present_choices']);
+  });
+
+  it('never offers a proposal outside propose, even with grounding', () => {
+    const references = { releaseRef: 'rref_release', paths: ['films/Arrival.mkv'], inspectedPaths: ['films/Arrival.mkv'] };
+    for (const phase of ['orient', 'discover', 'select', 'monitor', 'maintain'] as const) {
+      for (const intentKind of ['download', 'delete', 'convert'] as const) {
+        const offered = getPhaseTools(phase, { intentKind, references }).flatMap(t => (t.parameters as any).properties.action?.enum ?? []);
+        expect(offered.filter((action: string) => action.startsWith('propose')), `${phase}/${intentKind}`).toEqual([]);
+      }
+    }
+  });
+
+  it('makes queue reads and library filtering reachable after an earlier proposal', () => {
+    for (const phase of ['orient', 'select', 'propose', 'monitor'] as const) {
+      expect(actions(phase, 'queue', 'downloads')).toEqual(['status', 'list_queue']);
+      // A status question may still check the queue before calling a download available.
+      expect(actions(phase, 'status', 'downloads')).toEqual(['status', 'list_queue']);
+      expect(actions(phase, 'library', 'media_query')).toContain('list');
+      expect(actions(phase, 'library', 'downloads')).toEqual([]);
+      expect(actions(phase, 'server', 'downloads')).toEqual([]);
+    }
   });
 });

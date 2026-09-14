@@ -15,15 +15,19 @@
     "ci:typecheck": "npm run typecheck",
     "ci:build": "npm run build -w @mediabox/contracts && npm run build -w @mediabox/core && npm run build -w @mediabox/chat-core && npm run build -w mediabox-mcp && npm run build -w mcp-telegram-client && npm run build -w create-mediabox && npm run build -w @mediabox/ui",
     "ci:test": "node scripts/ci/verify-suites.mjs",
+    "test:ci-harness": "node --test scripts/ci/*.test.mjs packages/desktop/scripts/*.test.mjs",
     "test:security-contracts": "vitest run packages/mcp-server/src/security",
     "test:operations": "vitest run packages/mcp-server/src/operations",
     "test:queries": "vitest run packages/mcp-server/src/queries",
     "test:filesystem": "vitest run packages/mcp-server/src/storage/storage.test.ts",
     "test:media-recovery": "vitest run packages/mcp-server/src/storage/media-jobs.test.ts",
     "test:agent-replay": "vitest run packages/chat-core/src/agent",
+    "test:local-egress": "node --test tests/local-egress/*.test.mjs",
     "smoke:media-ffmpeg": "node scripts/ci/smoke-media-ffmpeg.mjs",
     "smoke:node-bun": "node scripts/ci/smoke-node-bun.mjs",
+    "smoke:desktop": "npm run smoke:execa -w @mediabox/desktop && npm run smoke:execa-compiled -w @mediabox/desktop",
     "smoke:local-canary": "node scripts/ci/smoke-local-canary.mjs",
+    "smoke:local-canary:scripted": "node scripts/ci/smoke-local-canary.mjs --scripted",
     "dev": "npm-run-all --parallel dev:mcp dev:ui",
     "dev:mcp": "npm run dev --workspace packages/mcp-server",
     "dev:ui": "npm run dev --workspace packages/ui",
@@ -33,7 +37,12 @@
     "sidecar:build": "node packages/desktop/scripts/build-sidecar.mjs",
     "bundle:desktop": "npm run bundle --workspace packages/desktop",
     "icons:desktop": "npm run icons  --workspace packages/desktop",
-    "test:local-provider": "vitest run packages/chat-core/src/providers packages/core/src/hardware packages/core/src/models"
+    "test:local-provider": "vitest run packages/chat-core/src/providers packages/core/src/hardware packages/core/src/models",
+    "test:eval-harness": "node --test tests/eval-harness/*.test.mjs",
+    "eval:local": "node evals/local-agent/controller.mjs",
+    "eval:profile": "node evals/local-agent/profile.mjs",
+    "ci:evidence": "node scripts/ci/evidence.mjs",
+    "ci:verify-evidence": "node scripts/ci/verify-evidence.mjs"
   },
   "engines": {
     "node": ">=20"

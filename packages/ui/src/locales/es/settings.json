@@ -36,7 +36,14 @@
     "policyLabel": "Política de endpoint",
     "canaryLabel": "Canario de tool calling",
     "canaryUnknown": "sin medir en este hardware",
-    "canaryFailed": "falló: solo texto"
+    "canaryFailed": "falló: solo texto",
+    "runtimeStateLabel": "Estado del runtime",
+    "artifactLabel": "Artefacto del modelo",
+    "privacyLabel": "Perfil de privacidad",
+    "privacyUnverified": "sin configurar (aislamiento no verificado)",
+    "privacyVerified": "verificado: sin ruta por defecto",
+    "privacyNotVerified": "no verificado en este proceso",
+    "privacyStrictUnavailable": "Este proceso no puede demostrar la contención de red (ejecución nativa o hay una ruta por defecto). El perfil estricto está configurado pero no verificado aquí; usa el despliegue Docker aislado para un perfil verificado."
   },
   "telegram": {
     "title": "Bot de Telegram",

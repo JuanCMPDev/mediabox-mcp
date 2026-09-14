@@ -106,6 +106,29 @@ function assertNoInterferingProxy(host: string, urlStr: string): void {
   );
 }
 
+/**
+ * First validated address of each endpoint name, kept for the life of the
+ * process. Pinning inside one request stops rebinding between check and
+ * connect; this stops it between requests, where a changed answer would move
+ * later prompts to another host (NET-04). Moving the runtime needs a restart.
+ */
+const addressPins = new Map<string, string>();
+
+function enforceAddressPin(hostname: string, ip: string, urlStr: string): void {
+  const pinned = addressPins.get(hostname);
+  if (pinned && pinned !== ip) {
+    throw new AgentError(
+      'ERR_ENDPOINT_POLICY',
+      `Endpoint '${urlStr}' now resolves to '${ip}' but was validated as '${pinned}'. A changing answer is treated as DNS rebinding; restart the server after moving the runtime.`,
+    );
+  }
+  addressPins.set(hostname, ip);
+}
+
+export function resetEndpointPinsForTesting(): void {
+  addressPins.clear();
+}
+
 export interface ValidatedEndpoint {
   /** The address the request must actually connect to. */
   resolvedIp: string;
@@ -126,6 +149,10 @@ export async function validateInferenceEndpoint(
     url = new URL(urlStr);
   } catch {
     throw new AgentError('ERR_ENDPOINT_POLICY', `Malformed inference endpoint URL: '${urlStr}'`);
+  }
+
+  if (url.username || url.password) {
+    throw new AgentError('ERR_ENDPOINT_POLICY', 'Inference endpoint must not contain embedded credentials');
   }
 
   if (url.protocol === 'https:') {
@@ -180,6 +207,7 @@ export async function validateInferenceEndpoint(
   const pinned = pinUrl(url, ip);
 
   if (isLoopbackAddress(ip)) {
+    if (!isIP(hostname)) enforceAddressPin(hostname, ip, urlStr);
     return { resolvedIp: ip, url, pinnedUrl: pinned, hostHeader: url.host };
   }
 
@@ -208,6 +236,7 @@ export async function validateInferenceEndpoint(
     );
   }
 
+  if (!isIP(hostname)) enforceAddressPin(hostname, ip, urlStr);
   return { resolvedIp: ip, url, pinnedUrl: pinned, hostHeader: url.host };
 }
 

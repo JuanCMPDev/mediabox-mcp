@@ -25,6 +25,16 @@ function clean<T extends Record<string, unknown>>(obj: T): Record<string, unknow
   return out;
 }
 
+/**
+ * "Marea Alta (2012)": a year written after the title becomes the year filter.
+ * Sent as part of the title, it matched nothing in Jellyfin or the catalog.
+ */
+export function splitTitleYear(query: unknown, year: unknown): { query: unknown; year: unknown } {
+  if (typeof query !== 'string' || year !== undefined) return { query, year };
+  const m = /^(.*\S)\s*\(((?:19|20)\d{2})\)\s*$/.exec(query);
+  return m ? { query: m[1], year: Number(m[2]) } : { query, year };
+}
+
 export function resolveVirtualCall(
   name: string,
   args: Record<string, unknown> = {},
@@ -53,12 +63,14 @@ export function resolveVirtualCall(
     }
 
     case 'media_query': {
-      if (action === 'search') {
+      if (action === 'search' || action === 'list') {
+        const { query, year } = action === 'search' ? splitTitleYear(args.query, args.year) : { query: undefined, year: args.year };
         return {
           tool: 'jellyfin_search',
           args: clean({
-            query: args.query,
+            query,
             type: args.type,
+            year,
             page: args.page,
             pageSize: args.pageSize,
           }),
@@ -80,12 +92,13 @@ export function resolveVirtualCall(
 
     case 'catalog': {
       if (action === 'search') {
+        const { query, year } = splitTitleYear(args.query, args.year);
         return {
           tool: 'search_media',
           args: clean({
-            query: args.query,
+            query,
             type: args.type,
-            year: args.year,
+            year,
             cursor: args.cursor,
             pageSize: args.pageSize,
           }),
@@ -106,7 +119,8 @@ export function resolveVirtualCall(
             mediaRef: args.mediaRef,
             resolution: args.resolution,
             audioLanguage: args.audioLanguage,
-            strictLanguage: args.strictLanguage,
+            // A language the user asks for is a requirement: strict unless the model says otherwise.
+            strictLanguage: args.strictLanguage ?? (typeof args.audioLanguage === 'string' && args.audioLanguage.trim() ? true : undefined),
             minSeeders: args.minSeeders,
           }),
         };
@@ -244,18 +258,13 @@ export function resolveVirtualCall(
     }
 
     case 'downloads': {
-      if (action === 'status') {
+      if (action === 'status' || action === 'list_queue') {
         return {
-          tool: 'download_status',
-          args: { action: 'status' },
-        };
-      }
-      if (action === 'list_queue') {
-        return {
-          tool: 'cancel_downloads',
+          tool: 'download_queue',
           args: clean({
-            source: args.source ?? 'sonarr',
-            action: 'list',
+            source: args.source ?? 'all',
+            page: args.page,
+            pageSize: args.pageSize,
           }),
         };
       }

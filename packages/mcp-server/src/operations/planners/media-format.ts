@@ -24,6 +24,15 @@ export interface MediaFormatPlanSummary {
   sourceBytes: number;
   stagingBytes: number;
   hardLinked: boolean;
+  /** Plain statements the agent relays before approval: what is lost, and why no space is freed. */
+  warnings: string[];
+}
+
+function mediaFormatWarnings(profile: MediaProfile, hardLinked: boolean): string[] {
+  const out: string[] = [];
+  if (profile.lossNote) out.push(profile.lossNote);
+  if (hardLinked) out.push("The source is a hard link: the conversion writes a new copy and frees no space.");
+  return out;
 }
 
 function destinationFor(relativePath: string, profile: MediaProfile): string {
@@ -110,6 +119,7 @@ export async function createMediaFormatPlan(
       sourceBytes,
       stagingBytes,
       hardLinked: (fileIdentity.nlink ?? 1) > 1,
+      warnings: mediaFormatWarnings(profile, (fileIdentity.nlink ?? 1) > 1),
     },
   };
 }

@@ -36,7 +36,14 @@
     "policyLabel": "Endpoint policy",
     "canaryLabel": "Tool-calling canary",
     "canaryUnknown": "not measured on this hardware yet",
-    "canaryFailed": "failed: text only"
+    "canaryFailed": "failed: text only",
+    "runtimeStateLabel": "Runtime state",
+    "artifactLabel": "Model artifact",
+    "privacyLabel": "Privacy profile",
+    "privacyUnverified": "not configured (isolation not verified)",
+    "privacyVerified": "verified: no default route",
+    "privacyNotVerified": "not verified in this process",
+    "privacyStrictUnavailable": "This process cannot prove network containment (native run or a default route is present). The strict profile is configured but not verified here; use the isolated Docker deployment for a verified profile."
   },
   "telegram": {
     "title": "Telegram bot",

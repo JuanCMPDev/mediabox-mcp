@@ -1,58 +1,85 @@
 #!/usr/bin/env node
 /**
- * Smoke test: prove that `execa` works inside a `bun build --compile` binary.
- *
- * The desktop wizard (PR 3.2) runs the entire deploy through `mcp-server`,
- * which imports `DockerCliDeployer` from `@mediabox/core`, which uses execa
- * to shell out to `docker compose`. That whole chain is bundled by Bun into
- * a single binary. This script isolates the execa-under-bun-compile variable
- * before we wire any UI on top.
- *
- * Usage (manual smoke):
- *
- *   # 1. Compile this script to a single binary:
- *   bun build --compile --target=bun-windows-x64 \
- *     packages/desktop/scripts/smoke-execa.mjs \
- *     --outfile packages/desktop/.smoke-execa.exe
- *
- *   # 2. Run the binary. It exits 0 if execa works end-to-end.
- *   packages/desktop/.smoke-execa.exe
+ * Desktop sidecar subprocess smoke, under Node and bun build --compile.
+ * Synthetic Node children exercise execa without requiring Docker, a daemon,
+ * or a Tauri/webview session. Any violated assertion fails the process.
  */
-
+import assert from "node:assert/strict";
+import { randomUUID } from "node:crypto";
+import os from "node:os";
+import path from "node:path";
 import { execa } from "execa";
 
-async function check(label, cmd, args) {
+const args = process.argv.slice(2);
+if (args.length !== 0 && (args.length !== 2 || args[0] !== "--node-executable" || !args[1])) {
+  console.error("Usage: smoke-execa.mjs [--node-executable <path>]");
+  process.exit(1);
+}
+
+// A compiled Bun binary's execPath points to itself, not a JavaScript runner.
+const nodeExecutable = args[1] ?? (typeof Bun === "undefined" ? process.execPath : "node");
+const fixture = (exitCode) => ["-e", `process.stdout.write('smoke-stdout'); process.stderr.write('smoke-stderr'); process.exitCode = ${exitCode};`];
+const options = { stdio: "pipe", timeout: 10_000 };
+
+let failures = 0;
+async function check(label, run) {
   try {
-    const result = await execa(cmd, args, { stdio: "pipe", reject: false });
-    const ok = result.exitCode === 0;
-    const head = (result.stdout || result.stderr || "").split("\n")[0]?.trim() ?? "";
-    console.log(`[${ok ? "OK" : "FAIL"}] ${label}: ${head || "<empty>"}  (exit ${result.exitCode})`);
-    return ok;
-  } catch (err) {
-    console.log(`[FAIL] ${label}: ${err instanceof Error ? err.message : String(err)}`);
-    return false;
+    await run();
+    console.log(`[OK] ${label}`);
+  } catch (error) {
+    failures++;
+    console.error(`[FAIL] ${label}: ${error instanceof Error ? error.message : String(error)}`);
   }
 }
 
-const isWin = process.platform === "win32";
+await check("stdout, stderr and successful exit", async () => {
+  const result = await execa(nodeExecutable, fixture(0), options);
+  assert.equal(result.stdout, "smoke-stdout");
+  assert.equal(result.stderr, "smoke-stderr");
+  assert.equal(result.exitCode, 0);
+  assert.equal(result.failed, false);
+});
 
-const results = await Promise.all([
-  // A guaranteed-present command on every platform — verifies basic spawn.
-  check("native echo",       isWin ? "cmd"  : "echo", isWin ? ["/c", "echo", "execa-ok"] : ["execa-ok"]),
-  // A real-world scenario the wizard depends on. Will FAIL if Docker is not
-  // installed — that's still an "execa works" success (we got an exit code).
-  check("docker --version",  "docker", ["--version"]),
-  // Stdout capture sanity check.
-  check("node --version",    "node",   ["--version"]),
-]);
+await check("nonzero exit remains observable with reject:false", async () => {
+  const result = await execa(nodeExecutable, fixture(17), { ...options, reject: false });
+  assert.equal(result.stdout, "smoke-stdout");
+  assert.equal(result.stderr, "smoke-stderr");
+  assert.equal(result.exitCode, 17);
+  assert.equal(result.failed, true);
+});
 
-const allSpawned = results.length > 0; // every promise either resolved or threw — both paths logged
-const anySpawnError = results.some(r => r === false && false); // placeholder; we only fail on true exec errors
+await check("nonzero exit rejects with captured output", async () => {
+  await assert.rejects(execa(nodeExecutable, fixture(23), options), (error) => {
+    assert.equal(error.exitCode, 23);
+    assert.equal(error.stdout, "smoke-stdout");
+    assert.equal(error.stderr, "smoke-stderr");
+    return true;
+  });
+});
 
-// The smoke test only fails if execa itself blew up (caught in the catch
-// branch). If a command exits non-zero, that's still a successful execa
-// invocation — just reflects host state. So we report and exit 0.
-console.log(`\nSmoke result: execa is functional under this runtime.`);
-console.log(`Binary path:  ${process.execPath}`);
-console.log(`Bun runtime:  ${typeof Bun !== "undefined" ? Bun.version : "n/a (Node)"}`);
-process.exit(0);
+await check("missing executable rejects", async () => {
+  const missingCommand = `mediabox-missing-${randomUUID()}`;
+  await assert.rejects(execa(missingCommand, [], options), (error) => {
+    // On Windows execa's command lookup can fail through cmd.exe with exit=1.
+    if (process.platform === "win32" && error.code !== "ENOENT") {
+      assert.equal(error.exitCode, 1);
+      assert.ok(error.stderr.includes(missingCommand));
+    } else {
+      assert.equal(error.code, "ENOENT");
+    }
+    assert.equal(error.failed, true);
+    return true;
+  });
+});
+
+await check("native spawn error rejects with ENOENT", async () => {
+  const cwd = path.join(os.tmpdir(), `mediabox-missing-${randomUUID()}`);
+  await assert.rejects(execa(nodeExecutable, fixture(0), { ...options, cwd }), (error) => {
+    assert.equal(error.code, "ENOENT");
+    assert.equal(error.failed, true);
+    return true;
+  });
+});
+
+console.log(`Smoke result: ${failures === 0 ? "PASS" : "FAIL"} (${5 - failures}/5 assertions); runtime ${typeof Bun === "undefined" ? `Node ${process.version}` : `Bun ${Bun.version}`}.`);
+process.exitCode = failures === 0 ? 0 : 1;

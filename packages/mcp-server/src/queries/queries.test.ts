@@ -533,6 +533,27 @@ describe("Gate G06 & Phases P06-P07: Query Contracts, Identity & Download Verifi
       expect(ranked.reasons.some((r) => r.includes("Latin American Spanish"))).toBe(true);
     });
 
+    it("applies a strict requirement for any other language and rejects one it cannot confirm (policy 1.1.0)", () => {
+      const latino = { guid: "r1", title: "Rio.Quieto.2021.1080p.WEB-DL.LATINO.x264-SYN", size: 1, seeders: 40, languages: [{ name: "Spanish (Latino)" }] };
+      const english = { guid: "r2", title: "Rio.Quieto.2021.720p.HDTV.ENG-SYN", size: 1, seeders: 12, languages: [{ name: "English" }] };
+      const unknown = { guid: "r3", title: "Rio.Quieto.2021.2160p.UHD-SYN", size: 1, seeders: 3, languages: [] };
+      const japanese = { guid: "r4", title: "Rio.Quieto.2021.1080p.BluRay.JPN-SYN", size: 1, seeders: 9, languages: [{ name: "Japanese" }] };
+      for (const requiredAudioLanguage of ["ja", "japanese", "japonés"]) {
+        const strict = { requiredAudioLanguage, strictAudioLanguage: true };
+        expect(rankReleaseCandidate(latino, strict).rejections).toContain("Does not contain required Japanese audio");
+        expect(rankReleaseCandidate(english, strict).rejected).toBe(true);
+        expect(rankReleaseCandidate(unknown, strict).rejections).toContain("Unknown language; cannot satisfy strict Japanese requirement");
+        const confirmed = rankReleaseCandidate(japanese, strict);
+        expect(confirmed.rejected).toBe(false);
+        expect(confirmed.reasons).toContain("Confirmed Japanese audio (+40)");
+        expect(confirmed.languages).toContain("Japanese");
+      }
+      expect(rankReleaseCandidate(latino, { requiredAudioLanguage: "klingon", strictAudioLanguage: true }).rejections[0]).toMatch(/Unsupported language requirement 'klingon'/);
+      const preferred = rankReleaseCandidate(latino, { requiredAudioLanguage: "ja" });
+      expect(preferred.rejected).toBe(false);
+      expect(preferred.reasons).toContain("Japanese audio not confirmed when preferred (-30)");
+    });
+
     it("produces identical stable ranking across repeated executions", async () => {
       const rawList = [
         { guid: "g1", title: "Show.S01E01.720p", size: 1000, seeders: 5 },

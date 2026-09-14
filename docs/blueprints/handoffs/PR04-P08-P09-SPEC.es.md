@@ -117,6 +117,8 @@ Reglas:
 - El selector léxico actual (`tool-selector.ts`) pasa a ser una **heurística de fase** (sugiere la fase inicial de un turno); la fase efectiva la decide el reducer con los eventos anteriores. `tool-selector.test.ts` se adapta; el resto de tests de router no cambia.
 - Transiciones registradas como eventos `phase_transition` con motivo; aparecen en la traza.
 
+> **Desviación (PR05, 2026-09-13).** El catálogo lo decide la intención de la petición junto con su grounding verificado; la fase queda como etiqueta de progreso. Almacenamiento, formatos y descargas conservan en todas las fases las lecturas que necesitan. `propose` solo se alcanza con una intención de propuesta y grounding, y solo ofrece la acción de esa intención. Las lecturas (`queue`, `status`, `library`, `server`, `owner_only`) comparten `server_info`, `media_query`, `downloads` y `operations`. La tabla de arriba sigue rigiendo los mensajes sin intención clasificada. Detalle y motivos en [PR05-AGENT-FLOW-HANDOFF.es.md](PR05-AGENT-FLOW-HANDOFF.es.md).
+
 ### 2.4 Presupuesto de contexto
 
 Perfil de partida (blueprint): `contextTokens = 8192`, `outputReserve = 1024`, `safetyMargin = 512`, `inputBudget = 6656`. Configurable por perfil de modelo; **nunca** superior al contexto que el runtime reporta (sección 3.6).

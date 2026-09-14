@@ -2,7 +2,39 @@ import type { ReleaseCandidate, ToolEnvelope, DataSourceStatus } from "@mediabox
 import { createToolEnvelope } from "./envelope.js";
 import { createReleaseRef } from "./references.js";
 
-export const RANKING_VERSION = "1.0.0";
+export const RANKING_VERSION = "1.1.0";
+
+/**
+ * Audio languages beyond Spanish and English (policy 1.1.0): the language name
+ * Radarr/Sonarr report, whole title tokens, and the ways a user may ask for it.
+ * Before 1.1.0 any other requirement was ignored, even when strict, so a
+ * "Japanese audio" request still ranked (and let the agent propose) a Latino release.
+ */
+const OTHER_LANGUAGES: Record<string, { label: string; aliases: string[]; tokens: string[] }> = {
+  ja: { label: "Japanese", aliases: ["ja", "jpn", "japanese", "japones", "japonesa"], tokens: ["japanese", "jpn"] },
+  fr: { label: "French", aliases: ["fr", "fre", "fra", "french", "frances", "francesa"], tokens: ["french", "vff", "truefrench"] },
+  de: { label: "German", aliases: ["de", "ger", "deu", "german", "aleman", "alemana"], tokens: ["german", "ger"] },
+  it: { label: "Italian", aliases: ["it", "ita", "italian", "italiano", "italiana"], tokens: ["italian", "ita"] },
+  pt: { label: "Portuguese", aliases: ["pt", "por", "pt-br", "portuguese", "portugues", "portuguesa"], tokens: ["portuguese", "ptbr"] },
+  ko: { label: "Korean", aliases: ["ko", "kor", "korean", "coreano", "coreana"], tokens: ["korean", "kor"] },
+  zh: { label: "Chinese", aliases: ["zh", "chi", "zho", "chinese", "chino", "china", "mandarin"], tokens: ["chinese", "mandarin", "cantonese"] },
+  ru: { label: "Russian", aliases: ["ru", "rus", "russian", "ruso", "rusa"], tokens: ["russian", "rus"] },
+};
+
+const fold = (s: string) => s.normalize("NFKD").replace(/[̀-ͯ]/g, "").toLowerCase().trim();
+
+function otherLanguageKey(requested: string): string | undefined {
+  const r = fold(requested);
+  return Object.entries(OTHER_LANGUAGES).find(([, l]) => l.aliases.includes(r))?.[0];
+}
+
+function hasOtherLanguage(raw: RawReleaseItem, key: string): boolean {
+  const lang = OTHER_LANGUAGES[key];
+  const label = fold(lang.label);
+  if ((raw.languages || []).some((l) => fold(l.name || "").split(/[^a-z]+/)[0] === label)) return true;
+  const tokens = new Set(fold(raw.title).split(/[^a-z0-9]+/).filter(Boolean));
+  return lang.tokens.some((t) => tokens.has(t));
+}
 
 export interface ReleaseRankingOptions {
   minSeeders?: number;
@@ -78,6 +110,9 @@ export function analyzeReleaseLanguages(raw: RawReleaseItem): {
   if (isLatinSpanish) detectedLanguages.push("Spanish (Latin America)");
   if (isCastilianSpanish) detectedLanguages.push("Spanish (Castilian)");
   if (isEnglish) detectedLanguages.push("English");
+  for (const [key, lang] of Object.entries(OTHER_LANGUAGES)) {
+    if (hasOtherLanguage(raw, key)) detectedLanguages.push(lang.label);
+  }
 
   const isUnknown = detectedLanguages.length === 0;
   if (isUnknown) {
@@ -207,6 +242,25 @@ export function rankReleaseCandidate(
       } else {
         score -= 30;
         reasons.push("Non-English audio when English preferred (-30)");
+      }
+    } else {
+      const key = otherLanguageKey(req);
+      const label = key ? OTHER_LANGUAGES[key].label : options.requiredAudioLanguage;
+      if (key && hasOtherLanguage(raw, key)) {
+        score += 40;
+        reasons.push(`Confirmed ${label} audio (+40)`);
+      } else if (isStrict) {
+        rejected = true;
+        rejections.push(
+          !key
+            ? `Unsupported language requirement '${options.requiredAudioLanguage}'; it cannot be confirmed`
+            : lang.isUnknown
+              ? `Unknown language; cannot satisfy strict ${label} requirement`
+              : `Does not contain required ${label} audio`
+        );
+      } else {
+        score -= 30;
+        reasons.push(`${label} audio not confirmed when preferred (-30)`);
       }
     }
   }

@@ -13,7 +13,8 @@ import { randomUUID } from "crypto";
 import { streamChat }       from "@mediabox/chat-core";
 import type { ChatEvent, ChatStreamRequest } from "@mediabox/contracts";
 import { getLoopbackCaller }  from "../chat/loopback-client.js";
-import { getChatProvider, chatProviderInfo, ensureChatProviderReady } from "../chat/provider.js";
+import { getChatProvider, chatProviderInfo, ensureChatProviderReady, getRuntimeSupervisor } from "../chat/provider.js";
+import { RuntimeAdmissionError } from "../chat/runtime-supervisor.js";
 import { chatHistory }      from "../chat/store.js";
 import { isValidTypedSelection, formatTypedSelection } from "../chat/selection.js";
 import { isOwner } from "../auth.js";
@@ -70,6 +71,26 @@ chatRouter.post("/stream", async (req: Request, res: Response): Promise<void> =>
     return;
   }
 
+  // Local runtime admission (§3.3): loading happens outside the turn, one
+  // inference at a time, and an unavailable runtime never falls back to cloud.
+  const supervisor = getRuntimeSupervisor();
+  let lease: { release: () => void } | null = null;
+  let admissionError: RuntimeAdmissionError | null = null;
+  if (supervisor) {
+    try {
+      lease = await supervisor.admit();
+    } catch (err) {
+      if (err instanceof RuntimeAdmissionError && err.httpStatus === 429) {
+        inFlightTurns.delete(conversationId);
+        res.status(429).json({ error: err.message, code: err.code });
+        return;
+      }
+      admissionError = err instanceof RuntimeAdmissionError
+        ? err
+        : new RuntimeAdmissionError("ERR_PROVIDER_UNAVAILABLE", "The local runtime could not be admitted");
+    }
+  }
+
   // Headers for NDJSON streaming — tell any reverse proxy not to buffer
   res.setHeader("Content-Type", "application/x-ndjson");
   res.setHeader("Transfer-Encoding", "chunked");
@@ -89,6 +110,12 @@ chatRouter.post("/stream", async (req: Request, res: Response): Promise<void> =>
   }
 
   try {
+    if (admissionError) {
+      emit({ type: "conversation", id: conversationId });
+      emit({ type: "error", message: admissionError.message, code: admissionError.code });
+      return;
+    }
+
     const mcpCall = await getLoopbackCaller();
 
     for await (const evt of streamChat({
@@ -108,6 +135,9 @@ chatRouter.post("/stream", async (req: Request, res: Response): Promise<void> =>
     })) {
       if (closed) break;
       emit(evt);
+      if (evt.type === "error" && evt.code === "ERR_PROVIDER_UNAVAILABLE") {
+        supervisor?.markUnavailable("The runtime failed during a turn");
+      }
       // A guard is followed by its own `done`, so only these two end the stream.
       if (evt.type === "done" || evt.type === "error") break;
     }
@@ -117,6 +147,7 @@ chatRouter.post("/stream", async (req: Request, res: Response): Promise<void> =>
       message: err instanceof Error ? err.message : String(err),
     });
   } finally {
+    lease?.release();
     inFlightTurns.delete(conversationId);
     res.end();
   }

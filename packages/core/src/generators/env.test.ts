@@ -96,6 +96,19 @@ describe("generateEnv", () => {
     expect(env).toContain("INFERENCE_BACKEND=rocm");
     expect(env).toContain("INFERENCE_ALLOW_LAN=true");
     expect(env).toContain("INFERENCE_ENDPOINT_HOSTS=192.168.1.50");
+    // Not a strict profile: no pinned-digest slot.
+    expect(env).not.toContain("LOCAL_LLM_MODEL_DIGEST");
+  });
+
+  it("reserves an empty LOCAL_LLM_MODEL_DIGEST for prepare in strict profiles", () => {
+    for (const profile of ["offline-library", "local-agent-online-media"] as const) {
+      const cfg = baseConfig();
+      cfg.deployment.privacyProfile = profile;
+      cfg.ai = { kind: "local", runtime: "ollama", baseUrl: "http://127.0.0.1:11434", model: "qwen2.5:7b" };
+      const lines = generateEnv(cfg).split("\n");
+      expect(lines.filter((l) => l.startsWith("LOCAL_LLM_MODEL_DIGEST="))).toEqual(["LOCAL_LLM_MODEL_DIGEST="]);
+      expect(lines.indexOf("LOCAL_LLM_MODEL_DIGEST=")).toBe(lines.indexOf("LOCAL_LLM_MODEL=qwen2.5:7b") + 1);
+    }
   });
 });
 

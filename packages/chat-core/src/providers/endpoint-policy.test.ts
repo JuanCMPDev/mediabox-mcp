@@ -200,4 +200,10 @@ describe('Connection behaviour', () => {
     const res = await validateInferenceEndpoint('http://127.0.0.1:11434');
     expect(res.resolvedIp).toBe('127.0.0.1');
   });
+
+  it('rejects inference endpoint containing embedded credentials', async () => {
+    await expect(
+      validateInferenceEndpoint('http://user:secret@127.0.0.1:11434'),
+    ).rejects.toThrow('embedded credentials');
+  });
 });

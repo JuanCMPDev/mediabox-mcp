@@ -187,6 +187,7 @@
       "generateCompose": "Escribiendo docker-compose.yml",
       "generateQbittorrent": "Pre-configurando qBittorrent",
       "generateCaddy": "Escribiendo Caddyfile",
+      "deployPrepareArtifacts": "Fijando imágenes y modelo por digest",
       "deployPrepareImages": "Descargando imágenes de Docker",
       "deployStart": "Iniciando contenedores",
       "deployHealth": "Esperando a que los servicios estén listos",

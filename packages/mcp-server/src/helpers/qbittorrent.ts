@@ -2,11 +2,12 @@ import { QBIT_URL, QBIT_USER, QBIT_PASS } from "../config.js";
 
 let qbitCookie: string | null = null;
 
-export async function qbitLogin(): Promise<void> {
+export async function qbitLogin(signal?: AbortSignal): Promise<void> {
   const res = await fetch(`${QBIT_URL}/api/v2/auth/login`, {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
     body: new URLSearchParams({ username: QBIT_USER, password: QBIT_PASS }),
+    signal,
   });
   const text = await res.text();
   if (text !== "Ok.") throw new Error("qBittorrent login failed");
@@ -14,12 +15,12 @@ export async function qbitLogin(): Promise<void> {
   if (cookie) qbitCookie = cookie;
 }
 
-export async function qbitApi(endpoint: string, method: "GET" | "POST" = "GET", body?: Record<string, string>): Promise<any> {
-  if (!qbitCookie) await qbitLogin();
-  const opts: RequestInit = { method, headers: { Cookie: qbitCookie! } };
+export async function qbitApi(endpoint: string, method: "GET" | "POST" = "GET", body?: Record<string, string>, signal?: AbortSignal): Promise<any> {
+  if (!qbitCookie) await qbitLogin(signal);
+  const opts: RequestInit = { method, headers: { Cookie: qbitCookie! }, signal };
   if (body) { (opts.headers as Record<string, string>)["Content-Type"] = "application/x-www-form-urlencoded"; opts.body = new URLSearchParams(body); }
   let res = await fetch(`${QBIT_URL}/api/v2/${endpoint}`, opts);
-  if (res.status === 403) { await qbitLogin(); opts.headers = { Cookie: qbitCookie! }; if (body) (opts.headers as Record<string, string>)["Content-Type"] = "application/x-www-form-urlencoded"; res = await fetch(`${QBIT_URL}/api/v2/${endpoint}`, opts); }
+  if (res.status === 403) { await qbitLogin(signal); opts.headers = { Cookie: qbitCookie! }; if (body) (opts.headers as Record<string, string>)["Content-Type"] = "application/x-www-form-urlencoded"; res = await fetch(`${QBIT_URL}/api/v2/${endpoint}`, opts); }
   if (!res.ok) throw new Error(`qBit ${res.status}: ${await res.text()}`);
   const ct = res.headers.get("content-type");
   return ct?.includes("json") ? res.json() : res.text();

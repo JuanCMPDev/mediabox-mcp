@@ -252,9 +252,22 @@ npm run smoke:node-bun     # G08 incluida la carga de LocalProvider en Bun
 npm run smoke:local-canary # LOC-01: requiere un runtime local escuchando
 ```
 
-El canario detecta Ollama en `127.0.0.1:11434`; sin runtime cae a modo guionado, y en ese modo **no es
-evidencia de compatibilidad** (el proveedor guionado emite justo las llamadas que el ledger comprueba).
-Solo cuenta la ejecución en vivo, con el SHA revisado, adjuntando la salida del perfil de rendimiento.
+En el árbol auditado el canario detectaba Ollama y caía a modo guionado si no respondía.
+La preparación de PR05 corrige esa ambigüedad: `smoke:local-canary` exige inferencia real
+y falla sin runtime; `smoke:local-canary:scripted` prueba explícitamente el harness, con
+`agentCompatible: null` y sin métricas de hardware. Solo la ejecución en vivo puede
+acreditar LOC-01; tres turnos no constituyen un perfil de rendimiento de P11.
+
+### Adenda de preparación PR05 (2026-09-11)
+
+Se encontró una diferencia entre el G08 ejecutado arriba y su comando en la matriz:
+faltaba `smoke:desktop` en raíz/CI. Además, el smoke de execa devolvía cero incluso ante
+fallos. La preparación agrega ese comando y pruebas negativas. Su alcance sigue siendo
+subprocesos Node/Bun y servidor compilado; no acredita Tauri/webview ni toda la matriz
+de plataformas. El reporte histórico no certifica el parche nuevo.
+
+La continuación, las deudas trasladadas y los requisitos del laboratorio quedan en
+[PR05-P10-P11-SPEC.es.md](PR05-P10-P11-SPEC.es.md).
 
 ## 7. Estado de los casos de aceptación
 

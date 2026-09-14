@@ -20,6 +20,7 @@ const usePhaseLabels = (t: any): Record<string, string> => ({
   'generate:compose':           t('deployProgress.phases.generateCompose'),
   'generate:qbittorrent':       t('deployProgress.phases.generateQbittorrent'),
   'generate:caddy':             t('deployProgress.phases.generateCaddy'),
+  'deploy:prepare-artifacts':   t('deployProgress.phases.deployPrepareArtifacts'),
   'deploy:prepare-images':      t('deployProgress.phases.deployPrepareImages'),
   'deploy:start':               t('deployProgress.phases.deployStart'),
   'deploy:health':              t('deployProgress.phases.deployHealth'),

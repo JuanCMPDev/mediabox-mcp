@@ -30,6 +30,8 @@ export const DEFAULT_RUNTIME_PORTS: Record<LocalRuntimeKind, { port: number; def
 
 export interface RuntimeContextInfo {
   contextTokens?: number;
+  /** False when the runtime reports only the model's trained maximum, not the window it serves. */
+  servedContextKnown?: boolean;
   supportsTools?: boolean;
   version?: string;
   models: string[];
@@ -62,6 +64,25 @@ function contextFromOllamaInfo(info: Record<string, unknown> | undefined): numbe
     if (key.endsWith('.context_length') && typeof value === 'number' && value > 0) return value;
   }
   return undefined;
+}
+
+/** Context length of the model as currently loaded by Ollama, when it is loaded. */
+async function servedContextFromPs(
+  root: string,
+  model: string,
+  headers: Record<string, string>,
+  signal: AbortSignal,
+  policy?: EndpointPolicyOptions,
+): Promise<number | undefined> {
+  try {
+    const res = await safeInferenceFetch(`${root}/api/ps`, { headers, signal }, policy);
+    if (!res.ok) return undefined;
+    const data = (await res.json()) as any;
+    const entry = (Array.isArray(data?.models) ? data.models : []).find((m: any) => m?.name === model || m?.model === model);
+    return typeof entry?.context_length === 'number' && entry.context_length > 0 ? entry.context_length : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 function numCtxFromParameters(parameters: unknown): number | undefined {
@@ -102,11 +123,18 @@ export async function readRuntimeContext(
       if (!res.ok) return { models: [], source: '/api/show' };
       const data = (await res.json()) as any;
       const capabilities: string[] = Array.isArray(data.capabilities) ? data.capabilities : [];
+      // model_info holds the trained maximum; the window actually served comes from the
+      // loaded model (/api/ps) or a Modelfile num_ctx. The effective value is the smallest.
+      const trainedMax = contextFromOllamaInfo(data.model_info);
+      const served = numCtxFromParameters(data.parameters)
+        ?? await servedContextFromPs(root, model, headers, controller.signal, opts.policy);
+      const known = [served, trainedMax].filter((v): v is number => typeof v === 'number');
       return {
-        contextTokens: contextFromOllamaInfo(data.model_info) ?? numCtxFromParameters(data.parameters),
+        contextTokens: known.length ? Math.min(...known) : undefined,
+        servedContextKnown: served !== undefined,
         supportsTools: capabilities.length > 0 ? capabilities.includes('tools') : undefined,
         models: [model],
-        source: '/api/show',
+        source: served !== undefined ? '/api/show+/api/ps' : '/api/show',
       };
     }
 

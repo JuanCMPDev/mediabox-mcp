@@ -6,11 +6,14 @@ import { defaultRootFs, RootFsError } from "./rootfs.js";
 
 /**
  * Quarantine (Blueprint 4.3 / P04): the normal "delete" is a per-file move into
- * `<root>/.mediabox-trash/<planId>/<original relative path>` on the same
- * filesystem, with a manifest next to the file. Moving to quarantine never
- * frees space on that volume; purge is a separate owner-approved operation and
- * the retention TTL never purges on its own. Restore never overwrites a file
- * that has since taken the original path.
+ * `<base>/.mediabox-trash/<planId>/<original relative path>` on the same
+ * filesystem, with a manifest next to the file. `<base>` is the shallowest
+ * directory of the root that lives on the file's own filesystem: the root
+ * itself, or a bind mount under it (the Docker layout mounts /data/movies,
+ * /data/tv … separately), so the move is always a rename. Moving to quarantine
+ * never frees space on that volume; purge is a separate owner-approved
+ * operation and the retention TTL never purges on its own. Restore never
+ * overwrites a file that has since taken the original path.
  */
 
 export const QUARANTINE_DIR_NAME = ".mediabox-trash";
@@ -48,8 +51,10 @@ export interface QuarantineManifest {
 }
 
 export interface QuarantineResult extends QuarantineManifest {
-  /** Path of the quarantined file relative to the root's trash directory. */
+  /** Path of the quarantined file relative to its trash directory (`<planId>/<original>`). */
   entryPath: string;
+  /** Root-relative path of the quarantined file, trash directory included. */
+  entryRelativePath: string;
 }
 
 export interface QuarantineOptions {
@@ -62,9 +67,49 @@ function manifestPathFor(absoluteEntry: string): string {
   return `${absoluteEntry}.manifest.json`;
 }
 
+/** Internal directories can sit at any depth (a trash per mount), so every segment counts. */
 export function isInternalPath(relativePath: string): boolean {
-  const first = relativePath.replace(/\\/g, "/").split("/")[0];
-  return INTERNAL_DIR_NAMES.has(first);
+  return relativePath.replace(/\\/g, "/").split("/").some((segment) => INTERNAL_DIR_NAMES.has(segment));
+}
+
+function trashDirFor(base: string): string {
+  return base ? `${base}/${QUARANTINE_DIR_NAME}` : QUARANTINE_DIR_NAME;
+}
+
+async function defaultStatDev(absolutePath: string): Promise<number | bigint> {
+  return (await fs.stat(absolutePath)).dev;
+}
+
+/**
+ * Root-relative directory whose trash receives a file: the shallowest ancestor
+ * (root included) on the same filesystem as the file.
+ */
+export async function quarantineBaseFor(
+  canonicalRoot: string,
+  relativePath: string,
+  fileDev: number | bigint,
+  statDev: (absolutePath: string) => Promise<number | bigint> = defaultStatDev,
+): Promise<string> {
+  const dirs = relativePath.replace(/\\/g, "/").split("/").slice(0, -1);
+  for (let i = 0; i <= dirs.length; i++) {
+    if ((await statDev(path.join(canonicalRoot, ...dirs.slice(0, i)))) === fileDev) return dirs.slice(0, i).join("/");
+  }
+  return dirs.join("/");
+}
+
+/**
+ * Root-relative path of an existing quarantine entry, or null. The trash that
+ * holds it is the root's or one of the original path's ancestors'.
+ */
+export async function locateQuarantineEntry(rootId: string, entryPath: string): Promise<string | null> {
+  const normalized = entryPath.replace(/\\/g, "/").replace(/^\/+/, "");
+  const dirs = normalized.split("/").slice(1, -1);
+  for (let i = 0; i <= dirs.length; i++) {
+    const candidate = `${trashDirFor(dirs.slice(0, i).join("/"))}/${normalized}`;
+    const resolved = await defaultRootFs.resolveWithinRoot(rootId, candidate);
+    if (resolved.exists) return candidate;
+  }
+  return null;
 }
 
 function assertNotInternal(relativePath: string): void {
@@ -101,7 +146,9 @@ export async function quarantineFile(rootId: string, relativePath: string, opts:
   const nlink = identity.nlink ?? 1;
 
   const entryPath = `${opts.planId ?? "manual"}/${resolved.relativePath}`;
-  const trashRoot = path.join(resolved.canonicalRoot, QUARANTINE_DIR_NAME);
+  const fileDev = (await fs.stat(resolved.absolutePath)).dev;
+  const trashDir = trashDirFor(await quarantineBaseFor(resolved.canonicalRoot, resolved.relativePath, fileDev));
+  const trashRoot = path.join(resolved.canonicalRoot, ...trashDir.split("/"));
   const destination = path.join(trashRoot, ...entryPath.split("/"));
 
   await fs.mkdir(path.dirname(destination), { recursive: true });
@@ -141,7 +188,7 @@ export async function quarantineFile(rootId: string, relativePath: string, opts:
   };
   await fs.writeFile(manifestPathFor(destination), JSON.stringify(manifest, null, 2), "utf8");
 
-  return { ...manifest, entryPath };
+  return { ...manifest, entryPath, entryRelativePath: `${trashDir}/${entryPath}` };
 }
 
 export interface RemoveDirectoryResult {
@@ -183,7 +230,9 @@ async function readManifest(absoluteEntry: string, entryPath: string): Promise<Q
 async function resolveEntry(rootId: string, entryPath: string) {
   let resolved;
   try {
-    resolved = await defaultRootFs.resolveWithinRoot(rootId, `${QUARANTINE_DIR_NAME}/${entryPath}`, {
+    const located = await locateQuarantineEntry(rootId, entryPath);
+    if (!located) throw new QuarantineError(`Quarantine entry not found: ${entryPath}`, "ERR_QUARANTINE_ENTRY_NOT_FOUND");
+    resolved = await defaultRootFs.resolveWithinRoot(rootId, located, {
       mustExist: true,
       expectKind: "file",
     });
@@ -199,10 +248,19 @@ async function resolveEntry(rootId: string, entryPath: string) {
 
 export async function listQuarantine(rootId: string): Promise<QuarantineEntry[]> {
   const root = await defaultRootFs.canonicalRoot(rootId);
-  const trashRoot = path.join(root, QUARANTINE_DIR_NAME);
   const entries: QuarantineEntry[] = [];
 
-  async function walk(dir: string): Promise<void> {
+  // The root's trash plus the trash of every top-level directory (bind mounts live there).
+  const trashRoots = [path.join(root, QUARANTINE_DIR_NAME)];
+  try {
+    for (const d of await fs.readdir(root, { withFileTypes: true })) {
+      if (d.isDirectory() && !INTERNAL_DIR_NAMES.has(d.name)) trashRoots.push(path.join(root, d.name, QUARANTINE_DIR_NAME));
+    }
+  } catch (err: any) {
+    if (err?.code !== "ENOENT") throw err;
+  }
+
+  async function walk(dir: string, trashRoot: string): Promise<void> {
     let dirents: Dirent[];
     try {
       dirents = await fs.readdir(dir, { withFileTypes: true });
@@ -213,7 +271,7 @@ export async function listQuarantine(rootId: string): Promise<QuarantineEntry[]>
     for (const d of dirents) {
       const full = path.join(dir, d.name);
       if (d.isDirectory()) {
-        await walk(full);
+        await walk(full, trashRoot);
       } else if (d.isFile() && d.name.endsWith(".manifest.json")) {
         const fileAbs = full.slice(0, -".manifest.json".length);
         const entryPath = path.relative(trashRoot, fileAbs).split(path.sep).join("/");
@@ -237,7 +295,7 @@ export async function listQuarantine(rootId: string): Promise<QuarantineEntry[]>
     }
   }
 
-  await walk(trashRoot);
+  for (const trashRoot of trashRoots) await walk(trashRoot, trashRoot);
   entries.sort((a, b) => a.quarantinedAt.localeCompare(b.quarantinedAt));
   return entries;
 }

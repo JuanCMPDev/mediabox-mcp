@@ -1,0 +1,2 @@
+# Shell scripts are executed inside Linux containers (G09); keep LF on every checkout.
+*.sh text eol=lf

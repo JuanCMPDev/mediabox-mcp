@@ -20,17 +20,18 @@ export const VIRTUAL_TOOLS: Record<string, VirtualToolDef> = {
 
   media_query: {
     name: 'media_query',
-    description: 'Search or list Jellyfin library content, seasons, and episodes.',
+    description: 'Jellyfin library: search by title; list by type/year without a title; details lists seasons and episodes.',
     parameters: {
       type: 'object',
       properties: {
-        action:       { type: 'string', enum: ['search', 'details'] },
+        action:       { type: 'string', enum: ['search', 'list', 'details'] },
         query:        { type: 'string', description: 'Search title' },
         type:         { type: 'string', enum: ['Movie', 'Series', 'Episode', 'Audio'] },
-        showId:       { type: 'string', description: 'Jellyfin item ID' },
-        seasonNumber: { type: 'number', description: 'Season filter' },
-        page:         { type: 'number' },
-        pageSize:     { type: 'number' },
+        year:         { type: 'integer', minimum: 1, maximum: 9999, description: 'Production year filter, only when the user gives one; never part of the title' },
+        showId:       { type: 'string', description: 'Required for details: the id of a media_query search result' },
+        seasonNumber: { type: 'integer', minimum: 0, description: 'Only to read one season' },
+        page:         { type: 'integer', minimum: 1 },
+        pageSize:     { type: 'integer', minimum: 1, maximum: 50 },
       },
       required: ['action'],
     },
@@ -44,11 +45,11 @@ export const VIRTUAL_TOOLS: Record<string, VirtualToolDef> = {
       properties: {
         action:         { type: 'string', enum: ['search', 'details', 'releases', 'propose_download'] },
         query:          { type: 'string' },
-        type:           { type: 'string', description: 'movie or series' },
-        year:           { type: 'number' },
+        type:           { type: 'string', enum: ['movie', 'series', 'all'], description: 'Only when the user says it' },
+        year:           { type: 'integer', description: 'Only when the user gives a year' },
         cursor:         { type: 'string' },
-        page:           { type: 'number' },
-        pageSize:       { type: 'number' },
+        page:           { type: 'integer', minimum: 1 },
+        pageSize:       { type: 'integer', minimum: 1, maximum: 50 },
         mediaRef:       { type: 'string', description: 'Opaque media token' },
         releaseRef:     { type: 'string', description: 'Opaque release token' },
         replacement:    { type: 'boolean' },
@@ -120,12 +121,14 @@ export const VIRTUAL_TOOLS: Record<string, VirtualToolDef> = {
 
   downloads: {
     name: 'downloads',
-    description: 'Check download queues and status in clients.',
+    description: 'Read live download queues. Omit source for Sonarr, Radarr and qBittorrent; totals stay separate per source.',
     parameters: {
       type: 'object',
       properties: {
         action: { type: 'string', enum: ['status', 'list_queue'] },
-        source: { type: 'string', enum: ['sonarr', 'radarr', 'qbittorrent'] },
+        source: { type: 'string', enum: ['all', 'sonarr', 'radarr', 'qbittorrent'] },
+        page: { type: 'integer', minimum: 1 },
+        pageSize: { type: 'integer', minimum: 1, maximum: 5, description: 'Rows per source (default 5)' },
       },
       required: ['action'],
     },
@@ -140,7 +143,7 @@ export const VIRTUAL_TOOLS: Record<string, VirtualToolDef> = {
         action:      { type: 'string', enum: ['analyze', 'propose'] },
         path:        { type: 'string' },
         job:         { type: 'string', enum: ['remux', 'subtitle-convert', 'transcode'] },
-        profileName: { type: 'string' },
+        profileName: { type: 'string', enum: ['mkv_remux', 'srt_subtitles', 'cpu_hevc_transcode', 'cpu_av1_transcode'], description: 'Omit for the job default' },
       },
       required: ['action'],
     },

@@ -1,6 +1,6 @@
 import { OpenRouterProvider } from './openrouter.js';
 import { GeminiProvider }     from './gemini.js';
-import { LocalProvider }      from './local.js';
+import { LocalProvider, REASONING_EFFORTS, type ReasoningEffort } from './local.js';
 import type { StreamProvider } from './types.js';
 import type { LocalRuntimeKind } from '@mediabox/contracts';
 import { parseHostList } from './endpoint-policy.js';
@@ -16,6 +16,11 @@ export interface ProviderEnv {
   LOCAL_LLM_RUNTIME?:        string;
   LOCAL_LLM_API_KEY?:        string;
   LOCAL_LLM_CONTEXT_TOKENS?: string;
+  /** Sampling recorded by the model profile (P11 §4.1); unset keeps the runtime defaults below. */
+  LOCAL_LLM_TEMPERATURE?:    string;
+  LOCAL_LLM_SEED?:           string;
+  /** OpenAI-compatible `reasoning_effort` for thinking models ("none" turns thinking off); unset sends nothing. */
+  LOCAL_LLM_REASONING_EFFORT?: string;
   INFERENCE_ALLOW_LAN?:      string;
   INFERENCE_ENDPOINT_HOSTS?: string;
   /** Short aliases accepted for backwards compatibility. */
@@ -91,6 +96,17 @@ function firstNonEmpty(...values: Array<string | undefined>): string | undefined
   return undefined;
 }
 
+/** An out-of-range sampling value fails loudly instead of being silently ignored (LOC-05). */
+function parseOptionalNumber(raw: string | undefined, name: string, min: number, max: number): number | undefined {
+  const value = firstNonEmpty(raw);
+  if (value === undefined) return undefined;
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed) || parsed < min || parsed > max) {
+    throw new Error(`${name}='${value}' must be a number between ${min} and ${max}`);
+  }
+  return parsed;
+}
+
 export function resolveProvider(env: ProviderEnv): StreamProvider {
   const openrouterKey = env.OPENROUTER_API_KEY ?? '';
   const googleKey     = env.GOOGLE_AI_API_KEY  ?? '';
@@ -109,12 +125,21 @@ export function resolveProvider(env: ProviderEnv): StreamProvider {
     const contextRaw = Number(firstNonEmpty(env.LOCAL_LLM_CONTEXT_TOKENS) ?? '');
     const model =
       firstNonEmpty(env.LLM_MODEL, env.LOCAL_LLM_MODEL, env.LOCAL_MODEL) ?? DEFAULT_MODELS.local;
+    const temperature = parseOptionalNumber(env.LOCAL_LLM_TEMPERATURE, 'LOCAL_LLM_TEMPERATURE', 0, 2);
+    const seed = parseOptionalNumber(env.LOCAL_LLM_SEED, 'LOCAL_LLM_SEED', 0, Number.MAX_SAFE_INTEGER);
+    const reasoningEffort = firstNonEmpty(env.LOCAL_LLM_REASONING_EFFORT)?.toLowerCase();
+    if (reasoningEffort !== undefined && !REASONING_EFFORTS.includes(reasoningEffort as ReasoningEffort)) {
+      throw new Error(`LOCAL_LLM_REASONING_EFFORT='${env.LOCAL_LLM_REASONING_EFFORT}' must be one of ${REASONING_EFFORTS.join(', ')}`);
+    }
 
     return new LocalProvider({
+      reasoningEffort: reasoningEffort as ReasoningEffort | undefined,
       baseUrl: firstNonEmpty(env.LOCAL_LLM_BASE_URL, env.LOCAL_BASE_URL),
       model,
       runtime,
       apiKey: firstNonEmpty(env.LOCAL_LLM_API_KEY),
+      temperature,
+      seed: seed === undefined ? undefined : Math.trunc(seed),
       contextTokens: Number.isFinite(contextRaw) && contextRaw > 0 ? contextRaw : undefined,
       allowLan: env.INFERENCE_ALLOW_LAN === 'true' || env.LOCAL_ALLOW_LAN === '1',
       endpointHosts: parseHostList(env.INFERENCE_ENDPOINT_HOSTS),

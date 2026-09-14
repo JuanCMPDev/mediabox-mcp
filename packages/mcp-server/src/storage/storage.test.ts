@@ -187,6 +187,7 @@ describe("DEL-01 / DEL-03: exact scope and quarantine", () => {
     const { plan, summary } = await createDeletePlan({ logicalPaths: ["movies/Film (2019)/film.mkv"], scope });
     expect(summary.files).toBe(1);
     expect(summary.reclaimableBytes).toBe(0);
+    expect(summary.warnings).toEqual(["Quarantine frees 0 B now: the files stay on the same disk until an approved purge."]);
     expect(plan.effects).toHaveLength(1);
     expect(plan.effects[0].serviceAction).toBe("quarantine.move");
     expect(plan.targets[0].fileIdentity?.kind).toBe("file");
@@ -267,6 +268,7 @@ describe("DEL-06 / DEL-07: reclaimable space, restore and purge", () => {
     const { store, executor } = newStoreAndExecutor();
     const { plan, summary } = await createDeletePlan({ logicalPaths: ["movies/A/a.mkv"], scope });
     expect(summary.hardLinkedFiles).toBe(1);
+    expect(summary.warnings[1]).toBe("1 of 1 files are hard links: a later purge also frees 0 B for them.");
     expect(summary.selectedBytes).toBe(10);
     expect(plan.effects[0].requiredResources).toMatchObject({ selectedBytes: 10, reclaimableBytes: 0 });
     expect(plan.targets[0].fileIdentity?.nlink).toBe(2);
@@ -377,6 +379,9 @@ describe("DEL-08: MCP proposal, REST approval and the single executor share one 
     expect(envelope.status).toBe("ok");
     expect(envelope.data.status).toBe("awaiting_approval");
     expect(envelope.data.summary.files).toBe(1);
+    // STORAGE-05, experiment 5: the selected size was announced as freed. The result
+    // says in bytes what is selected and that quarantine frees nothing now.
+    expect(envelope.data).toMatchObject({ selectedSize: "7 B", freedNow: "0 B" });
     expect(JSON.parse(result.content[0].text)).toEqual(envelope);
 
     const ownerHeaders = { Authorization: `Bearer ${INTERNAL_API_KEY}`, "Content-Type": "application/json" };

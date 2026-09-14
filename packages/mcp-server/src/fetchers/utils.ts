@@ -2,7 +2,10 @@ export function formatBytes(bytes: number): string {
   if (bytes >= 1_099_511_627_776) return `${(bytes / 1_099_511_627_776).toFixed(1)} TB`;
   if (bytes >= 1_073_741_824)     return `${(bytes / 1_073_741_824).toFixed(1)} GB`;
   if (bytes >= 1_048_576)         return `${(bytes / 1_048_576).toFixed(1)} MB`;
-  return `${Math.round(bytes / 1024)} KB`;
+  if (bytes >= 1024)              return `${Math.round(bytes / 1024)} KB`;
+  // Below 1 KB the exact byte count, never "0 KB": the models read a size that looks
+  // like zero as a wrong figure or as space a cleanup frees (STORAGE-05, experiments 5 and 6).
+  return `${bytes} B`;
 }
 
 export function formatEta(seconds: number): string {
@@ -38,9 +41,22 @@ export function formatTicks(ticks: number): string {
     : `${m}:${String(s).padStart(2, "0")}`;
 }
 
+/** Drops any user:password embedded in a URL before it is shown to anyone (NET-05). */
+export function stripUrlCredentials(url: string): string {
+  try {
+    const parsed = new URL(url);
+    if (!parsed.username && !parsed.password) return url;
+    parsed.username = "";
+    parsed.password = "";
+    return parsed.toString().replace(/\/$/, url.endsWith("/") ? "/" : "");
+  } catch {
+    return url.replace(/\/\/[^@/]*@/, "//");
+  }
+}
+
 /** Replace Docker container hostname with localhost for browser-accessible URLs */
 export function toHostUrl(containerUrl: string, hostPort?: string): string {
-  const withLocal = containerUrl.replace(/\/\/[^:/]+/, "//localhost");
+  const withLocal = stripUrlCredentials(containerUrl).replace(/\/\/[^:/]+/, "//localhost");
   if (hostPort) return withLocal.replace(/:\d+/, `:${hostPort}`);
   return withLocal;
 }

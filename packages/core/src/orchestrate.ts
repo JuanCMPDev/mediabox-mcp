@@ -1,17 +1,33 @@
+import { parse } from "yaml";
 import type { DeployConfig } from "./config/types.js";
 import { validateDeployConfig } from "./config/validate.js";
 import type { EventHandler } from "./events/types.js";
-import type {
-  Deployer,
-  DeployerContext,
-  DeployResult,
-  HealthCheck,
+import {
+  PREPARE_ARTIFACTS_PHASE,
+  type Deployer,
+  type DeployerContext,
+  type DeployResult,
+  type HealthCheck,
 } from "./deployer/types.js";
 
-import { generateDockerCompose } from "./generators/docker-compose.js";
+import { generateDockerCompose, isStrictPrivacyProfile } from "./generators/docker-compose.js";
 import { generateEnv, updateEnvKeys, type DiscoveredKeys } from "./generators/env.js";
 import { generateCaddyfile } from "./generators/caddyfile.js";
 import { generateQbittorrentConfig } from "./generators/qbittorrent.js";
+
+import { ArtifactError } from "./artifacts/manifest.js";
+import {
+  ARTIFACT_LOCK_FILE,
+  findUnpinnedImages,
+  imageRefsFromCompose,
+  lockedImage,
+  normalizeOllamaModelName,
+  ollamaManifestPath,
+  serializeArtifactLock,
+  verifyProvisionedModel,
+  type ArtifactLock,
+  type ArtifactPlatform,
+} from "./artifacts/lock.js";
 
 import { tryParseApiKey } from "./utils/xml.js";
 
@@ -39,6 +55,11 @@ export interface DeployStackOptions {
   serviceUrls?: Partial<ServiceUrls>;
   /** Client version reported to Jellyfin in the X-Emby-Authorization header. */
   jellyfinClientVersion?: string;
+  /**
+   * Strict profiles: platform the artifact lock is resolved for. Asked from the
+   * deployer (Docker server platform) when omitted.
+   */
+  artifactPlatform?: ArtifactPlatform;
 }
 
 interface ServiceUrls {
@@ -63,6 +84,64 @@ const DEFAULT_SERVICE_URLS: ServiceUrls = {
   mcp: "http://localhost:3000",
 };
 
+type ComposeDoc = { services?: Record<string, any> } & Record<string, any>;
+
+/**
+ * Registry and Docker CLI errors can carry credentials in URLs, query strings or
+ * auth headers. Strict-profile diagnostics keep the message and digests and
+ * drop those (§3.2).
+ */
+export function sanitizeDeployDiagnostic(message: string): string {
+  return message
+    .replace(/\b(proxy-authorization|authorization)\s*:\s*[^\r\n]*/gi, "$1: [REDACTED]")
+    .replace(/\b(bearer|basic)\s+[A-Za-z0-9._~+/=-]+/gi, "$1 [REDACTED]")
+    .replace(/(\b[a-z][a-z0-9+.-]*:\/\/)[^\s/@]+@/gi, "$1")
+    .replace(/(\bhttps?:\/\/[^\s?#]+)[?#]\S*/gi, "$1")
+    .replace(/(?<!sha256:)\b[A-Za-z0-9_-]{32,}/g, "[REDACTED]")
+    .slice(0, 600);
+}
+
+/** Inference profile whose image `run` needs, from the configured backend. */
+function runProfiles(config: DeployConfig): string[] {
+  const llm = config.ai ?? config.telegram?.llm;
+  if (llm?.kind !== "local") return [];
+  const backend = llm.backend;
+  return [backend === "cuda" || backend === "rocm" || backend === "vulkan" ? `inference-${backend}` : "inference-cpu"];
+}
+
+/** Pinned images of the services `up` starts plus the active inference profile. */
+function pinnedImagesForRun(compose: ComposeDoc, profiles: string[]): string[] {
+  const refs = new Set<string>();
+  for (const service of Object.values(compose.services ?? {})) {
+    if (typeof service?.image !== "string") continue;
+    const serviceProfiles: string[] = service.profiles ?? [];
+    if (serviceProfiles.length === 0 || serviceProfiles.some((p) => profiles.includes(p))) refs.add(service.image);
+  }
+  return [...refs].sort();
+}
+
+/** TCP host ports the compose file publishes (`[ip:]host:container`). */
+function publishedHostPorts(compose: ComposeDoc): Set<number> {
+  const ports = new Set<number>();
+  for (const service of Object.values(compose.services ?? {})) {
+    for (const mapping of service?.ports ?? []) {
+      if (typeof mapping !== "string" || mapping.endsWith("/udp")) continue;
+      const parts = mapping.replace(/\/tcp$/, "").split(":");
+      if (parts.length >= 2) ports.add(Number(parts[parts.length - 2]));
+    }
+  }
+  return ports;
+}
+
+function isLocalTarget(target: string): URL | null {
+  try {
+    const url = new URL(target);
+    return /^(localhost|127\.0\.0\.1|\[::1\])$/i.test(url.hostname) ? url : null;
+  } catch {
+    return null;
+  }
+}
+
 /**
  * Drive the full stack deploy. Never throws — collects errors per phase
  * into DeployResult.errors so callers can render a useful summary.
@@ -77,6 +156,7 @@ export async function deployStack(opts: DeployStackOptions): Promise<DeployResul
     jellyfinClientVersion = "unknown",
   } = opts;
   const serviceUrls: ServiceUrls = { ...DEFAULT_SERVICE_URLS, ...opts.serviceUrls };
+  const strict = isStrictPrivacyProfile(config.deployment.privacyProfile);
 
   const result: DeployResult = {
     ok: true,
@@ -185,19 +265,62 @@ export async function deployStack(opts: DeployStackOptions): Promise<DeployResul
 
   if (generateOnly) return result;
 
+  // ── Prepare artifacts (strict profiles) ─────────────────────────────
+  // `prepare` resolves every tag once and pins it; `run` only uses what the lock
+  // names (§3.2). Any failure stops the deploy before `up`.
+  let pinnedCompose: ComposeDoc | null = null;
+  let pinnedImages: string[] = [];
+  if (strict) {
+    if (!result.ok) return result;
+    await step(PREPARE_ARTIFACTS_PHASE, "Resolving images and models by digest", async () => {
+      try {
+        pinnedCompose = await prepareArtifacts(config, deployer, ctx, opts.artifactPlatform);
+        pinnedImages = pinnedImagesForRun(pinnedCompose, runProfiles(config));
+        onEvent({
+          kind: "success",
+          phase: PREPARE_ARTIFACTS_PHASE,
+          message: `Pinned ${imageRefsFromCompose(pinnedCompose).length} images in ${ARTIFACT_LOCK_FILE}`,
+        });
+      } catch (err) {
+        throw new Error(sanitizeDeployDiagnostic((err as Error).message || String(err)));
+      }
+    });
+    if (!result.ok) return result;
+  }
+
   // ── Deploy ──────────────────────────────────────────────────────────
   await step("deploy:prepare-images", "Preparing Docker images", async () => {
-    await deployer.prepareImages(ctx);
+    if (!strict) {
+      await deployer.prepareImages(ctx);
+      return;
+    }
+    try {
+      await deployer.prepareImages(ctx, { pinnedImages });
+    } catch (err) {
+      throw new Error(sanitizeDeployDiagnostic((err as Error).message || String(err)));
+    }
   });
   if (!result.ok) return result;
 
   await step("deploy:start", "Starting Docker containers", async () => {
-    await deployer.up(ctx);
+    if (!strict) {
+      await deployer.up(ctx);
+      return;
+    }
+    // Refuse a compose file that still names tags, whoever wrote it last.
+    const unpinned = findUnpinnedImages(await deployer.readFile(ctx, "docker-compose.yml"));
+    if (unpinned.length > 0) {
+      throw new ArtifactError(
+        "ERR_ARTIFACT_UNPINNED",
+        `docker-compose.yml is not pinned for ${unpinned.join(", ")}; run prepare first`,
+      );
+    }
+    await deployer.up(ctx, { pull: "never" });
   });
   if (!result.ok) return result;
 
   // ── Health checks ──────────────────────────────────────────────────
-  const healthChecks: HealthCheck[] = [
+  const allHealthChecks: HealthCheck[] = [
     {
       name: "jellyfin",
       type: "http",
@@ -244,6 +367,25 @@ export async function deployStack(opts: DeployStackOptions): Promise<DeployResul
       timeoutMs: 90_000,
     },
   ];
+
+  // Strict profiles publish no host port for internal-only services, so polling
+  // them from the host could only time out.
+  let healthChecks = allHealthChecks;
+  if (strict && pinnedCompose) {
+    const published = publishedHostPorts(pinnedCompose);
+    const unreachable = allHealthChecks.filter((check) => {
+      const url = isLocalTarget(check.target);
+      return url !== null && !published.has(Number(url.port || 80));
+    });
+    healthChecks = allHealthChecks.filter((check) => !unreachable.includes(check));
+    if (unreachable.length > 0) {
+      onEvent({
+        kind: "warn",
+        phase: "deploy:health",
+        message: `Not checked from the host (internal-only in ${config.deployment.privacyProfile}): ${unreachable.map((c) => c.name).join(", ")}`,
+      });
+    }
+  }
 
   onEvent({
     kind: "start",
@@ -488,7 +630,9 @@ export async function deployStack(opts: DeployStackOptions): Promise<DeployResul
   await step("deploy:restart", "Restarting services with new API keys", async () => {
     const targets = ["mcp-server"];
     if (config.telegram) targets.push("telegram-bot");
-    await deployer.up(ctx, { recreate: true, services: targets });
+    await deployer.up(ctx, strict
+      ? { recreate: true, services: targets, pull: "never" }
+      : { recreate: true, services: targets });
     // Wait for MCP to come back
     const ready = await deployer.waitForHealth(ctx, {
       name: "mcp-server",
@@ -513,4 +657,77 @@ export async function deployStack(opts: DeployStackOptions): Promise<DeployResul
 
   result.discoveredKeys = discoveredKeys;
   return result;
+}
+
+/**
+ * Strict-profile `prepare`: resolve every image for the server platform, pin the
+ * compose file, provision the model and verify its manifest, then record the
+ * lock and the model digest the server checks before starting the agent.
+ * Returns the pinned compose document.
+ */
+async function prepareArtifacts(
+  config: DeployConfig,
+  deployer: Deployer,
+  ctx: DeployerContext,
+  platformOverride?: ArtifactPlatform,
+): Promise<ComposeDoc> {
+  const platform = platformOverride ?? (await deployer.serverPlatform(ctx));
+  const refs = imageRefsFromCompose(generateDockerCompose(config));
+  const lock: ArtifactLock = {
+    schemaVersion: 1,
+    resolvedAt: new Date().toISOString(),
+    platform,
+    images: {},
+    models: {},
+  };
+
+  for (const ref of refs) {
+    ctx.onEvent({ kind: "progress", phase: PREPARE_ARTIFACTS_PHASE, message: `Resolving ${ref} for ${platform}` });
+    lock.images[ref] = lockedImage(ref, await deployer.resolveImage(ctx, ref, platform), platform);
+  }
+
+  // Pin the compose file before provisioning so the provisioner runs the locked image.
+  await deployer.writeFile(ctx, ARTIFACT_LOCK_FILE, serializeArtifactLock(lock));
+  const pinnedYaml = generateDockerCompose(config, { artifactLock: lock });
+  await deployer.writeFile(ctx, "docker-compose.yml", pinnedYaml);
+
+  const llm = config.ai ?? config.telegram?.llm;
+  if (llm?.kind === "local" && llm.runtime === "ollama") {
+    ctx.onEvent({ kind: "progress", phase: PREPARE_ARTIFACTS_PHASE, message: `Provisioning model ${llm.model}` });
+    const reported = await deployer.runProvisioner(ctx);
+    if (!reported) throw new Error("The model provisioner did not report a manifest digest");
+    const expected = normalizeOllamaModelName(llm.model);
+    if (normalizeOllamaModelName(reported.name) !== expected) {
+      throw new Error(`The model provisioner reported '${reported.name}' instead of '${expected}'`);
+    }
+
+    const { entry } = await verifyProvisionedModel({
+      runtime: "ollama",
+      name: llm.model,
+      manifestDigest: reported.manifestDigest,
+      manifestJson: await readOllamaManifest(deployer, ctx, llm.model),
+      platform,
+    });
+    lock.models[`ollama:${llm.model}`] = entry;
+    await deployer.writeFile(ctx, ARTIFACT_LOCK_FILE, serializeArtifactLock(lock));
+
+    const env = await deployer.readFile(ctx, ".env");
+    await deployer.writeFile(ctx, ".env", updateEnvKeys(env, { LOCAL_LLM_MODEL_DIGEST: entry.manifestDigest }));
+  }
+
+  return parse(pinnedYaml) as ComposeDoc;
+}
+
+/** Reads the manifest the provisioner wrote to the shared Ollama volume. */
+async function readOllamaManifest(deployer: Deployer, ctx: DeployerContext, model: string): Promise<string> {
+  const relPath = `config/ollama/${ollamaManifestPath(model)}`;
+  // Recent Ollama versions store manifest paths lowercased.
+  for (const candidate of new Set([relPath, relPath.toLowerCase()])) {
+    try {
+      return await deployer.readFile(ctx, candidate);
+    } catch {
+      // try the next spelling
+    }
+  }
+  throw new ArtifactError("ERR_ARTIFACT_MISSING", `Provisioned manifest for '${model}' not found at ${relPath}`);
 }

@@ -16,6 +16,10 @@ import { readRuntimeContext } from './runtime-probe.js';
 /** Marker key for tool arguments that did not parse: never `{}` (§3.6). */
 export const INVALID_TOOL_ARGS_KEY = '__invalid_tool_arguments';
 
+/** Values of the OpenAI-compatible `reasoning_effort` field; "none" turns thinking off. */
+export const REASONING_EFFORTS = ['none', 'low', 'medium', 'high'] as const;
+export type ReasoningEffort = (typeof REASONING_EFFORTS)[number];
+
 export interface RuntimeQuirks {
   /** Emit buffered tool calls when finish_reason is `stop` (LM Studio). */
   toolCallsOnStop: boolean;
@@ -43,6 +47,13 @@ export interface LocalProviderOptions {
   apiKey?: string;
   contextTokens?: number;      // Default: 8192
   temperature?: number;        // Default: 0.2
+  /** Sent only when set; runtimes that ignore it are recorded as `unsupported` by the profile. */
+  seed?: number;
+  /**
+   * OpenAI-compatible `reasoning_effort`, sent only when set. "none" turns thinking
+   * off on models that think by default (Qwen3.5 on Ollama); the profile records it.
+   */
+  reasoningEffort?: ReasoningEffort;
   timeoutMs?: number;
   /** Set false in tests to skip the runtime context probe. */
   probeRuntime?: boolean;
@@ -365,6 +376,11 @@ export class LocalProvider implements StreamProvider {
       if (probe.supportsTools === false) {
         this.contextWarning = `Runtime ${this.runtime} reports that model '${this.model}' has no tool support; the agent cannot operate in local mode with it`;
       }
+      if (probe.servedContextKnown === false && !this.contextWarning) {
+        this.contextWarning =
+          `Runtime ${this.runtime} does not report the context window it serves for '${this.model}' until it is loaded; ` +
+          `make sure it serves at least ${this.configuredContextTokens} tokens (OLLAMA_CONTEXT_LENGTH)`;
+      }
       if (probe.contextTokens && probe.contextTokens < this.configuredContextTokens) {
         this.effectiveContextTokens = probe.contextTokens;
         this.contextWarning =
@@ -401,6 +417,8 @@ export class LocalProvider implements StreamProvider {
       stream: true,
       stream_options: { include_usage: true },
     };
+    if (this.options.seed !== undefined) requestBody.seed = this.options.seed;
+    if (this.options.reasoningEffort !== undefined) requestBody.reasoning_effort = this.options.reasoningEffort;
 
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',

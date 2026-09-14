@@ -1,6 +1,6 @@
 import type { DatabaseAdapter } from "./sqlite/contract.js";
 
-export const CURRENT_SCHEMA_VERSION = 2;
+export const CURRENT_SCHEMA_VERSION = 3;
 
 export function initializeOperationsSchema(db: DatabaseAdapter): void {
   // Enforce foreign keys
@@ -99,6 +99,33 @@ export function initializeOperationsSchema(db: DatabaseAdapter): void {
         );
 
         PRAGMA user_version = 2;
+      `);
+    });
+  }
+
+  // v3: server-side ledger of executed MCP tool handlers. It records what the
+  // server did, independently of what the model reports (P11 §4.3).
+  const afterV2 = db.prepare("PRAGMA user_version;").get<{ user_version: number }>();
+  if ((afterV2?.user_version ?? 0) < 3) {
+    db.transaction(() => {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS tool_audit (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          ts TEXT NOT NULL,
+          principal_id TEXT NOT NULL,
+          principal_kind TEXT NOT NULL,
+          session_id TEXT NOT NULL,
+          conversation_id TEXT NOT NULL,
+          tool TEXT NOT NULL,
+          args_json TEXT NOT NULL,
+          ok INTEGER NOT NULL,
+          error_code TEXT,
+          duration_ms INTEGER NOT NULL
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_tool_audit_ts ON tool_audit(ts);
+
+        PRAGMA user_version = 3;
       `);
     });
   }

@@ -129,6 +129,7 @@ pub async fn spawn(app: AppHandle) -> Result<(), Box<dyn std::error::Error + Sen
         "INFERENCE_ALLOW_LAN",
         "INFERENCE_ENDPOINT_HOSTS",
         "INFERENCE_TLS_FINGERPRINT",
+        "PRIVACY_PROFILE",
     ];
     let mut forwarded_count = 0;
     for key in FORWARDED {

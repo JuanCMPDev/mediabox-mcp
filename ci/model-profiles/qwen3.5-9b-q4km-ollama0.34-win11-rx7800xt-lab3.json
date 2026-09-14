@@ -1,0 +1,174 @@
+{
+  "schemaVersion": 2,
+  "profileId": "qwen3.5-9b-q4km-ollama0.34-win11-rx7800xt-lab3",
+  "collectedAt": "2026-09-14T04:53:30.573Z",
+  "cpu": {
+    "model": "AMD Ryzen 5 7600X 6-Core Processor",
+    "cores": 6,
+    "threads": 12
+  },
+  "ram": {
+    "physicalBytes": 34359738368,
+    "usableBytes": 33454338048,
+    "reservedSystemBytes": 8589934592,
+    "reservedInferenceBytes": 12884901888
+  },
+  "os": {
+    "name": "Microsoft Windows 11 Pro",
+    "version": "10.0.26200",
+    "build": "26200",
+    "platform": "win32",
+    "arch": "x64"
+  },
+  "gpu": {
+    "name": "AMD  Radeon RX 7800 XT",
+    "driverVersion": "32.0.31041.1004",
+    "pnpDeviceId": "PCI\\VEN_1002&DEV_747E&SUBSYS_24131458&REV_C8\\6&B6CA535&0&00000009",
+    "vramBytes": 17179869184,
+    "reservedInferenceVramBytes": 12884901888,
+    "backend": {
+      "library": "ROCm",
+      "compute": "gfx1101",
+      "runtimeDriver": "0.0",
+      "variant": "none"
+    }
+  },
+  "runtime": {
+    "name": "ollama",
+    "version": "0.34.0",
+    "binary": {
+      "path": "~\\AppData\\Local\\Programs\\Ollama\\ollama.exe",
+      "sha256": "sha256:1f9b38e594a3e1cffdf606a507ac8660626c0985ee0782dd6b49309153d38080"
+    },
+    "libraries": {
+      "files": 989,
+      "sha256": "sha256:152f2c352626f4851088dd3bbd1af31138196234355fd3708a35e29f107c5a8f"
+    },
+    "env": {
+      "OLLAMA_CONTEXT_LENGTH": "8192",
+      "OLLAMA_NUM_PARALLEL": "1",
+      "OLLAMA_MAX_LOADED_MODELS": "1",
+      "OLLAMA_KEEP_ALIVE": "-1",
+      "OLLAMA_NO_CLOUD": "1",
+      "LLAMA_ARG_CACHE_RAM": "0"
+    }
+  },
+  "model": {
+    "name": "qwen3.5:9b",
+    "manifestDigest": "sha256:6488c96fa5faab64bb65cbd30d4289e20e6130ef535a93ef9a49f42eda893ea7",
+    "totalParameters": 9653104368,
+    "activeParameters": 9653104368,
+    "isMoe": false,
+    "family": "qwen35",
+    "format": "gguf",
+    "quantization": "Q4_K_M",
+    "nativeContextTokens": 262144,
+    "layers": [
+      {
+        "mediaType": "application/vnd.ollama.image.model",
+        "digest": "sha256:dec52a44569a2a25341c4e4d3fee25846eed4f6f0b936278e3a3c900bb99d37c",
+        "size": 6594462816
+      },
+      {
+        "mediaType": "application/vnd.ollama.image.license",
+        "digest": "sha256:7339fa418c9ad3e8e12e74ad0fd26a9cc4be8703f9c110728a992b193be85cb2",
+        "size": 11355
+      },
+      {
+        "mediaType": "application/vnd.ollama.image.params",
+        "digest": "sha256:9371364b27a52acac9d87f88bd93c9db1174d8d6ec57f6888925cdc1788871ff",
+        "size": 65
+      }
+    ],
+    "weights": {
+      "digest": "sha256:dec52a44569a2a25341c4e4d3fee25846eed4f6f0b936278e3a3c900bb99d37c",
+      "sizeBytes": 6594462816,
+      "verifiedAgainstBlob": true
+    },
+    "tokenizer": {
+      "status": "not_applicable",
+      "reason": "embedded in the GGUF weights blob sha256:dec52a44569a2a25341c4e4d3fee25846eed4f6f0b936278e3a3c900bb99d37c; no separate tokenizer artifact exists"
+    },
+    "template": {
+      "status": "not_applicable",
+      "reason": "no template layer: Ollama renders this model with its built-in renderer 'qwen3.5', named by the config blob sha256:be595b49fe22012bd1f5605ec14c7ffa58331783a88a4fd8c22e5fc8ec42cf9f",
+      "renderer": "qwen3.5",
+      "configDigest": "sha256:be595b49fe22012bd1f5605ec14c7ffa58331783a88a4fd8c22e5fc8ec42cf9f"
+    },
+    "capabilities": [
+      "completion",
+      "vision",
+      "tools",
+      "thinking"
+    ],
+    "sizeTargetDeviation": {
+      "reason": "qwen3.5:9b reports 9.65B total parameters because its GGUF includes a 27-block vision encoder the agent never uses; its language model is the 9B-class Qwen3.5 the blueprint names as a candidate (LOCAL-AGENT-HARDENING.es.md, PR04-P08-P09-SPEC.es.md §7). PR05-P10-P11-SPEC states <=9B total as the initial target, not a hard limit."
+    }
+  },
+  "parser": {
+    "effective": "runtime-side: Ollama's built-in 'qwen3.5' parser returns OpenAI tool_calls",
+    "clientFallback": "none: RUNTIME_QUIRKS.ollama.hermesXmlToolCalls = false in packages/chat-core/src/providers/local.ts"
+  },
+  "sampling": {
+    "temperature": 0,
+    "seed": 42,
+    "reasoningEffort": "none",
+    "thinking": "off. qwen3.5 thinks by default; reasoning_effort=none turns it off on Ollama's OpenAI-compatible endpoint (think=false is ignored there). Decided before measuring: the frozen sampling is greedy (temperature 0), and the agent allows 1024 output tokens and 6 inferences per turn.",
+    "topP": "runtime default (not sent by the client)",
+    "presencePenalty": "runtime default of the model (not sent by the client)",
+    "source": "LOCAL_LLM_TEMPERATURE / LOCAL_LLM_SEED / LOCAL_LLM_REASONING_EFFORT sent in every /v1/chat/completions request",
+    "unsupported": []
+  },
+  "context": {
+    "configuredTokens": 8192,
+    "runtimeTokens": 8192,
+    "source": "configured: LOCAL_LLM_CONTEXT_TOKENS + OLLAMA_CONTEXT_LENGTH; runtime: /api/ps context_length of the loaded model"
+  },
+  "concurrency": {
+    "activeConversations": 1,
+    "loadedModels": 1,
+    "parallelInferences": 1
+  },
+  "jellyfinLoad": {
+    "workload": "ffmpeg hardware transcode representative of a Jellyfin AMF transcode: d3d11va decode, CPU scale to 1280x720, h264_amf encode at 4 Mb/s, audio dropped",
+    "fixture": "1920x1080 30 fps testsrc2, 60 s, libx264 veryfast yuv420p, generated by perf.mjs; sha256 recorded in the evidence",
+    "throughputMetric": "frames per second of wall time",
+    "runDefinition": "the 60 s fixture is looped 5 times (9000 frames) so one run lasts several seconds and the inference load overlaps all of it; the load starts first and must have one request in flight before the transcode begins",
+    "ffmpegArgs": {
+      "pre": [
+        "-stream_loop",
+        "4",
+        "-hwaccel",
+        "d3d11va"
+      ],
+      "post": [
+        "-vf",
+        "scale=1280:720",
+        "-c:v",
+        "h264_amf",
+        "-b:v",
+        "4M",
+        "-an"
+      ]
+    },
+    "isJellyfinItself": false,
+    "reason": "no Jellyfin server runs in the lab; the transcoder workload is declared instead of a Jellyfin session"
+  },
+  "deviceSharing": {
+    "sharesGpuWithTranscode": true,
+    "detail": "inference (ROCm) and the AMF transcode run on the same Radeon RX 7800 XT",
+    "concurrentInferenceLoad": "continuous non-streamed completions, frozen prompt, max_tokens 512, temperature 0, seed 42, until the transcode ends"
+  },
+  "memoryPolicy": {
+    "maxFractionOfReservedBudget": 0.7,
+    "sampler": "external PowerShell process, PDH GPU Process Memory\\Dedicated Usage and WorkingSet64 summed over every ollama* and llama-server* process (Ollama 0.34 loads the weights in a llama-server worker)",
+    "targetSampleIntervalMs": 100,
+    "maxSampleIntervalMs": 250,
+    "admission": "OLLAMA_MAX_LOADED_MODELS=1, OLLAMA_NUM_PARALLEL=1, server admits one inference at a time",
+    "hardGpuQuota": "none: no portable hard VRAM limit exists on this platform; admission and supervision stop new loads instead"
+  },
+  "privacy": {
+    "class": "unverified-native",
+    "detail": "native Windows server and runtime; network containment is verified separately by G09 in the isolated Docker topology"
+  }
+}

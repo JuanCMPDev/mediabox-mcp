@@ -1,4 +1,5 @@
 import type { DeployConfig } from "./types.js";
+import { isStrictPrivacyProfile } from "../generators/docker-compose.js";
 
 /**
  * Shallow validation of DeployConfig. Returns an array of error messages;
@@ -21,6 +22,54 @@ export function validateDeployConfig(config: DeployConfig): string[] {
     if (!d.tunnelToken) errors.push("deployment.tunnelToken is required for mode=tunnel");
   }
   if (!d.imageTag) errors.push("deployment.imageTag is required");
+  if (d.privacyProfile !== undefined) {
+    if (d.privacyProfile !== "offline-library" && d.privacyProfile !== "local-agent-online-media") {
+      errors.push(`deployment.privacyProfile '${d.privacyProfile}' is not a valid privacy profile`);
+    } else if (d.privacyProfile === "offline-library") {
+      if (config.telegram) {
+        errors.push("deployment.privacyProfile=offline-library requires telegram to be disabled");
+      }
+      const llmProvider = (config.ai ?? config.telegram?.llm)?.kind;
+      if (llmProvider === "openrouter" || llmProvider === "google") {
+        errors.push(`deployment.privacyProfile=offline-library forbids cloud LLM provider '${llmProvider}'`);
+      }
+      // Caddy needs Internet for certificates, and an internal-only container cannot publish 80/443.
+      if (d.mode === "vps") {
+        errors.push("deployment.privacyProfile=offline-library is not available with mode=vps: Caddy needs Internet for certificates");
+      }
+    } else if (d.privacyProfile === "local-agent-online-media") {
+      const llmProvider = config.ai?.kind;
+      if (llmProvider === "openrouter" || llmProvider === "google") {
+        errors.push(`deployment.privacyProfile=local-agent-online-media forbids cloud LLM provider '${llmProvider}' for agent inference`);
+      }
+    }
+  }
+
+  // Strict profiles: the agent sits on internal networks only, so its runtime must
+  // be the compose inference container, provisioned and pinned by `prepare` (§3.1, §3.2).
+  if (isStrictPrivacyProfile(d.privacyProfile)) {
+    const strictLlm = config.ai ?? config.telegram?.llm;
+    if (strictLlm?.kind === "local") {
+      if (strictLlm.runtime && strictLlm.runtime !== "ollama") {
+        errors.push(
+          `deployment.privacyProfile=${d.privacyProfile} requires ai.runtime 'ollama': prepare can only pin and verify Ollama model manifests before run (got '${strictLlm.runtime}')`,
+        );
+      }
+      if (strictLlm.baseUrl) {
+        try {
+          const hostname = new URL(strictLlm.baseUrl).hostname.toLowerCase();
+          const isLoopback = hostname === "localhost" || hostname === "127.0.0.1" || hostname === "::1" || hostname === "[::1]";
+          if (!isLoopback) {
+            errors.push(
+              `deployment.privacyProfile=${d.privacyProfile} requires a loopback ai.baseUrl served by the compose inference container (mediabox-inference); '${hostname}' is a host-native or LAN runtime that the internal inference network cannot reach`,
+            );
+          }
+        } catch {
+          // Reported by the local provider checks below.
+        }
+      }
+    }
+  }
 
   // System
   if (!config.system.timezone) errors.push("system.timezone is required");
