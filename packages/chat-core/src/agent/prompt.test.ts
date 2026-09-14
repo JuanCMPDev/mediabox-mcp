@@ -21,6 +21,8 @@ const OPTIONS: PhasePromptOptions[] = [
   { intentKind: 'inspect', references: { paths: [FILE], inspectedPaths: [FILE] } },
   { intentKind: 'download' },
   { intentKind: 'download', references: { mediaRef: 'mref_000000000001', releaseRef: 'rref_000000000001' } },
+  { intentKind: 'download', references: { mediaRef: 'mref_000000000001' }, releasesAllRejected: true },
+  { intentKind: 'download', references: { mediaRef: 'mref_000000000001', releaseRef: 'rref_000000000001' }, releasesAllRejected: true },
   { intentKind: 'inspect' },
   { intentKind: 'status' },
   { intentKind: 'server' },
@@ -143,6 +145,37 @@ describe('Prompt follows the capabilities of the active request', () => {
     expect(server).toContain('only for past playback');
     const releases = buildSystemPromptForPhase('es', 'select', { intentKind: 'download', references: { mediaRef: 'mref_000000000001' } });
     expect(releases).toContain('If no release meets a stated constraint, say so and do not propose');
+  });
+
+  it('asks for the proposal in the same turn, not for a confirmation in the chat', () => {
+    // Nine G10 scenarios of experiment 6 ended on "¿Deseas descargar esta versión?"
+    // with the release resolved and propose_download offered.
+    for (const locale of LOCALES) {
+      expect(buildSystemPromptForPhase(locale, 'orient')).toContain('Once the exact target is resolved, propose it in the same turn; never ask for confirmation in the chat');
+    }
+    const download = buildSystemPromptForPhase('en', 'propose', { intentKind: 'download', references: { mediaRef: 'mref_000000000001', releaseRef: 'rref_000000000001' } });
+    expect(download).toContain('Next: propose the release that meets every constraint the user stated, without asking for confirmation');
+    // SEARCH-06/07: the homonyms were listed in text with no card to select.
+    expect(download).toContain('present_choices: for ambiguous choices, call it with no other tool in the same reply');
+    expect(download).toContain('a short sentence may accompany it');
+  });
+
+  it('after a read that rejected every release, says so instead of reading releases again (review F1)', () => {
+    // DOWNLOAD-03, experiment 6: with R10 the phase stays at select, and the releases
+    // line invited a search without the Japanese constraint in all three passes.
+    const line = 'Next: every release just read was rejected, so none meets what the user asked for. Say so and name what is missing';
+    const mediaRef = { mediaRef: 'mref_000000000001' };
+    const select = buildSystemPromptForPhase('es', 'select', { intentKind: 'download', references: mediaRef, releasesAllRejected: true });
+    expect(select).toContain(line);
+    expect(select).toContain("Do not search again without the user's constraint and do not propose another release.");
+    expect(select).not.toContain('Next: retrieve releases for the resolved media');
+    // It also comes before a proposal that an older release still grounds.
+    const propose = buildSystemPromptForPhase('en', 'propose', { intentKind: 'download', references: { ...mediaRef, releaseRef: 'rref_000000000001' }, releasesAllRejected: true });
+    expect(propose).toContain(line);
+    expect(propose).not.toContain('Next: propose the release');
+    // Without the signal, or for a request that is not a download, the usual line.
+    expect(buildSystemPromptForPhase('en', 'select', { intentKind: 'download', references: mediaRef })).toContain('Next: retrieve releases for the resolved media');
+    expect(buildSystemPromptForPhase('en', 'orient', { intentKind: 'queue', releasesAllRejected: true })).not.toContain(line);
   });
 
   it('says that an operation without a tool is not supported', () => {

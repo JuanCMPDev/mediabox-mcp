@@ -9,7 +9,7 @@
  * ──────────────────────────────────────────────────────────────────────── */
 import { createHash } from 'node:crypto';
 import type { ChatEvent, TypedSelection, Phase } from '@mediabox/contracts';
-import type { StreamChatOptions, ChatMessage, ToolCallInfo, ToolResultInfo } from '../types.js';
+import type { StreamChatOptions, ChatMessage, ToolCallInfo, ToolResultInfo, VirtualToolDef } from '../types.js';
 import type { LLMStreamChunk } from '../providers/types.js';
 import { AgentError } from './errors.js';
 import {
@@ -36,7 +36,8 @@ import { buildSystemPromptForPhase } from '../prompt.js';
 import { PRESENT_CHOICES_TOOL } from '../virtual-tools.js';
 import { prepareContext, budgetForContext, digestToolResult, type BudgetConfig, DEFAULT_BUDGET } from './budget.js';
 import { TurnGuards, type GuardConfig, computeArgsHash } from './guards.js';
-import { dispatchToolCall } from './dispatch.js';
+import { dispatchToolCall, retriedTitle } from './dispatch.js';
+import { splitTitleYear } from '../tool-router.js';
 import { TokenCounter } from './tokenizer.js';
 import { redactTrace, type AgentTrace, type InferenceTrace, type ToolCallTrace } from './trace.js';
 import { heuristicPhase } from '../tool-selector.js';
@@ -257,6 +258,11 @@ function collectRefStrings(value: unknown, key: 'mediaRef' | 'releaseRef', out: 
   }
   if (typeof value === 'object') {
     const record = value as Record<string, unknown>;
+    // A release the server rejected (seeders, size, a strict language) is not a
+    // target. In DOWNLOAD-03 (experiment 6, every release rejected) the rejected refs
+    // still moved the phase to propose and exposed propose_download (review R10). The
+    // owner can still pick one through a typed selection, which grounds it itself.
+    if (key === 'releaseRef' && record.rejected === true) return;
     const direct = record[key];
     if (typeof direct === 'string' && out.length < limit) out.push(direct);
     for (const nestedKey of ['data', 'items', 'results']) {
@@ -447,6 +453,10 @@ export class AgentRuntime {
     const counter = TokenCounter.fromCalibration(state.calibration);
 
     // 3. Process turn input (typed_selection vs user_message)
+    // What this turn's own message asks for, before the reducer merges it into the
+    // request it continues. Undefined for a typed selection or an unclassified reply.
+    let messageIntentKind: IntentKind | undefined;
+    const turnText = selection ? selection.value || message : message;
     if (selection) {
       const prevPhase = state.phase;
       state = reduce(state, { type: 'typed_selection', selection }, clock);
@@ -457,7 +467,11 @@ export class AgentRuntime {
       historyStore.set(conversationId, history);
     } else if (message) {
       const intent = classifyIntent(message);
+      messageIntentKind = intent?.kind;
       const suggestedPhase = entryPhase(intent, message, history);
+      // Checked against what the conversation verified before this message's reduce,
+      // which may drop an earlier request's references (ADV-02, experiment 6).
+      const unverifiedRefs = unverifiedReferenceTokens(message, state, history);
 
       const prevPhase = state.phase;
       state = reduce(state, { type: 'user_message', text: message, intent, suggestedPhase }, clock);
@@ -478,7 +492,13 @@ export class AgentRuntime {
         }
         planNote = planStatusNote(updates, state.proposals);
       }
-      history.push({ role: 'user', content: planNote ? `${message}\n\n${planNote}` : message });
+      // A pasted reference no tool returned travels with the message the same way:
+      // the rule in the prompt alone did not make qwen3.5 refuse it (ADV-02,
+      // experiment 6). The note changes no reference, phase or grounding.
+      const refNote = unverifiedReferenceNote(unverifiedRefs);
+      if (refNote) stateNotes.push(`message named ${unverifiedRefs.length} reference(s) no tool returned: added an unverified-reference note`);
+      const notes = [planNote, refNote].filter(Boolean).join('\n\n');
+      history.push({ role: 'user', content: notes ? `${message}\n\n${notes}` : message });
       historyStore.set(conversationId, history);
     }
 
@@ -504,6 +524,14 @@ export class AgentRuntime {
     let emptyRetried = false;
     let emptyNudge = false;
     const turnProposals: TurnProposal[] = [];
+    // Steps the runtime completes itself because they are not decisions (G10, experiment 6).
+    const turnCalls: TurnCall[] = [];
+    const sourceFailures = new Map<string, SourceFailure>();
+    let proposalAttempted = false;
+    let choicesEmitted = false;
+    let actionNudged = false;
+    let actionNudge: ProposalAction | undefined;
+    let discardedReply = '';
 
     // Pending tool calls announced to the provider but whose results are not yet
     // in the history. Any exit path must flush them (§2.5).
@@ -567,7 +595,10 @@ export class AgentRuntime {
         const currentPhase = state.phase;
         const phaseOptions = { intentKind: state.intent?.kind, references: state.references };
         const exposedTools = getPhaseTools(currentPhase, phaseOptions);
-        const systemPrompt = buildSystemPromptForPhase(locale, currentPhase, phaseOptions);
+        // The prompt also hears when the last releases read rejected every release; the
+        // tools stay the same (review F1, DOWNLOAD-03).
+        const promptOptions = releasesAllRejected(turnCalls) ? { ...phaseOptions, releasesAllRejected: true } : phaseOptions;
+        const systemPrompt = buildSystemPromptForPhase(locale, currentPhase, promptOptions);
 
         // Enforce context budget (§2.4 / AGT-02 / AGT-07)
         const prepared = prepareContext({
@@ -588,7 +619,14 @@ export class AgentRuntime {
         // Only the retry right after an empty completion carries the nudge.
         const nudge = emptyNudge;
         emptyNudge = false;
-        const combinedSystemPrompt = `${prepared.systemPrompt}\n\n${prepared.stateSummary}${nudge ? `\n\n${emptyReplyNudge(exposedTools.map(t => t.name))}` : ''}`;
+        // Likewise, only the inference right after a reply that asked instead of proposing.
+        const pendingAction = actionNudge;
+        actionNudge = undefined;
+        const nudges = [
+          nudge ? emptyReplyNudge(exposedTools.map(t => t.name)) : '',
+          pendingAction ? pendingActionNudge(pendingAction) : '',
+        ].filter(Boolean).map(note => `\n\n${note}`).join('');
+        const combinedSystemPrompt = `${prepared.systemPrompt}\n\n${prepared.stateSummary}${nudges}`;
 
         let accText = '';
         const accCalls: ToolCallInfo[] = [];
@@ -652,10 +690,16 @@ export class AgentRuntime {
 
         // ── Handle Tool Calls ────────────────────────────────────────────────
         if (accCalls.length > 0) {
+          // After a tool call the reply the nudge discarded is stale (review R5).
+          discardedReply = '';
           // Check for present_choices (§2.5)
           const choicesCall = accCalls.find(c => c.name === PRESENT_CHOICES_TOOL);
           if (choicesCall) {
-            const built = buildChoicesEvent(choicesCall.args);
+            const filledChoices = fillChoiceMediaRefs(choicesCall.args, turnCalls);
+            if (filledChoices.filled > 0) {
+              trace.guardDecisions.push(`present_choices had ${filledChoices.filled} item(s) without references: filled their mediaRef from this turn's search`);
+            }
+            const built = buildChoicesEvent(filledChoices.args);
             if (built) {
               yield built.event;
               state = reduce(state, { type: 'candidates_presented', candidates: built.candidates }, clock);
@@ -706,7 +750,24 @@ export class AgentRuntime {
               throw new AgentError('ERR_CANCELLED', 'Turn cancelled before tool dispatch');
             }
 
+            // Any attempt counts, even one dispatch rejects: the nudge must not push
+            // a proposal the model already tried and the checks refused.
+            if (isProposalAttempt(tc.name, tc.args)) proposalAttempted = true;
+
             const argsHash = computeArgsHash(tc.args);
+            // The first identical repeat of a call whose source did not answer gets
+            // that answer again instead of a dispatch: in SEARCH-10 (experiment 6)
+            // qwen3.5 repeated the search until the loop guard ended the turn. Nothing
+            // is executed, so no tool event and no guard count; a second repeat is
+            // dispatched and the loop guard still stops it.
+            const failureKey = `${tc.name}:${argsHash}`;
+            const failure = sourceFailures.get(failureKey);
+            if (failure && !failure.replayed) {
+              failure.replayed = true;
+              pendingResults.push({ id: tc.id, name: tc.name, ok: failure.ok, source: failure.source, result: replayedSourceFailure(failure.result) });
+              trace.guardDecisions.push(`repeated ${tc.name} call after a source failure: replayed its result without dispatch`);
+              continue;
+            }
             guards.checkToolCallAllowed(tc.name, argsHash);
 
             yield { type: 'tool-start', name: tc.name, args: tc.args, callId: tc.id };
@@ -755,13 +816,16 @@ export class AgentRuntime {
             }
 
             let references: Partial<WorkflowReferences> | undefined;
+            let parsedResult: unknown;
+            let completeResult = false;
             try {
               const parsed = JSON.parse(dispatchRes.result);
+              parsedResult = parsed;
               // The arguments that were validated and dispatched, after normalization.
               const effectiveArgs = dispatchRes.args ?? tc.args;
               // A failed or partial observation must not unlock a mutation.
               // It can still be reported to the user as a partial read.
-              const completeResult = dispatchRes.ok && parsed?.status !== 'partial' &&
+              completeResult = dispatchRes.ok && parsed?.status !== 'partial' &&
                 !parsed?.sources?.some((source: any) => source.completeness !== 'complete');
               if (completeResult) references = extractEntitledReferences(tc.name, effectiveArgs, parsed);
 
@@ -804,6 +868,11 @@ export class AgentRuntime {
               }
             } catch {
               // Non-JSON results are ignored for proposal and reference tracking
+            }
+
+            turnCalls.push({ tool: tc.name, args: dispatchRes.args ?? tc.args, ok: dispatchRes.ok, complete: completeResult, parsed: parsedResult });
+            if (!sourceFailures.has(failureKey) && isSourceFailure(parsedResult, dispatchRes.ok)) {
+              sourceFailures.set(failureKey, { result: dispatchRes.result, ok: dispatchRes.ok, source: dispatchRes.mcpTool, replayed: false });
             }
 
             // recordToolCall can raise ERR_LOOP_DETECTED; the state update above and
@@ -875,7 +944,68 @@ export class AgentRuntime {
           trace.guardDecisions.push('empty completion: retried once with a nudge');
           continue;
         }
-        const finalText = accText || fallbacks.empty;
+
+        // The request as the owner stated it: the stored intent summary plus this
+        // turn's text, so a year, type, language or resolution of the first message
+        // still counts after a card selection or a follow-up like "la de 2017"
+        // (review R1-R3).
+        const requestText = `${state.intent?.summary ?? ''}\n${turnText}`;
+
+        // Homonyms a download search returned are presented as cards when the reply
+        // only listed them in text: in SEARCH-06/07 (experiment 6) both models asked
+        // "¿cuál?" without present_choices, so the owner had nothing to select. The
+        // cards carry the returned mediaRefs only; the owner still chooses. Only the
+        // owner tells them apart, with a typed selection or a request that fits one of
+        // them: a homonym the model read on its own still gets the cards (review R3).
+        const homonyms = homonymGroup(turnCalls);
+        const undecided = homonyms && !selection && !requestPicksHomonym(homonyms, requestText) ? homonyms : undefined;
+        let cardsPrompt = '';
+        if (undecided && !choicesEmitted && !proposalAttempted && state.intent?.kind === 'download') {
+          const built = buildChoicesEvent(homonymChoices(undecided, locale));
+          if (built) {
+            yield built.event;
+            state = reduce(state, { type: 'candidates_presented', candidates: built.candidates }, clock);
+            choicesEmitted = true;
+            cardsPrompt = built.event.prompt ?? '';
+            trace.guardDecisions.push(`download search returned ${built.candidates.length} homonyms and the reply presented no choices: the runtime presented them`);
+          }
+        }
+
+        // A reply that ends asking to confirm a resolved target gets one more
+        // inference that names the proposal action: in nine scenarios of experiment 6
+        // (DOWNLOAD-01/02/05/06/07/09/10, STORAGE-01/05) qwen3.5 asked "¿Deseas
+        // descargar esta versión?" instead of proposing, and the owner approves in
+        // the app anyway. The question is not kept; the model still chooses the
+        // target and the proposal still passes grounding.
+        const pending = accText.trim() && !actionNudged && !choicesEmitted && !proposalAttempted && guards.hasInferenceBudget()
+          ? pendingProposalAction({
+            kind: state.intent?.kind,
+            requestKind: selection ? state.intent?.kind : messageIntentKind,
+            phase: state.phase,
+            exposedTools,
+            references: state.references,
+            calls: turnCalls,
+            requestText,
+            // This turn's homonyms, and the media cards of an earlier turn the owner has
+            // not chosen (review F4).
+            undecidedMediaRefs: new Set([
+              ...(undecided?.map(entry => entry.mediaRef) ?? []),
+              ...unchosenPresentedMedia(state.candidates, state.selections, requestText),
+            ]),
+          })
+          : undefined;
+        if (pending) {
+          actionNudged = true;
+          actionNudge = pending;
+          // Kept as the answer if the nudged inference, and its possible empty retry,
+          // end with no text and no tool call: better than "(sin respuesta)" (review R5).
+          discardedReply = accText;
+          guards.forgiveEmptyInference();
+          trace.guardDecisions.push(`reply ended without proposing a resolved target: retried once with a nudge to call ${pending.tool}.${pending.action}`);
+          continue;
+        }
+
+        const finalText = accText || cardsPrompt || discardedReply || fallbacks.empty;
         history.push({ role: 'assistant', content: finalText });
         persistHistory();
 
@@ -940,6 +1070,448 @@ function emptyReplyNudge(toolNames: string[]): string {
   return `Your previous reply was empty; a call to a tool that is not available is discarded. Available now: ${toolNames.join(', ')}. Reply to the last user message: answer with the data you have, or call one of those tools.`;
 }
 
+/* ── Unverified references in a message (ADV-02, experiment 6) ──────────── */
+
+/** The reference shapes workflow.ts accepts, unanchored, to find them in text. */
+const REFERENCE_TOKEN = /\b(?:mref|rref)_[A-Za-z0-9_.:=-]{1,220}/g;
+const MAX_NOTED_REFERENCES = 3;
+
+/** Reference tokens in `text`, without the sentence punctuation that may follow one. */
+function referenceTokens(text: string): string[] {
+  return (text.match(REFERENCE_TOKEN) ?? []).map(token => token.replace(/[.:]+$/, '')).filter(token => token.length > 5);
+}
+
+/**
+ * Tokens of the message that nothing in the conversation verified: not in the
+ * references, candidates or selections of `state`, and not in a successful result of
+ * `history` from a tool entitled to mint that kind of reference. Call it with the
+ * state before the message is reduced.
+ */
+export function unverifiedReferenceTokens(message: string, state: WorkflowState, history: ChatMessage[]): string[] {
+  const found = [...new Set(referenceTokens(message))];
+  if (found.length === 0) return [];
+  const known = new Set<string>();
+  const add = (value: unknown) => { if (typeof value === 'string') known.add(value.trim()); };
+  const refs = state.references;
+  add(refs.mediaRef);
+  add(refs.releaseRef);
+  refs.mediaRefs?.forEach(add);
+  refs.releaseRefs?.forEach(add);
+  for (const candidate of state.candidates) { add(candidate.mediaRef); add(candidate.releaseRef); }
+  for (const chosen of state.selections) { add(chosen.mediaRef); add(chosen.releaseRef); }
+  for (const msg of history) {
+    // A failed result can echo the token it refused (ERR_REF_INVALID names the value
+    // it was given): that is not a tool returning it.
+    for (const result of msg.toolResults ?? []) {
+      if (result.ok === false) continue;
+      for (const token of referenceTokens(result.result)) if (mintsReferenceToken(result.name, token)) add(token);
+    }
+  }
+  return found.filter(token => !known.has(token)).slice(0, MAX_NOTED_REFERENCES);
+}
+
+/** The tools of REFERENCE_SOURCES whose results carry catalog references. */
+const CATALOG_REFERENCE_TOOLS: ReadonlySet<string> = new Set(['catalog', 'series', 'movies']);
+
+/**
+ * True when `toolName` is entitled to mint the kind of `token`: catalog mints media and
+ * release references, series and movies release references. The same token in any
+ * other result is free text, such as a Jellyfin item named "rref_..." in a media_query
+ * result, and verifies nothing (review R7, L2).
+ */
+function mintsReferenceToken(toolName: string, token: string): boolean {
+  if (!CATALOG_REFERENCE_TOOLS.has(toolName)) return false;
+  const entitlement = REFERENCE_SOURCES[toolName];
+  return token.startsWith('mref_') ? Boolean(entitlement?.media?.length) : Boolean(entitlement?.release?.length);
+}
+
+/**
+ * The note steers to the refusal the ADV-02 and ADV-07 oracles accept ("no puedo*",
+ * and "no es válid*" for ADV-02) and claims nothing about what tools returned, which
+ * the runtime cannot know for text outside the history (review R6, L16/L17).
+ */
+function unverifiedReferenceNote(tokens: string[]): string {
+  if (tokens.length === 0) return '';
+  const names = tokens.join(', ');
+  return tokens.length === 1
+    ? `[Mediabox note] ${names} is not a reference verified in this conversation, so you cannot use it: say you cannot use it because it is not valid here; do not look it up.`
+    : `[Mediabox note] ${names} are not references verified in this conversation, so you cannot use them: say you cannot use them because they are not valid here; do not look them up.`;
+}
+
+/* ── What the tool loop of a turn observed ───────────────────────────────── */
+
+/** A dispatched call of this turn, with the arguments after normalization. */
+export interface TurnCall {
+  tool: string;
+  args: Record<string, unknown>;
+  ok: boolean;
+  /** Successful and complete, the test that lets a result mint references. */
+  complete: boolean;
+  parsed: unknown;
+}
+
+interface SourceFailure {
+  result: string;
+  ok: boolean;
+  source?: string;
+  replayed: boolean;
+}
+
+export interface ProposalAction {
+  tool: string;
+  action: string;
+}
+
+/** A proposal call as the model wrote it, before dispatch normalizes the action. */
+function isProposalAttempt(toolName: string, args: Record<string, unknown>): boolean {
+  const action = typeof args?.action === 'string' ? args.action.trim().toLowerCase() : '';
+  return isProposalCall(toolName, { action });
+}
+
+/** A result in which a source did not answer: partial, incomplete or unreachable. */
+function isSourceFailure(parsed: unknown, ok: boolean): boolean {
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return false;
+  const record = parsed as Record<string, any>;
+  if (record.status === 'partial') return true;
+  if (Array.isArray(record.sources) && record.sources.some((source: any) => source?.completeness !== 'complete')) return true;
+  return !ok && record.error?.code === 'ERR_UPSTREAM_UNAVAILABLE';
+}
+
+/** Replaces the top-level message of a replayed result; compaction keeps 120 characters. */
+export const REPEATED_SOURCE_FAILURE_NOTE = 'Already answered in this turn: the source did not answer. Do not call it again; tell the user.';
+
+function replayedSourceFailure(result: string): string {
+  try {
+    return JSON.stringify({ ...JSON.parse(result), message: REPEATED_SOURCE_FAILURE_NOTE });
+  } catch {
+    return result;
+  }
+}
+
+/* ── Homonym cards (SEARCH-06/07, experiment 6) ──────────────────────────── */
+
+function foldTitle(value: string): string {
+  // \p{M}: the combining accents NFD splits off, so "Éclipse" folds to "eclipse".
+  return value.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase().replace(/\s+/g, ' ').trim();
+}
+
+const MEDIA_TYPE_LABELS: Record<'es' | 'en', Record<string, string>> = {
+  es: { movie: 'película', series: 'serie' },
+  en: { movie: 'movie', series: 'series' },
+};
+
+const HOMONYM_PROMPT: Record<'es' | 'en', string> = {
+  es: '¿Cuál de estos títulos quieres?',
+  en: 'Which of these titles do you mean?',
+};
+
+interface Homonym {
+  title: string;
+  year?: number;
+  type?: string;
+  mediaRef: string;
+}
+
+/** The object items of the last complete catalog search of the turn, with its call. */
+function lastCompleteSearch(calls: TurnCall[]): { call: TurnCall; items: Record<string, unknown>[] } | undefined {
+  for (let i = calls.length - 1; i >= 0; i--) {
+    const c = calls[i];
+    if (c.tool !== 'catalog' || actionOf(c.args) !== 'search' || !c.ok || !c.complete) continue;
+    const data = (c.parsed as { data?: unknown } | undefined)?.data;
+    if (!Array.isArray(data)) return undefined;
+    return { call: c, items: data.filter((raw): raw is Record<string, unknown> => Boolean(raw) && typeof raw === 'object' && !Array.isArray(raw)) };
+  }
+  return undefined;
+}
+
+/**
+ * The homonyms of the last complete catalog search of the turn: at least two returned
+ * items with a different (year, type) whose folded title equals the folded query or,
+ * when the result is dispatch's retry of an empty search (READ-13), the title it
+ * searched instead; each also without a trailing "(2017)": the router searches that as
+ * title and year (splitTitleYear), and dispatch turns '"Eclipse" (2017)' into "Eclipse (2017)".
+ * No other group: falling back to the first ambiguous group of the result offered
+ * titles the owner never asked for (review R3).
+ */
+function homonymGroup(calls: TurnCall[]): Homonym[] | undefined {
+  const search = lastCompleteSearch(calls);
+  if (!search) return undefined;
+  const rawQuery = search.call.args.query;
+  const query = typeof rawQuery === 'string' ? rawQuery : '';
+  // The normalized title only when dispatch searched it, which its retry note says. A
+  // search for "El Show de Truman" that found the 1998 film offered "Truman (1995)" and
+  // "Truman (2015)" as cards, which also kept the nudge off (review F3).
+  const retried = retriedTitle(query, (search.call.parsed as { message?: unknown } | undefined)?.message);
+  const titles = [query, retried ?? ''].flatMap(title => [title, String(splitTitleYear(title, undefined).query)]);
+  const keys = [...new Set(titles.map(foldTitle).filter(Boolean))];
+  for (const key of keys) {
+    const group: Homonym[] = [];
+    for (const item of search.items) {
+      if (typeof item.title !== 'string' || foldTitle(item.title) !== key || !isValidMediaRef(item.mediaRef)) continue;
+      const entry: Homonym = {
+        title: item.title.trim(),
+        year: typeof item.year === 'number' ? item.year : undefined,
+        type: typeof item.type === 'string' ? item.type : undefined,
+        mediaRef: (item.mediaRef as string).trim(),
+      };
+      // The same (year, type) twice would give two identical cards.
+      if (!group.some(other => other.year === entry.year && other.type === entry.type)) group.push(entry);
+    }
+    if (group.length >= 2) return group.slice(0, MAX_CHOICE_ITEMS);
+  }
+  return undefined;
+}
+
+/** Years and type words of a request, over lower-case text without accents. */
+const YEAR_IN_TEXT = /\b(?:19|20)\d{2}\b/g;
+const MOVIE_WORD = /\b(?:pelicula|movie|film)\b/;
+const SERIES_WORD = /\b(?:serie|series|show)\b/;
+
+/**
+ * The homonym the request text itself picks: filtering the group by the years and by
+ * the type word (película, movie, film; serie, series, show) the text names leaves
+ * exactly one member, with at least one filter applied. A typed selection is the
+ * caller's check. This replaces "a later call of the turn used one of them", which let
+ * a model pick a homonym on its own, read its releases and skip the cards (review R3).
+ * `untypedFits` lets a member of unknown type through the type filter: a card label
+ * names the type only where two cards share a year (review F4).
+ */
+function pickHomonym(group: Homonym[], requestText: string, untypedFits = false): Homonym | undefined {
+  const text = foldTitle(requestText);
+  const years = new Set((text.match(YEAR_IN_TEXT) ?? []).map(Number));
+  const types = new Set<string>();
+  if (MOVIE_WORD.test(text)) types.add('movie');
+  if (SERIES_WORD.test(text)) types.add('series');
+  let members = group;
+  let filtered = false;
+  if (years.size > 0) {
+    members = members.filter(entry => entry.year !== undefined && years.has(entry.year));
+    filtered = true;
+  }
+  // A text with both type words names no type.
+  if (types.size === 1) {
+    members = members.filter(entry => (entry.type === undefined ? untypedFits : types.has(entry.type)));
+    filtered = true;
+  }
+  return filtered && members.length === 1 ? members[0] : undefined;
+}
+
+function requestPicksHomonym(group: Homonym[], requestText: string): boolean {
+  return pickHomonym(group, requestText) !== undefined;
+}
+
+/** present_choices arguments for a homonym group, with the returned mediaRefs only. */
+function homonymChoices(group: Homonym[], locale: string): Record<string, unknown> {
+  const tag = locale === 'es' ? 'es' : 'en';
+  const items = group.map(entry => {
+    const sharesYear = group.filter(other => other.year === entry.year).length > 1;
+    const typeLabel = sharesYear && entry.type ? MEDIA_TYPE_LABELS[tag][entry.type] ?? entry.type : '';
+    const detail = [entry.year !== undefined ? String(entry.year) : '', typeLabel].filter(Boolean).join(', ');
+    const label = detail ? `${entry.title} (${detail})` : entry.title;
+    return { label, value: label, mediaRef: entry.mediaRef, selectionType: 'select_candidate' };
+  });
+  return { prompt: HOMONYM_PROMPT[tag], items };
+}
+
+/**
+ * Fills the mediaRef of model-written present_choices items that carry no valid
+ * reference, so the owner gets cards that select something (review R8, L14). An item
+ * gets the mediaRef of the single returned item of the turn's last complete catalog
+ * search whose folded title is in the item's label or value and whose year, when it
+ * has one, appears there too. Only server-returned mediaRefs, never releaseRefs.
+ */
+function fillChoiceMediaRefs(args: Record<string, unknown>, calls: TurnCall[]): { args: Record<string, unknown>; filled: number } {
+  const search = Array.isArray(args.items) ? lastCompleteSearch(calls) : undefined;
+  if (!search) return { args, filled: 0 };
+  const returned = search.items
+    .filter(item => typeof item.title === 'string' && foldTitle(item.title) && isValidMediaRef(item.mediaRef))
+    .map(item => ({
+      title: foldTitle(item.title as string),
+      year: typeof item.year === 'number' ? new RegExp(`\\b${Math.trunc(item.year)}\\b`) : undefined,
+      mediaRef: (item.mediaRef as string).trim(),
+    }));
+  let filled = 0;
+  const items = (args.items as unknown[]).map(raw => {
+    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return raw;
+    const item = raw as Record<string, unknown>;
+    if (isValidMediaRef(item.mediaRef) || isValidReleaseRef(item.releaseRef)) return raw;
+    const text = foldTitle([item.label, item.value].filter((part): part is string => typeof part === 'string').join(' '));
+    if (!text) return raw;
+    const matches = new Set(returned
+      .filter(entry => text.includes(entry.title) && (!entry.year || entry.year.test(text)))
+      .map(entry => entry.mediaRef));
+    if (matches.size !== 1) return raw;
+    filled++;
+    return { ...item, mediaRef: [...matches][0], selectionType: 'select_candidate' };
+  });
+  return filled > 0 ? { args: { ...args, items }, filled } : { args, filled: 0 };
+}
+
+/* ── Media cards of an earlier turn (review F4) ──────────────────────────── */
+
+/** The detail in the trailing parentheses of a card label: "Eclipse (2017, película)". */
+const LABEL_DETAIL = /\(([^()]*)\)\s*$/;
+
+/** A presented media card as a homonym: the year and the type its label names, if any. */
+function labelHomonym(label: string, mediaRef: string): Homonym {
+  const detail = foldTitle(LABEL_DETAIL.exec(label)?.[1] ?? '');
+  const years = detail.match(YEAR_IN_TEXT) ?? [];
+  const movie = MOVIE_WORD.test(detail);
+  const series = SERIES_WORD.test(detail);
+  return {
+    title: label,
+    year: years.length > 0 ? Number(years[years.length - 1]) : undefined,
+    type: movie === series ? undefined : movie ? 'movie' : 'series',
+    mediaRef,
+  };
+}
+
+/**
+ * mediaRefs of the media cards the conversation presented (two or more media, no
+ * release on the card) that the owner has not chosen. Chosen is the card of the last
+ * typed selection among them, or the one the request text picks among their labels
+ * with the test of the cards. Reproduced in review F4: after cards for Eclipse 2004 and
+ * 2017, "Descárgala en 1080p." came as free text, the model read the 2017 releases on
+ * its own and the nudge created plan_e2017, although the owner never picked 2017.
+ */
+function unchosenPresentedMedia(candidates: CandidateRecord[], selections: TypedSelection[], requestText: string): string[] {
+  const media = new Map<string, Homonym>();
+  for (const candidate of candidates) {
+    if (candidate.releaseRef || !isValidMediaRef(candidate.mediaRef)) continue;
+    const mediaRef = candidate.mediaRef.trim();
+    if (!media.has(mediaRef)) media.set(mediaRef, labelHomonym(candidate.label, mediaRef));
+  }
+  if (media.size < 2) return [];
+  const chosen = new Set<string>();
+  const selected = [...selections].reverse().find(s => isValidMediaRef(s.mediaRef) && media.has(s.mediaRef.trim()));
+  if (selected?.mediaRef) chosen.add(selected.mediaRef.trim());
+  const picked = pickHomonym([...media.values()], requestText, true);
+  if (picked) chosen.add(picked.mediaRef);
+  return [...media.keys()].filter(mediaRef => !chosen.has(mediaRef));
+}
+
+/* ── Releases that were all rejected (review F1) ─────────────────────────── */
+
+/**
+ * True when the last complete catalog releases read of the turn returned releases and
+ * the server rejected every one. DOWNLOAD-03 asks for Japanese audio that no release
+ * has: with R10 that read leaves the phase at select, where the prompt said to
+ * "retrieve releases" again. Exported for its tests.
+ */
+export function releasesAllRejected(calls: TurnCall[]): boolean {
+  for (let i = calls.length - 1; i >= 0; i--) {
+    const c = calls[i];
+    if (c.tool !== 'catalog' || actionOf(c.args) !== 'releases' || !c.ok || !c.complete) continue;
+    const data = (c.parsed as { data?: unknown } | undefined)?.data;
+    return Array.isArray(data) && data.length > 0 &&
+      data.every(item => Boolean(item) && typeof item === 'object' && (item as Record<string, unknown>).rejected === true);
+  }
+  return false;
+}
+
+/* ── Nudge of a pending proposal (experiment 6) ──────────────────────────── */
+
+const PROPOSAL_ACTION_OF: Partial<Record<IntentKind, ProposalAction>> = {
+  download: { tool: 'catalog', action: 'propose_download' },
+  delete: { tool: 'library_ops', action: 'propose_delete' },
+  convert: { tool: 'media_format', action: 'propose' },
+};
+
+/**
+ * An audio language named in the request, over lower-case text without accents.
+ * DOWNLOAD-03 asks for Japanese audio that no release has: without the language in
+ * the releases call, a release that was not rejected is not a resolved target.
+ */
+const AUDIO_LANGUAGE_CUE = /\b(latino|latina|latinoamericano|espanol|espanola|castellano|spanish|ingles|inglesa|english|japones|japonesa|japanese|frances|francesa|french|aleman|alemana|german|italiano|italiana|italian|portugues|portuguesa|portuguese|brasileno|coreano|coreana|korean|chino|chinese|mandarin|cantones|ruso|rusa|russian|hindi|arabe|arabic|catalan|euskera|polaco|polish|turco|turkish|neerlandes|dutch|sueco|swedish)\b/;
+
+/**
+ * A resolution named in the request, over lower-case text without accents. 4k and uhd
+ * mean 2160p, the value find_releases reports (mcp-server queries/releases.ts).
+ */
+const RESOLUTION_CUE = /\b(?:480p|576p|720p|1080p|2160p|4k|uhd)\b/g;
+
+function canonicalResolution(value: string): string {
+  const folded = value.trim().toLowerCase();
+  return folded === '4k' || folded === 'uhd' ? '2160p' : folded;
+}
+
+/**
+ * The proposal action a text reply should have called: a proposal request in
+ * `propose` with that action offered, and a target this turn's own reads resolved.
+ * `requestText` is the stored intent summary plus this turn's text, so a language or
+ * resolution named in the first message still counts after a card selection or a
+ * follow-up such as "la de 2017" (review R1, R2). A message that asks for something
+ * else ("show me the versions") is not nudged. Exported for its tests.
+ */
+export function pendingProposalAction(opts: {
+  kind: IntentKind | undefined;
+  requestKind: IntentKind | undefined;
+  phase: Phase;
+  exposedTools: VirtualToolDef[];
+  references: WorkflowReferences;
+  calls: TurnCall[];
+  requestText: string;
+  /** mediaRefs of homonyms or media cards the owner has not told apart (review R3, F4). */
+  undecidedMediaRefs: ReadonlySet<string>;
+}): ProposalAction | undefined {
+  const target = opts.kind ? PROPOSAL_ACTION_OF[opts.kind] : undefined;
+  if (!target || opts.phase !== 'propose') return undefined;
+  if (opts.requestKind !== undefined && opts.requestKind !== opts.kind) return undefined;
+  const offered = (opts.exposedTools.find(t => t.name === target.tool)?.parameters as any)?.properties?.action?.enum;
+  if (!Array.isArray(offered) || !offered.includes(target.action)) return undefined;
+
+  // Paths or an analysis kept from an earlier turn are not this turn's resolution:
+  // the nudge needs the listing or the analysis read now (review R4).
+  const readThisTurn = (tool: string, action: string) =>
+    opts.calls.some(c => c.tool === tool && actionOf(c.args) === action && c.ok && c.complete);
+  if (opts.kind === 'delete') return opts.references.paths?.length && readThisTurn('library_ops', 'list') ? target : undefined;
+  if (opts.kind === 'convert') return opts.references.inspectedPaths?.length && readThisTurn('media_format', 'analyze') ? target : undefined;
+
+  const text = foldTitle(opts.requestText);
+  const namesLanguage = AUDIO_LANGUAGE_CUE.test(text);
+  // The last resolution the request names. The summary keeps the earlier messages of
+  // the request (review F2), and "en 720p" then "descárgala en 1080p" asks for 1080p:
+  // one resolution is never looser than the set of one message it replaces.
+  const named = text.match(RESOLUTION_CUE) ?? [];
+  const resolution = named.length > 0 ? canonicalResolution(named[named.length - 1]) : undefined;
+  const resolved = opts.calls.some(c => {
+    if (c.tool !== 'catalog' || actionOf(c.args) !== 'releases' || !c.ok || !c.complete) return false;
+    // Defense in depth for the homonym cards: the releases of a homonym the owner did
+    // not pick are not the requested target (review R3).
+    if (typeof c.args.mediaRef === 'string' && opts.undecidedMediaRefs.has(c.args.mediaRef.trim())) return false;
+    // A named language counts only in a call that requires it: strictLanguage false
+    // also returns releases without that language (review R1).
+    if (namesLanguage && (!(typeof c.args.audioLanguage === 'string' && c.args.audioLanguage.trim()) || c.args.strictLanguage === false)) return false;
+    const data = (c.parsed as { data?: unknown } | undefined)?.data;
+    return Array.isArray(data) && data.some(raw => {
+      if (!raw || typeof raw !== 'object') return false;
+      const item = raw as Record<string, unknown>;
+      if (item.rejected === true || !isValidReleaseRef(item.releaseRef)) return false;
+      // A named resolution counts only with a release of that resolution (review R2).
+      return resolution === undefined || (typeof item.resolution === 'string' && canonicalResolution(item.resolution) === resolution);
+    });
+  });
+  return resolved ? target : undefined;
+}
+
+/**
+ * Conditional per kind: the reads of the turn returned candidates, and whether one of
+ * them is what the user asked for is still the model's call. The previous wording
+ * claimed "the exact target is resolved" (review R4).
+ */
+function pendingActionNudge(action: ProposalAction): string {
+  const call = `${action.tool}(action:"${action.action}")`;
+  const lead = `Your reply ended without proposing, and ${call} is available. The owner approves in the Mediabox app, never in this chat, so do not ask for confirmation.`;
+  switch (action.action) {
+    case 'propose_download':
+      return `${lead} The releases read returned releases that were not rejected: if one of them meets every constraint the user stated, call ${call} now with it and report the returned approval state; if none does, say so in one sentence and propose nothing.`;
+    case 'propose_delete':
+      return `${lead} The listing returned exact file paths: if one of them is exactly the file the user asked for, call ${call} now with only that path and report the returned approval state; if none is, say so in one sentence and propose nothing.`;
+    default:
+      return `${lead} If the analyzed file is exactly the file the user asked for and the requested job applies, call ${call} now and report the returned approval state; otherwise say so in one sentence and propose nothing.`;
+  }
+}
+
 interface TurnProposal {
   planId: string;
   operation: string;
@@ -989,8 +1561,13 @@ function planStatusNote(updates: Array<{ planId: string; status: string }>, prop
   if (updates.length === 0) return '';
   const lines = updates.map(u => {
     const operation = proposals.find(p => p.planId === u.planId)?.operation ?? 'operation';
+    // A succeeded download only sent the release: in experiment 6 DOWNLOAD-08 turn 2
+    // answered "ya está disponible en su biblioteca" after this note, and DOWNLOAD-09
+    // forbids "ya está disponible". The word "sent" is what DOWNLOAD-08 accepts (review R9).
     const meaning = u.status === 'succeeded'
-      ? (operation === 'media_download' ? 'the release was sent to the downloader; it may still be downloading' : 'it completed')
+      ? (operation === 'media_download'
+        ? 'the plan only sent the release to the downloader, which does not mean it is in the library; unless downloads or the library show it, say it is not available yet and may still be downloading'
+        : 'it completed')
       : PLAN_STATUS_MEANING[u.status] ?? `its status is ${u.status}`;
     return `Plan ${u.planId} (${operation}) is ${u.status}: ${meaning}.`;
   });

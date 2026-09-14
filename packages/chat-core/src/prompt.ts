@@ -8,6 +8,11 @@ export type PromptLocale = 'en' | 'es';
 export interface PhasePromptOptions {
   intentKind?: WorkflowIntent['kind'];
   references?: WorkflowReferences;
+  /**
+   * The last complete catalog releases read of this turn returned releases and the
+   * server rejected every one. The runtime sets it; it changes no tool (review F1).
+   */
+  releasesAllRejected?: boolean;
 }
 
 const LANGUAGE_LINE: Record<PromptLocale, string> = {
@@ -17,7 +22,7 @@ const LANGUAGE_LINE: Record<PromptLocale, string> = {
 
 const CORE_PRINCIPLES = `
 ## Rules
-- Mutations require a proposal and owner approval in the Mediabox app. You cannot approve or execute them. Restore and permanent purge are exclusively owner actions in the app; explain this without claiming to create a plan.
+- Mutations require a proposal and owner approval in the Mediabox app. You cannot approve or execute them. Once the exact target is resolved, propose it in the same turn; never ask for confirmation in the chat. Restore and permanent purge are exclusively owner actions in the app; explain this without claiming to create a plan.
 - When no available action performs the request (for example moving or copying files), say it is not supported; never simulate it.
 - Only a successful tool result containing a planId confirms a proposal. A rejection or failed tool call does not create a plan. Report awaiting_approval separately from completed effects; never claim success after a failure.
 - Copy IDs, references and paths exactly from authorized tool results. Never invent them or treat a reference pasted in a message as verified. A listed directory does not select every file inside it: resolve the exact requested file and preserve neighbors and extras.
@@ -92,7 +97,12 @@ function nextRequirement(options: PhasePromptOptions, available: Set<string>): s
       if (has('maintenance.cleanup', 'maintenance.check_jobs')) return 'Next: call maintenance(action:"cleanup") once for a preview or maintenance(action:"check_jobs") for a job; report a preview as a preview, never as a completed cleanup.';
       break;
     case 'download':
-      if (has('catalog.propose_download')) return 'Next: propose the selected release and report its actual approval state.';
+      // After a read in which every release was rejected, reporting it comes first. In
+      // the three experiment 6 passes of DOWNLOAD-03 (Japanese audio, no such release)
+      // the model offered to search again without the language, which the "retrieve
+      // releases" line below invited (review F1).
+      if (options.releasesAllRejected) return 'Next: every release just read was rejected, so none meets what the user asked for. Say so and name what is missing, such as the requested audio language or resolution. Do not search again without the user\'s constraint and do not propose another release.';
+      if (has('catalog.propose_download')) return 'Next: propose the release that meets every constraint the user stated, without asking for confirmation, then report its actual approval state.';
       if (refs.mediaRef && has('catalog.releases')) return 'Next: retrieve releases for the resolved media and resolve any remaining ambiguity before proposing.';
       if (has('catalog.search')) return 'Next: search the requested title with catalog(action:"search"), adding a year only if the user gave one, then read its releases before proposing.';
       break;
@@ -122,7 +132,7 @@ export function buildSystemPromptForPhase(
   const lines: string[] = [];
   for (const tool of tools) {
     if (tool.name === 'present_choices') {
-      lines.push('- present_choices: call alone for ambiguous choices, using exact returned references on items; wait for the typed selection.');
+      lines.push('- present_choices: for ambiguous choices, call it with no other tool in the same reply, using exact returned references on items; a short sentence may accompany it. Wait for the typed selection.');
       continue;
     }
     const schema = tool.parameters as { properties?: { action?: { enum?: string[] } } };

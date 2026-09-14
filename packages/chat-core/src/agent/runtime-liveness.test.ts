@@ -140,6 +140,25 @@ describe('Open plans are read at the start of each turn', () => {
     expect((await workflowStore.get('conv_live'))!.proposals[0].status).toBe('rejected');
   });
 
+  it('says a succeeded download was only sent to the downloader, not that it is in the library (review R9)', async () => {
+    // Experiment 6: DOWNLOAD-08 turn 2 answered "ya está disponible en su biblioteca"
+    // after the succeeded note; DOWNLOAD-09 forbids "ya está disponible" and DOWNLOAD-08
+    // accepts "enviad*", so the note keeps the word "sent".
+    const workflowStore = new InMemoryWorkflowStore();
+    await workflowStore.set('conv_sent', withProposal('conv_sent', 'awaiting_approval'));
+    const mcp = new FakeMcp({ operation_status: JSON.stringify({ id: 'plan_7dc2e74c', operation: 'media_download', status: 'succeeded' }) });
+    const { provider } = await runTurn({
+      conversationId: 'conv_sent',
+      message: '¿Ya puedo ver Río Quieto?',
+      scripts: [[{ type: 'text', text: 'Aún no: se envió al descargador y puede seguir descargándose.' }]],
+      mcp,
+      workflowStore,
+    });
+    const lastUser = provider.seen[0].messages.filter((m) => m.role === 'user').at(-1)!;
+    expect(lastUser.content).toBe('¿Ya puedo ver Río Quieto?\n\n[Mediabox plan update, read from the server at the start of this turn] Plan plan_7dc2e74c (media_download) is succeeded: the plan only sent the release to the downloader, which does not mean it is in the library; unless downloads or the library show it, say it is not available yet and may still be downloading.');
+    expect((await workflowStore.get('conv_sent'))!.proposals[0].status).toBe('succeeded');
+  });
+
   it('adds no note when no open plan changed', async () => {
     const workflowStore = new InMemoryWorkflowStore();
     await workflowStore.set('conv_same', withProposal('conv_same', 'awaiting_approval'));
