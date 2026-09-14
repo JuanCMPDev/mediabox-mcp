@@ -99,7 +99,7 @@ function nextRequirement(options: PhasePromptOptions, available: Set<string>): s
   }
   if ((!options.intentKind || options.intentKind === 'other') && has('catalog.search')) {
     const library = has('media_query.search')
-      ? ' If the catalog finds nothing, search the library with media_query(action:"search") before saying it does not exist.'
+      ? ' When the catalog finds nothing, its result also lists the local library matches in `library`: answer from those.'
       : '';
     return `Next: to find a title, search with catalog(action:"search"), which also covers titles not in the library; media_query only covers the local library.${library} Ask when the exact target is unclear.`;
   }

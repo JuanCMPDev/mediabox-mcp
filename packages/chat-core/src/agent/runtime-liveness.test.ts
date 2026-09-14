@@ -46,6 +46,10 @@ describe('An empty completion gets one nudged retry', () => {
     expect(provider.seen).toHaveLength(2);
     expect(provider.seen[0].systemPrompt).not.toContain(NUDGE);
     expect(provider.seen[1].systemPrompt).toContain(NUDGE);
+    // The nudge names the tools: a call to one that is not offered is dropped by the runtime.
+    const offered = provider.seen[1].tools.map((t) => t.name).filter((n) => n !== 'present_choices');
+    expect(provider.seen[1].systemPrompt).toContain(`Available now: ${provider.seen[1].tools.map((t) => t.name).join(', ')}`);
+    expect(offered.length).toBeGreaterThan(0);
     expect(mcp.ledger).toHaveLength(0);
   });
 
@@ -72,6 +76,44 @@ describe('An empty completion gets one nudged retry', () => {
   });
 });
 
+describe('A proposal on the last inference still gets an answer', () => {
+  it('answers from the proposal result, warnings included, instead of ending on the budget guard', async () => {
+    const folder = 'tv/Órbita (2023)/Season 02';
+    const file = `${folder}/Órbita - S02E04.mkv`;
+    const provider = new ScriptedProvider([
+      [{ type: 'tool_call', id: 'c1', name: 'media_query', args: { action: 'search', query: 'Órbita', type: 'Series' } }],
+      [{ type: 'tool_call', id: 'c2', name: 'library_ops', args: { action: 'list', path: `/data/${folder}` } }],
+      [{ type: 'tool_call', id: 'c3', name: 'library_ops', args: { action: 'propose_delete', paths: [`media:${file}`] } }],
+    ]);
+    const mcp = new FakeMcp({
+      jellyfin_search: JSON.stringify({ results: [{ id: 'orbita', name: 'Órbita', path: `/data/${folder}` }] }),
+      manage_files: JSON.stringify({ path: `media:${folder}`, items: [{ name: 'Órbita - S02E04.mkv', type: 'file', path: `media:${file}` }] }),
+      propose_cleanup: JSON.stringify({ planId: 'plan_e04', operation: 'quarantine_files', status: 'awaiting_approval', warnings: ['Quarantine frees 0 B now: the files stay on the same disk until an approved purge.'] }),
+    });
+    const events: ChatEvent[] = [];
+    for await (const evt of AgentRuntime.streamTurn({
+      conversationId: 'conv_budget',
+      message: 'Borra el episodio 4 de Órbita temporada 2',
+      provider,
+      mcpCall: mcp.callFn,
+      historyStore: new InMemoryHistoryStore(),
+      workflowStore: new InMemoryWorkflowStore(),
+      clock,
+      locale: 'es',
+      guards: { maxInferences: 3 },
+    })) {
+      events.push(evt);
+    }
+    expect(mcp.ledger.map((e) => e.tool)).toEqual(['jellyfin_search', 'manage_files', 'propose_cleanup']);
+    expect(events.some((e) => e.type === 'guard')).toBe(false);
+    expect(events.at(-1)).toEqual({
+      type: 'done',
+      fullText: 'Propuse el plan plan_e04 para mover a cuarentena los archivos elegidos. Está pendiente de tu aprobación en la aplicación Mediabox; hasta entonces no se cambia nada.\n\nAvisos: Quarantine frees 0 B now: the files stay on the same disk until an approved purge.',
+    });
+    expect(provider.seen).toHaveLength(3);
+  });
+});
+
 describe('Open plans are read at the start of each turn', () => {
   function withProposal(conversationId: string, status: string): WorkflowState {
     const initial = createInitialWorkflowState(conversationId, 'user', 'inst', clock);
@@ -92,7 +134,18 @@ describe('Open plans are read at the start of each turn', () => {
     expect(events.at(-1)).toMatchObject({ type: 'done' });
     expect(mcp.ledger.map((e) => [e.tool, e.args])).toEqual([['operation_status', { planId: 'plan_7dc2e74c' }]]);
     expect(provider.seen[0].systemPrompt).toContain('media_download:plan_7dc2e74c(rejected)');
+    // The change also travels with the message: the summary alone did not outweigh the previous answer.
+    const lastUser = provider.seen[0].messages.filter((m) => m.role === 'user').at(-1)!;
+    expect(lastUser.content).toBe('¿Se descargó Río Quieto?\n\n[Mediabox plan update, read from the server at the start of this turn] Plan plan_7dc2e74c (media_download) is rejected: the owner declined it in the app, so nothing was changed or downloaded.');
     expect((await workflowStore.get('conv_live'))!.proposals[0].status).toBe('rejected');
+  });
+
+  it('adds no note when no open plan changed', async () => {
+    const workflowStore = new InMemoryWorkflowStore();
+    await workflowStore.set('conv_same', withProposal('conv_same', 'awaiting_approval'));
+    const mcp = new FakeMcp({ operation_status: JSON.stringify({ id: 'plan_7dc2e74c', operation: 'media_download', status: 'awaiting_approval' }) });
+    const { provider } = await runTurn({ conversationId: 'conv_same', message: '¿Se descargó Río Quieto?', scripts: [[{ type: 'text', text: 'Todavía espera tu aprobación.' }]], mcp, workflowStore });
+    expect(provider.seen[0].messages.filter((m) => m.role === 'user').at(-1)!.content).toBe('¿Se descargó Río Quieto?');
   });
 
   it('does not read plans for a proposal request: it acts, and the server checks duplicates', async () => {

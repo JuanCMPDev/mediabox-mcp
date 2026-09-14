@@ -464,19 +464,22 @@ export class AgentRuntime {
       if (state.phase !== prevPhase) {
         yield { type: 'phase', phase: state.phase, reason: 'user_message' };
       }
-      history.push({ role: 'user', content: message });
-      historyStore.set(conversationId, history);
-
       // Live status of this conversation's open plans (§2.2), for a question about
-      // state. The owner approves, rejects or cancels in the app between turns;
-      // without this read the agent repeated the status of the proposal turn. A
+      // state. The owner approves, rejects or cancels in the app between turns. A
       // proposal or a selection acts instead, and the server checks duplicates.
+      // The change also goes into the message: in experiment 5 the state summary
+      // alone did not outweigh the previous answer, which the model repeated.
+      let planNote = '';
       if (intent && PLAN_STATUS_INTENTS.has(intent.kind)) {
-        for (const update of await readOpenPlanStatuses(state.proposals, mcpCall, signal)) {
+        const updates = await readOpenPlanStatuses(state.proposals, mcpCall, signal);
+        for (const update of updates) {
           state = reduce(state, { type: 'operation_status', planId: update.planId, status: update.status }, clock);
           stateNotes.push(`plan ${update.planId} is ${update.status}`);
         }
+        planNote = planStatusNote(updates, state.proposals);
       }
+      history.push({ role: 'user', content: planNote ? `${message}\n\n${planNote}` : message });
+      historyStore.set(conversationId, history);
     }
 
     // 4. Initialize trace (§2.10 / AGT-10). turnId is deterministic (§6.12).
@@ -500,6 +503,7 @@ export class AgentRuntime {
     let turnCompleted = false;
     let emptyRetried = false;
     let emptyNudge = false;
+    const turnProposals: TurnProposal[] = [];
 
     // Pending tool calls announced to the provider but whose results are not yet
     // in the history. Any exit path must flush them (§2.5).
@@ -584,7 +588,7 @@ export class AgentRuntime {
         // Only the retry right after an empty completion carries the nudge.
         const nudge = emptyNudge;
         emptyNudge = false;
-        const combinedSystemPrompt = `${prepared.systemPrompt}\n\n${prepared.stateSummary}${nudge ? `\n\n${EMPTY_REPLY_NUDGE}` : ''}`;
+        const combinedSystemPrompt = `${prepared.systemPrompt}\n\n${prepared.stateSummary}${nudge ? `\n\n${emptyReplyNudge(exposedTools.map(t => t.name))}` : ''}`;
 
         let accText = '';
         const accCalls: ToolCallInfo[] = [];
@@ -788,6 +792,11 @@ export class AgentRuntime {
                       clock,
                     );
                     trace.proposalKeys.push(plan.proposalKey || plan.planId);
+                    turnProposals.push({
+                      planId: plan.planId,
+                      operation: plan.operation || 'operation',
+                      warnings: Array.isArray(plan.warnings) ? plan.warnings.filter((w: unknown): w is string => typeof w === 'string') : [],
+                    });
                   }
                 } else if (typeof plan.status === 'string') {
                   state = reduce(state, { type: 'operation_status', planId: plan.planId, status: plan.status }, clock);
@@ -838,6 +847,20 @@ export class AgentRuntime {
           pendingCalls = null;
           pendingResults = [];
           persistHistory();
+
+          // A proposal made on the last inference the turn allows leaves no room for
+          // the answer (STORAGE-01 in experiment 5): report it from the proposal
+          // result instead of ending the turn on the budget guard.
+          if (turnProposals.length > 0 && !guards.hasInferenceBudget()) {
+            const finalText = proposalAnswer(turnProposals, locale);
+            history.push({ role: 'assistant', content: finalText });
+            persistHistory();
+            await persistState();
+            trace.guardDecisions.push('inference budget spent after a proposal: answered from the proposal result');
+            turnCompleted = true;
+            yield { type: 'done', fullText: finalText };
+            return;
+          }
           continue; // Next inference iteration with tool results fed back
         }
 
@@ -908,7 +931,71 @@ export class AgentRuntime {
   }
 }
 
-const EMPTY_REPLY_NUDGE = 'Your previous reply was empty. Reply to the last user message now: answer it with the data you have, or call one of the available tools.';
+/**
+ * Nudge for the retry of an empty completion. It names the tools, because a call
+ * to a tool that is not offered is dropped by the runtime and looks empty: that
+ * is the likely cause of READ-14's 30 invisible tokens in experiment 5.
+ */
+function emptyReplyNudge(toolNames: string[]): string {
+  return `Your previous reply was empty; a call to a tool that is not available is discarded. Available now: ${toolNames.join(', ')}. Reply to the last user message: answer with the data you have, or call one of those tools.`;
+}
+
+interface TurnProposal {
+  planId: string;
+  operation: string;
+  warnings: string[];
+}
+
+const OPERATION_LABELS: Record<'es' | 'en', Record<string, string>> = {
+  es: {
+    quarantine_files: 'mover a cuarentena los archivos elegidos',
+    media_download: 'descargar el release elegido',
+    media_format_conversion: 'convertir el archivo elegido',
+  },
+  en: {
+    quarantine_files: 'move the selected files to quarantine',
+    media_download: 'download the selected release',
+    media_format_conversion: 'convert the selected file',
+  },
+};
+
+/** Answer built from the proposal results when no inference is left to write one. */
+function proposalAnswer(proposals: TurnProposal[], locale: string): string {
+  const es = locale === 'es';
+  const labels = OPERATION_LABELS[es ? 'es' : 'en'];
+  const lines = proposals.map(p => (es
+    ? `Propuse el plan ${p.planId} para ${labels[p.operation] ?? p.operation}. Está pendiente de tu aprobación en la aplicación Mediabox; hasta entonces no se cambia nada.`
+    : `I proposed plan ${p.planId} to ${labels[p.operation] ?? p.operation}. It awaits your approval in the Mediabox app; nothing changes until then.`));
+  const warnings = proposals.flatMap(p => p.warnings);
+  if (warnings.length > 0) lines.push(`${es ? 'Avisos' : 'Warnings'}: ${warnings.join(' ')}`);
+  return lines.join('\n\n');
+}
+
+const PLAN_STATUS_MEANING: Record<string, string> = {
+  rejected: 'the owner declined it in the app, so nothing was changed or downloaded',
+  cancelled: 'it was cancelled and did not complete',
+  expired: 'it expired without approval, so nothing was changed',
+  failed: 'it failed and did not complete',
+  unknown_outcome: 'its outcome is unknown',
+  interrupted: 'it was interrupted and did not complete',
+  partial: 'it completed only in part',
+  queued: 'the owner approved it and it is in progress',
+  running: 'the owner approved it and it is in progress',
+  verifying: 'the owner approved it and it is being verified',
+};
+
+/** The status changes read at the start of the turn, as a note the model reads with the message. */
+function planStatusNote(updates: Array<{ planId: string; status: string }>, proposals: WorkflowState['proposals']): string {
+  if (updates.length === 0) return '';
+  const lines = updates.map(u => {
+    const operation = proposals.find(p => p.planId === u.planId)?.operation ?? 'operation';
+    const meaning = u.status === 'succeeded'
+      ? (operation === 'media_download' ? 'the release was sent to the downloader; it may still be downloading' : 'it completed')
+      : PLAN_STATUS_MEANING[u.status] ?? `its status is ${u.status}`;
+    return `Plan ${u.planId} (${operation}) is ${u.status}: ${meaning}.`;
+  });
+  return `[Mediabox plan update, read from the server at the start of this turn] ${lines.join(' ')}`;
+}
 
 const OPEN_PLAN_STATUSES = new Set(['planned', 'awaiting_approval', 'queued', 'running', 'verifying', 'cancel_requested']);
 /** Questions about state, where a stale plan status would reach the answer. */

@@ -208,6 +208,8 @@ function compactEnvelope(parsed: Record<string, unknown>, itemLimit: number): Re
   if ('proposalKey' in parsed) compacted.proposalKey = parsed.proposalKey;
   if ('expiresAt' in parsed) compacted.expiresAt = parsed.expiresAt;
   if ('manifestHash' in parsed) compacted.manifestHash = parsed.manifestHash;
+  // Library matches the runtime adds to an empty catalog search (dispatch.ts).
+  if ('library' in parsed) compacted.library = shortenValue(parsed.library, 1, itemLimit);
 
   const data = parsed.data;
   if (Array.isArray(data)) {

@@ -218,24 +218,69 @@ export function validateProposalGrounding(
   return { valid: true };
 }
 
-export const EMPTY_CATALOG_HINT = 'No catalog match. A title already in the library is found with media_query(action:"search").';
+export const LIBRARY_MATCH_NOTE = 'No catalog match; the local library has the titles listed in `library`. Answer from them.';
+export const NOTHING_FOUND_NOTE = 'No match in the catalog or in the local library.';
+
+const CATALOG_TO_LIBRARY_TYPE: Record<string, string> = { movie: 'Movie', series: 'Series' };
+const LIBRARY_FALLBACK_ITEMS = 5;
+
+/** Sources of an envelope that did not answer completely. */
+function incompleteSources(parsed: any): string[] {
+  const sources = Array.isArray(parsed?.sources) ? parsed.sources : [];
+  return sources
+    .filter((s: any) => s && typeof s.completeness === 'string' && s.completeness !== 'complete')
+    .map((s: any) => String(s.source ?? 'a source'));
+}
 
 /**
- * An empty catalog search says where else the title can be: the catalog covers
- * Radarr/Sonarr, and a title that only exists in the library is found by
- * media_query. The hint goes in `message`, which compaction keeps.
+ * Turns results the model misread in G10 experiment 5 into ones it can answer from.
+ * - A partial result names the sources that did not answer, so missing data is
+ *   not reported as absent (READ-10, SEARCH-10).
+ * - An empty, complete catalog search is completed with a library search. The
+ *   catalog covers Radarr/Sonarr, and a title that only exists in the library
+ *   was reported as missing (READ-13). A hint alone made the model invent
+ *   library results instead of searching, so the runtime searches itself.
+ * Notes go in `message` and matches in `library`, which compaction keeps.
  */
-function withEmptyCatalogHint(toolName: string, args: Record<string, unknown>, raw: string, exposedTools: VirtualToolDef[]): string {
-  if (toolName !== 'catalog' || args.action !== 'search' || !exposedTools.some(t => t.name === 'media_query')) return raw;
+async function annotateResult(
+  toolName: string,
+  args: Record<string, unknown>,
+  raw: string,
+  exposedTools: VirtualToolDef[],
+  mcpCall: McpCallFn,
+  signal?: AbortSignal,
+): Promise<string> {
+  let parsed: any;
   try {
-    const parsed = JSON.parse(raw);
-    if (parsed && typeof parsed === 'object' && Array.isArray(parsed.data) && parsed.data.length === 0 && parsed.message === undefined) {
-      return JSON.stringify({ ...parsed, message: EMPTY_CATALOG_HINT });
-    }
+    parsed = JSON.parse(raw);
   } catch {
-    /* not JSON: leave it */
+    return raw;
   }
-  return raw;
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed) || parsed.message !== undefined) return raw;
+
+  const missing = incompleteSources(parsed);
+  if (missing.length > 0) {
+    return JSON.stringify({ ...parsed, message: `Incomplete: ${missing.join(', ')} did not answer, so its results are missing. Say so; do not call them absent.` });
+  }
+  if (toolName !== 'catalog' || args.action !== 'search' || !Array.isArray(parsed.data) || parsed.data.length > 0) return raw;
+  if (!exposedTools.some(t => t.name === 'media_query')) return raw;
+  // Only a result that declares its sources complete is known to be empty.
+  if (!Array.isArray(parsed.sources) || !parsed.sources.some((s: any) => s?.completeness === 'complete')) return raw;
+
+  const { args: libraryArgs } = resolveVirtualCall('media_query', {
+    action: 'search',
+    query: args.query,
+    type: CATALOG_TO_LIBRARY_TYPE[String(args.type ?? '')],
+    year: args.year,
+  });
+  try {
+    const library = JSON.parse(await mcpCall('jellyfin_search', { ...libraryArgs, pageSize: LIBRARY_FALLBACK_ITEMS }, { signal }));
+    if (!Array.isArray(library?.results)) return raw;
+    const matches = library.results.slice(0, LIBRARY_FALLBACK_ITEMS).map((r: any) => ({ name: r?.name, type: r?.type, year: r?.year, id: r?.id }));
+    return JSON.stringify({ ...parsed, message: matches.length > 0 ? LIBRARY_MATCH_NOTE : NOTHING_FOUND_NOTE, library: matches });
+  } catch {
+    return raw;
+  }
 }
 
 export async function dispatchToolCall(opts: {
@@ -336,7 +381,7 @@ export async function dispatchToolCall(opts: {
   const durationMs = Date.now() - t0;
   const failed = detectToolFailure(rawResult);
   const ok = !failed && !errorMessage;
-  const resultText = ok ? withEmptyCatalogHint(toolName, args, rawResult, exposedTools) : rawResult;
+  const resultText = ok ? await annotateResult(toolName, args, rawResult, exposedTools, mcpCall, signal) : rawResult;
 
   return {
     tool: toolName,
