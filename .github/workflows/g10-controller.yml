@@ -1,0 +1,81 @@
+name: G10 trusted controller
+
+# Live G10 evaluation on the local trusted controller (PR05 §5, revised on
+# 2026-09-14; runbook in docs/blueprints/handoffs/PR05-LOCAL-CONTROLLER.es.md).
+#
+# The controller job runs on a just-in-time runner that takes this one job,
+# under a dedicated standard Windows account provisioned by an administrator.
+# Before measuring, controller.mjs checks the isolation of that account from
+# inside it and refuses to run if any check fails. The evaluation step gets no
+# token. The digest of the evidence package is published on the candidate by
+# a GitHub-hosted job, so the self-hosted machine never holds a write token.
+#
+# Only a tag the maintainer pushes on a reviewed commit starts this workflow;
+# pull requests and forks cannot. scripts/controller/Start-G10Controller.ps1
+# pushes the tag and starts the runner.
+#
+#   g10/<sha8>-<stamp>            live run whose evidence G10 accepts
+#   g10-rehearsal/<sha8>-<stamp>  short dev run of the same path, never evidence
+
+on:
+  push:
+    tags:
+      - 'g10/**'
+      - 'g10-rehearsal/**'
+
+permissions: {}
+
+concurrency:
+  group: g10-controller
+  cancel-in-progress: false
+
+jobs:
+  controller:
+    name: G10 trusted controller
+    if: github.repository == 'JuanCMPDev/mediabox-mcp'
+    runs-on: [self-hosted, Windows, X64, mediabox-g10]
+    timeout-minutes: 180
+    permissions:
+      contents: read
+    outputs:
+      experiment: ${{ steps.controller.outputs.experiment_id }}
+      sums: ${{ steps.controller.outputs.sums_sha256 }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      # cmd, not PowerShell: the dedicated account keeps the default script
+      # execution policy. The node wrapper is written by the installer and
+      # points at the provisioned toolchain.
+      - name: Run the controller on the tagged commit
+        id: controller
+        shell: cmd
+        run: >-
+          call "%ProgramData%\mediabox-g10\bin\node.cmd" evals/local-agent/controller.mjs
+          --sha %GITHUB_SHA% --class trusted-controller
+          ${{ startsWith(github.ref, 'refs/tags/g10-rehearsal/') && '--rehearsal' || '' }}
+
+  bind:
+    name: Bind the evidence package to the candidate
+    needs: controller
+    if: ${{ !startsWith(github.ref, 'refs/tags/g10-rehearsal/') }}
+    runs-on: ubuntu-latest
+    permissions:
+      statuses: write
+    steps:
+      - name: Publish the SHA256SUMS digest as a commit status
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SUMS: ${{ needs.controller.outputs.sums }}
+          EXPERIMENT: ${{ needs.controller.outputs.experiment }}
+        run: |
+          set -euo pipefail
+          [[ "$SUMS" =~ ^[0-9a-f]{64}$ ]] || { echo "::error::the controller published no SHA256SUMS digest"; exit 1; }
+          [[ "$EXPERIMENT" =~ ^pr05-g10-[0-9]{8}T[0-9]{6}-[0-9a-f]{8}$ ]] || { echo "::error::invalid experiment id"; exit 1; }
+          gh api --method POST "repos/$GITHUB_REPOSITORY/statuses/$GITHUB_SHA" \
+            -f state=success \
+            -f context=g10/trusted-controller \
+            -f description="SHA256SUMS sha256:$SUMS $EXPERIMENT" \
+            -f target_url="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/attempts/$GITHUB_RUN_ATTEMPT"

@@ -31,7 +31,32 @@ export function buildReport(m) {
     profile: { profileId: m.profile.profileId, sha256: m.profile.sha256, sealedAt: m.profile.sealedAt },
     runtime: m.runtime,
     toolchain: m.toolchain,
-    controller: { id: m.controller.id, kind: m.controller.kind, cleanCheckout: m.controller.cleanCheckout, startedAt: m.controller.startedAt, finishedAt: m.controller.finishedAt },
+    controller: {
+      id: m.controller.id,
+      kind: m.controller.kind,
+      cleanCheckout: m.controller.cleanCheckout,
+      startedAt: m.controller.startedAt,
+      finishedAt: m.controller.finishedAt,
+      // The Actions run that produced trusted-controller evidence (PR05 §5).
+      ...(m.controller.runId ? {
+        repository: m.controller.repository,
+        runId: m.controller.runId,
+        runAttempt: m.controller.runAttempt,
+        workflowRef: m.controller.workflowRef,
+        workflowSha: m.controller.workflowSha,
+        event: m.controller.event,
+        ref: m.controller.ref,
+        runnerName: m.controller.runnerName,
+        runnerEnvironment: m.controller.runnerEnvironment,
+      } : {}),
+      ...(m.controller.isolation ? {
+        isolation: {
+          ok: m.controller.isolation.ok,
+          provisioningSha256: m.controller.isolation.provisioningSha256,
+          checks: (m.controller.isolation.checks ?? []).map((c) => ({ id: c.id, ok: c.ok })),
+        },
+      } : {}),
+    },
     passes: m.passes.map((p) => ({
       passNumber: p.passNumber,
       passRunId: p.passRunId,

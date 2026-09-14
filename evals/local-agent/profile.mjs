@@ -71,7 +71,7 @@ function readModelManifest(model) {
   return { file, manifestDigest: `sha256:${crypto.createHash('sha256').update(bytes).digest('hex')}`, manifest: JSON.parse(bytes.toString('utf8')) };
 }
 
-function hashDirectory(dir) {
+export function hashDirectory(dir) {
   const lines = [];
   const walk = (d) => {
     for (const entry of fs.readdirSync(d, { withFileTypes: true })) {
@@ -85,12 +85,49 @@ function hashDirectory(dir) {
   return { files: lines.length, sha256: `sha256:${crypto.createHash('sha256').update(lines.join('\n')).digest('hex')}` };
 }
 
-function windowsHardware() {
+export function windowsHardware() {
   const cpu = JSON.parse(ps('Get-CimInstance Win32_Processor | Select-Object Name,NumberOfCores,NumberOfLogicalProcessors | ConvertTo-Json'));
   const physical = Number(ps('(Get-CimInstance Win32_PhysicalMemory | Measure-Object -Property Capacity -Sum).Sum'));
   const osInfo = JSON.parse(ps('Get-CimInstance Win32_OperatingSystem | Select-Object Caption,Version,BuildNumber | ConvertTo-Json'));
   const gpus = JSON.parse(ps('Get-CimInstance Win32_VideoController | Select-Object Name,DriverVersion,PNPDeviceID | ConvertTo-Json'));
   return { cpu, physical, osInfo, gpus: Array.isArray(gpus) ? gpus : [gpus] };
+}
+
+/**
+ * Compares the machine and the runtime libraries with a sealed profile. A new
+ * GPU driver, OS build, CPU, memory size or runtime library set is another
+ * profile (PR05 §4.1), so a live run refuses to measure until one is collected.
+ * `hardware` and `libraries` can be injected for tests.
+ */
+export function checkProfileDrift(profile, { exe, hardware, libraries } = {}) {
+  const hw = hardware ?? windowsHardware();
+  const cpu = Array.isArray(hw.cpu) ? hw.cpu[0] : hw.cpu;
+  const checked = [];
+  const mismatches = [];
+  const same = (field, actual, expected) => {
+    checked.push(field);
+    if (String(actual ?? '').trim() !== String(expected ?? '').trim()) mismatches.push(`${field}: the machine has ${actual ?? 'nothing'}, the profile says ${expected}`);
+  };
+  same('cpu.model', cpu?.Name, profile.cpu?.model);
+  same('cpu.cores', cpu?.NumberOfCores, profile.cpu?.cores);
+  same('cpu.threads', cpu?.NumberOfLogicalProcessors, profile.cpu?.threads);
+  same('ram.physicalBytes', hw.physical, profile.ram?.physicalBytes);
+  same('os.name', hw.osInfo?.Caption, profile.os?.name);
+  same('os.version', hw.osInfo?.Version, profile.os?.version);
+  same('os.build', hw.osInfo?.BuildNumber, profile.os?.build);
+  checked.push('gpu.pnpDeviceId');
+  const gpu = (hw.gpus ?? []).find((g) => g?.PNPDeviceID === profile.gpu?.pnpDeviceId);
+  if (!gpu) mismatches.push(`gpu.pnpDeviceId: ${profile.gpu?.pnpDeviceId} is not present`);
+  else {
+    same('gpu.name', gpu.Name, profile.gpu?.name);
+    same('gpu.driverVersion', gpu.DriverVersion, profile.gpu?.driverVersion);
+  }
+  if (profile.runtime?.libraries?.sha256) {
+    const lib = libraries ?? hashDirectory(path.join(path.dirname(exe), 'lib', 'ollama'));
+    same('runtime.libraries.files', lib.files, profile.runtime.libraries.files);
+    same('runtime.libraries.sha256', lib.sha256, profile.runtime.libraries.sha256);
+  }
+  return { ok: mismatches.length === 0, checked, mismatches };
 }
 
 /**

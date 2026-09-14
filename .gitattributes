@@ -1,2 +1,6 @@
 # Shell scripts are executed inside Linux containers (G09); keep LF on every checkout.
 *.sh text eol=lf
+
+# G10 evidence packages are hashed byte for byte (SHA256SUMS and the commit
+# status of the controller run): never convert their line endings.
+evals/evidence/** -text

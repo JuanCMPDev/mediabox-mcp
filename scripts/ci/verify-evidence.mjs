@@ -8,7 +8,12 @@
  *     changed since; every sealed input is re-hashed from that commit's blobs;
  *  2. rejects anything that is not a live run of a real model (no simulated,
  *     scripted or replay evidence), and requires the evidence class the gate
- *     asks for — G10 accepts only `trusted-controller` evidence;
+ *     asks for — G10 accepts only `trusted-controller` evidence, and only when
+ *     GitHub confirms its controller run: a tag-triggered run of the controller
+ *     workflow of this repository on the candidate, its controller job on the
+ *     self-hosted controller runner, every job successful, and a commit status
+ *     from the GitHub-hosted bind job carrying this package's SHA256SUMS digest
+ *     (TRUSTED_CONTROLLER_POLICY);
  *  3. recomputes every pass summary, percentile and threshold from the
  *     per-execution records instead of trusting recorded summaries, checks
  *     completeness (60 IDs per pass, fixed order, attempts retained) and the
@@ -29,10 +34,116 @@ import { fileURLToPath } from 'node:url';
 const __filename = fileURLToPath(import.meta.url);
 const repoRoot = path.resolve(path.dirname(__filename), '../..');
 
-export const VERIFIER_VERSION = '2.0.0';
+export const VERIFIER_VERSION = '2.1.0';
 /** Paths that may change between the evaluated commit and the verified HEAD. */
 export const POST_EVIDENCE_ALLOWED = [/^evals\/evidence\//, /^docs\//];
 export const EVIDENCE_CLASSES = ['local-lab', 'trusted-controller'];
+
+/**
+ * Where trusted-controller evidence must come from (PR05 §5, revised
+ * 2026-09-14). It lives here, not in the controller, so that a change to the
+ * controller cannot relax what the verifier asks for. The isolation checks
+ * mirror controller-isolation.mjs; a test keeps both lists equal.
+ */
+export const TRUSTED_CONTROLLER_POLICY = Object.freeze({
+  repository: 'JuanCMPDev/mediabox-mcp',
+  workflowPath: '.github/workflows/g10-controller.yml',
+  event: 'push',
+  tagPrefix: 'g10/',
+  controllerJob: 'G10 trusted controller',
+  runnerLabel: 'mediabox-g10',
+  statusContext: 'g10/trusted-controller',
+  statusCreator: 'github-actions[bot]',
+  isolationChecks: Object.freeze([
+    'account', 'not-administrator', 'provisioning-read-only', 'maintainer-profile', 'denied-paths', 'drives',
+    'firewall-profiles', 'firewall-rules', 'lan-blocked', 'eval-loopback-only', 'host-sockets',
+  ]),
+});
+
+/** Minimal GitHub REST client: `api(path)` resolves to `{ ok, status, body }`. */
+export function githubApi(token) {
+  return async (apiPath) => {
+    const res = await fetch(`https://api.github.com${apiPath}`, {
+      headers: { Authorization: `Bearer ${token}`, Accept: 'application/vnd.github+json', 'X-GitHub-Api-Version': '2022-11-28' },
+    });
+    return { ok: res.ok, status: res.status, body: res.ok ? await res.json() : null };
+  };
+}
+
+/**
+ * Confirms with GitHub the run that produced trusted-controller evidence.
+ * Returns the list of problems; an empty list means the run is confirmed.
+ */
+export async function verifyControllerRun({ manifest, sumsSha256, api, policy = TRUSTED_CONTROLLER_POLICY }) {
+  const errors = [];
+  const fail = (msg) => { errors.push(msg); };
+  const c = manifest.controller ?? {};
+  const headSha = manifest.candidate?.headSha;
+
+  // What the manifest says about its run.
+  if (c.kind !== 'github-actions') fail(`controller kind '${c.kind}' is not github-actions`);
+  if (c.repository !== policy.repository) fail(`controller run belongs to '${c.repository}', not ${policy.repository}`);
+  if (!Number.isSafeInteger(c.runId) || c.runId <= 0) fail('controller runId is missing');
+  if (!Number.isSafeInteger(c.runAttempt) || c.runAttempt <= 0) fail('controller runAttempt is missing');
+  const tagRef = `refs/tags/${policy.tagPrefix}`;
+  const refOk = typeof c.ref === 'string' && c.ref.startsWith(tagRef);
+  if (!refOk) fail(`controller ref '${c.ref}' is not a ${tagRef}* tag`);
+  if (c.event !== policy.event) fail(`controller event '${c.event}' is not ${policy.event}`);
+  if (c.workflowRef !== `${policy.repository}/${policy.workflowPath}@${c.ref}`) fail(`controller workflow '${c.workflowRef}' is not ${policy.workflowPath} at ${c.ref}`);
+  if (!headSha || c.workflowSha !== headSha) fail(`controller workflow commit ${c.workflowSha} is not the candidate ${headSha}`);
+  if (!c.runnerName) fail('controller runner name is missing');
+  if (c.runnerEnvironment !== 'self-hosted') fail(`controller runner environment '${c.runnerEnvironment}' is not self-hosted`);
+  const isolation = c.isolation;
+  if (!isolation || isolation.ok !== true) fail('controller isolation checks are missing or did not pass');
+  else {
+    for (const id of policy.isolationChecks) {
+      if (!isolation.checks?.some((x) => x.id === id && x.ok === true)) fail(`controller isolation check '${id}' is missing or failed`);
+    }
+  }
+  if (!/^[0-9a-f]{64}$/.test(sumsSha256 ?? '')) fail('SHA256SUMS digest unavailable');
+  if (errors.length) return errors;
+  if (!api) return ['cannot confirm the controller run without GITHUB_TOKEN'];
+
+  // What GitHub says about that run.
+  const base = `/repos/${policy.repository}`;
+  const attempt = await api(`${base}/actions/runs/${c.runId}/attempts/${c.runAttempt}`);
+  if (!attempt.ok || !attempt.body) return [`controller run ${c.runId} attempt ${c.runAttempt} not found (${attempt.status})`];
+  const run = attempt.body;
+  if (run.status !== 'completed' || run.conclusion !== 'success') fail(`controller run ${c.runId} attempt ${c.runAttempt} is ${run.status}/${run.conclusion}`);
+  if (run.head_sha !== headSha) fail(`controller run head ${run.head_sha} != evidence candidate ${headSha}`);
+  if (String(run.path ?? '').split('@')[0] !== policy.workflowPath) fail(`controller run workflow ${run.path} is not ${policy.workflowPath}`);
+  if (run.event !== policy.event) fail(`controller run event ${run.event} is not ${policy.event}`);
+  if (run.head_branch !== c.ref.slice('refs/tags/'.length)) fail(`controller run ref ${run.head_branch} != manifest ${c.ref}`);
+  if (run.repository?.full_name !== policy.repository || (run.head_repository && run.head_repository.full_name !== policy.repository)) {
+    fail('controller run is not a run of this repository');
+  }
+
+  const jobsRes = await api(`${base}/actions/runs/${c.runId}/attempts/${c.runAttempt}/jobs?per_page=100`);
+  const jobs = jobsRes.ok ? jobsRes.body?.jobs ?? [] : [];
+  const job = jobs.find((j) => j.name === policy.controllerJob);
+  if (!job) fail(`controller run has no '${policy.controllerJob}' job`);
+  else {
+    const labels = (job.labels ?? []).map((l) => String(l).toLowerCase());
+    if (!labels.includes('self-hosted') || !labels.includes(policy.runnerLabel)) fail(`controller job ran on [${(job.labels ?? []).join(', ')}], not the self-hosted ${policy.runnerLabel} runner`);
+    if (job.runner_name !== c.runnerName) fail(`controller job runner ${job.runner_name} != manifest ${c.runnerName}`);
+  }
+  const unsuccessful = jobs.filter((j) => j.conclusion !== 'success');
+  if (unsuccessful.length) fail(`controller run jobs not successful: ${unsuccessful.map((j) => `${j.name}=${j.conclusion}`).join(', ')}`);
+
+  // The GitHub-hosted bind job published the package digest on the candidate.
+  const statusesRes = await api(`${base}/commits/${headSha}/statuses?per_page=100`);
+  const statuses = statusesRes.ok ? statusesRes.body ?? [] : [];
+  const expected = `SHA256SUMS sha256:${sumsSha256} ${manifest.experimentId}`;
+  const runUrl = `/${policy.repository}/actions/runs/${c.runId}/attempts/${c.runAttempt}`;
+  const binding = statuses.find((s) => s.context === policy.statusContext && String(s.target_url ?? '').endsWith(runUrl));
+  if (!binding) fail(`no ${policy.statusContext} commit status from run ${c.runId} attempt ${c.runAttempt} on the candidate`);
+  else {
+    if (binding.description !== expected) fail(`the ${policy.statusContext} status binds '${binding.description}', not this package ('${expected}')`);
+    if (binding.state !== 'success') fail(`the ${policy.statusContext} status is ${binding.state}`);
+    if (binding.creator?.login !== policy.statusCreator) fail(`the ${policy.statusContext} status was created by ${binding.creator?.login}, not ${policy.statusCreator}`);
+  }
+  return errors;
+}
 
 export function sha256(buf) {
   return crypto.createHash('sha256').update(buf).digest('hex');
@@ -104,18 +215,12 @@ export async function verifyEvidence(options = {}) {
     if (order < 0) fail(`evidence class '${m.evidenceClass}' is not accepted where '${opts.requireClass}' is required (G10 needs an isolated, trusted controller; see PR05 §5)`);
   }
   if (m.evidenceClass === 'trusted-controller') {
-    const c = m.controller ?? {};
-    if (c.kind !== 'github-actions' || !c.runId || !c.repository) fail('trusted-controller evidence must reference a verifiable controller run (kind github-actions, repository, runId)');
-    else if (!process.env.GITHUB_TOKEN) fail('cannot confirm the controller run without GITHUB_TOKEN');
-    else {
-      const res = await fetch(`https://api.github.com/repos/${c.repository}/actions/runs/${c.runId}`, { headers: { Authorization: `Bearer ${process.env.GITHUB_TOKEN}`, Accept: 'application/vnd.github+json' } });
-      const run = res.ok ? await res.json() : null;
-      if (!run) fail(`controller run ${c.runId} not found (${res.status})`);
-      else {
-        if (run.head_sha !== m.candidate?.headSha) fail(`controller run head ${run.head_sha} != evidence candidate ${m.candidate?.headSha}`);
-        if (run.conclusion !== 'success') fail(`controller run conclusion ${run.conclusion}`);
-      }
-    }
+    // The digest of SHA256SUMS covers the manifest and the report; the bind
+    // job of the controller run published it on the candidate commit.
+    const sumsFile = path.join(dir, 'SHA256SUMS');
+    const sumsSha256 = fs.existsSync(sumsFile) ? sha256(fs.readFileSync(sumsFile)) : null;
+    const api = opts.api ?? (process.env.GITHUB_TOKEN ? githubApi(process.env.GITHUB_TOKEN) : null);
+    for (const problem of await verifyControllerRun({ manifest: m, sumsSha256, api, policy: opts.policy ?? TRUSTED_CONTROLLER_POLICY })) fail(problem);
   }
 
   // ── 2. Candidate binding ────────────────────────────────────────────────
