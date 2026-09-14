@@ -178,4 +178,63 @@ describe('Compaction keeps nested ids and names (PR05 G10)', () => {
     expect(estimateTokenCount(compacted)).toBeLessThanOrEqual(TOOL_RESULT_TOKEN_CAP);
     expect(JSON.parse(compacted).name).toBe('Crónicas del Delta');
   });
+
+  it('download_queue: keeps every source, its completeness and its paging within the cap', () => {
+    const queue = (source: string) => ({
+      source,
+      records: Array.from({ length: 5 }, (_, i) => ({
+        id: i, title: `Título largo de descarga ${source} ${i} `.repeat(3), status: 'downloading', progressPercent: 42.5,
+      })),
+      total: source === 'qbittorrent' ? null : 9,
+      pagination: { page: 1, pageSize: 5, hasMore: true, nextPage: 2 },
+    });
+    const observedAt = '2026-09-12T12:00:00.000Z';
+    const raw = JSON.stringify({
+      status: 'partial',
+      data: {
+        queues: [
+          queue('sonarr'),
+          { source: 'radarr', records: null, total: null, pagination: { page: 1, pageSize: 5, hasMore: null, nextPage: null } },
+          queue('qbittorrent'),
+        ],
+        note: 'Separate client queues may overlap. Null means unknown, not zero.',
+      },
+      sources: [
+        { source: 'sonarr', completeness: 'complete', observedAt },
+        { source: 'radarr', completeness: 'unavailable', observedAt, error: { code: 'ERR_UPSTREAM_UNAVAILABLE', message: 'radarr queue could not be read; its count and state are unknown.' } },
+        { source: 'qbittorrent', completeness: 'complete', observedAt },
+      ],
+      page: { pageIndex: 1, pageSize: 5, totalItems: null, hasMore: true },
+    });
+    const compacted = compactToolResult('downloads', raw);
+    expect(estimateTokenCount(compacted)).toBeLessThanOrEqual(TOOL_RESULT_TOKEN_CAP);
+    const parsed = JSON.parse(compacted);
+    expect(parsed.status).toBe('partial');
+    expect(parsed.sources.map((s: any) => [s.source, s.completeness])).toEqual([
+      ['sonarr', 'complete'], ['radarr', 'unavailable'], ['qbittorrent', 'complete'],
+    ]);
+    expect(parsed.data.queues.map((q: any) => q.source)).toEqual(['sonarr', 'radarr', 'qbittorrent']);
+    expect(parsed.data.queues[1].records).toBeNull();
+    expect(parsed.data.queues[0].records[0]).toMatchObject({ status: 'downloading', progressPercent: 42.5 });
+    expect(parsed.data.queues[0].pagination).toMatchObject({ hasMore: true, nextPage: 2 });
+  });
+
+  it('summarizes observed references without listing every one', () => {
+    const summary = buildStateSummary({
+      ...createInitialWorkflowState('conv_1', 'p_1', 'inst_1'),
+      intent: { kind: 'convert', summary: 'Convert Arrival' },
+      references: {
+        mediaRef: 'mref_000000000001',
+        mediaRefs: ['mref_000000000001', 'mref_000000000002'],
+        releaseRef: 'rref_000000000001',
+        releaseRefs: ['rref_000000000001', 'rref_000000000002', 'rref_000000000003'],
+        paths: ['media:a.mkv', 'media:b.mkv', 'media:c.mkv', 'media:d.mkv'],
+        inspectedPaths: ['media:d.mkv'],
+      },
+    });
+    expect(summary).toContain('mediaRefsSeen=2');
+    expect(summary).toContain('releaseRefsSeen=3');
+    expect(summary).toContain('listedFiles=4 [media:d.mkv | media:c.mkv | media:b.mkv]');
+    expect(summary).toContain('analyzedFiles=[media:d.mkv]');
+  });
 });

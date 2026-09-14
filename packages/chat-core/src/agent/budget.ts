@@ -6,7 +6,7 @@
  * sees parseable JSON and the envelope can never be corrupted by its payload.
  * ──────────────────────────────────────────────────────────────────────── */
 import type { ChatMessage, VirtualToolDef, ToolResultInfo } from '../types.js';
-import type { WorkflowState } from './workflow.js';
+import { observedMediaRefs, observedReleaseRefs, type WorkflowState } from './workflow.js';
 import { AgentError } from './errors.js';
 
 export interface BudgetConfig {
@@ -83,9 +83,16 @@ export function buildStateSummary(state: WorkflowState, counter: TokenEstimator 
     parts.push(`Intent: ${state.intent.kind} — ${state.intent.summary}`);
   }
   const refParts: string[] = [];
-  if (state.references.mediaRef) refParts.push(`mediaRef=${state.references.mediaRef}`);
-  if (state.references.releaseRef) refParts.push(`releaseRef=${state.references.releaseRef}`);
-  if (state.references.paths?.length) refParts.push(`paths=${state.references.paths.slice(0, 3).join(',')}`);
+  const refs = state.references;
+  if (refs.mediaRef) refParts.push(`mediaRef=${refs.mediaRef}`);
+  const mediaSeen = observedMediaRefs(refs).length;
+  if (mediaSeen > 1) refParts.push(`mediaRefsSeen=${mediaSeen}`);
+  if (refs.releaseRef) refParts.push(`releaseRef=${refs.releaseRef}`);
+  const releasesSeen = observedReleaseRefs(refs).length;
+  if (releasesSeen > 1) refParts.push(`releaseRefsSeen=${releasesSeen}`);
+  // Newest first: the files this conversation listed or analyzed last.
+  if (refs.paths?.length) refParts.push(`listedFiles=${refs.paths.length} [${refs.paths.slice(-3).reverse().join(' | ')}]`);
+  if (refs.inspectedPaths?.length) refParts.push(`analyzedFiles=[${refs.inspectedPaths.slice(-3).reverse().join(' | ')}]`);
   if (refParts.length > 0) {
     parts.push(`ActiveReferences: ${refParts.join(' ')}`);
   }

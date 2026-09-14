@@ -252,11 +252,11 @@ describe('Phase regression and reference invalidation (§2.3)', () => {
   });
 
   it('exposes only the propose tool that matches the intent', () => {
-    const download = getPhaseTools('propose', { intentKind: 'download' }).map(t => t.name);
+    const download = getPhaseTools('propose', { intentKind: 'download', references: { releaseRef: 'rref_000000000001' } }).map(t => t.name);
     expect(download).toContain('catalog');
     expect(download).not.toContain('library_ops');
 
-    const del = getPhaseTools('propose', { intentKind: 'delete' }).map(t => t.name);
+    const del = getPhaseTools('propose', { intentKind: 'delete', references: { paths: ['media/movie.mkv'] } }).map(t => t.name);
     expect(del).toContain('library_ops');
     expect(del).not.toContain('catalog');
   });
@@ -631,7 +631,9 @@ describe('The flow a real conversation follows (regression from the live canary)
       [{ type: 'text', text: 'Una versión 1080p disponible.' }],
     ]);
     const afterReleases = (await workflowStore.get('conv_flow'))!;
-    expect(afterReleases.phase).toBe('propose');
+    // A search request never unlocks a proposal. The release stays grounded for
+    // the moment the user asks for the download.
+    expect(afterReleases.phase).toBe('select');
     expect(afterReleases.references.releaseRef).toBe('rref_000000000001');
 
     // The refinement must not be read as a new request: it kept failing the canary.

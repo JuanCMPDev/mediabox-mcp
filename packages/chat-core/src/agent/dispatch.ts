@@ -8,6 +8,7 @@ import { executeVirtualTool, resolveVirtualCall } from '../tool-router.js';
 import { detectToolFailure, extractToolFailureMessage } from '../result-budget.js';
 import { computeArgsHash, computeResultDigest } from './guards.js';
 import { AgentError } from './errors.js';
+import { canonicalPathKey, observedMediaRefs, observedReleaseRefs, type WorkflowReferences } from './workflow.js';
 
 const ajv = new AjvClass({
   strict: false, // schemas may lack draft declaration
@@ -122,11 +123,58 @@ export interface DispatchResult {
   durationMs: number;
 }
 
+/**
+ * A proposal may only target what the conversation verified: a release returned by
+ * a complete read or chosen by the owner, exact files from a complete listing, or a
+ * file with a complete analysis. Phase availability never authorizes substituting
+ * another reference or path, and the MCP server verifies them again (§2.7).
+ */
+export function validateProposalGrounding(
+  tool: string,
+  args: Record<string, unknown>,
+  references: WorkflowReferences = {},
+  now: string = new Date().toISOString(),
+): DispatchValidationResult {
+  const proposal = (tool === 'library_ops' && args.action === 'propose_delete') ||
+    (tool === 'media_format' && args.action === 'propose') ||
+    (tool === 'catalog' && args.action === 'propose_download');
+  if (!proposal) return { valid: true };
+  const reject = (error: string): DispatchValidationResult => ({ valid: false, code: 'ERR_ARGS_INVALID', error });
+  if (references.expiresAt && !(Date.parse(references.expiresAt) > Date.parse(now))) {
+    return reject('References expired. Read the target again before proposing.');
+  }
+  if (tool === 'catalog') {
+    const releaseRef = typeof args.releaseRef === 'string' ? args.releaseRef.trim() : '';
+    if (!observedReleaseRefs(references).includes(releaseRef)) {
+      return reject('releaseRef must be copied from a catalog(action:"releases") result or from the owner\'s selection in this conversation.');
+    }
+    if (args.mediaRef !== undefined &&
+        !(typeof args.mediaRef === 'string' && observedMediaRefs(references).includes(args.mediaRef.trim()))) {
+      return reject('mediaRef must be copied from a catalog result in this conversation; omit it otherwise.');
+    }
+  } else if (tool === 'library_ops') {
+    const listed = new Set((references.paths ?? []).map(canonicalPathKey));
+    const paths = typeof args.paths === 'string' ? [args.paths] : args.paths;
+    if (!Array.isArray(paths) || paths.length === 0 ||
+        paths.some(path => typeof path !== 'string' || !listed.has(canonicalPathKey(path)))) {
+      return reject('Each path must be an exact file path returned by library_ops(action:"list"). List the folder and copy the paths of the requested files only.');
+    }
+  } else {
+    const analyzed = new Set((references.inspectedPaths ?? []).map(canonicalPathKey));
+    if (typeof args.path !== 'string' || !analyzed.has(canonicalPathKey(args.path))) {
+      return reject('Call media_format(action:"analyze") on this exact file before proposing a job for it.');
+    }
+  }
+  return { valid: true };
+}
+
 export async function dispatchToolCall(opts: {
   toolName: string;
   args: Record<string, unknown>;
   exposedTools: VirtualToolDef[];
   mcpCall: McpCallFn;
+  references?: WorkflowReferences;
+  referenceTime?: string;
   timeoutMs?: number;
   signal?: AbortSignal;
 }): Promise<DispatchResult> {
@@ -135,7 +183,10 @@ export async function dispatchToolCall(opts: {
   const t0 = Date.now();
 
   // 1. Validation before dispatch (§2.5 / AGT-01)
-  const validation = validateToolCall(toolName, args, exposedTools);
+  const schemaValidation = validateToolCall(toolName, args, exposedTools);
+  const validation = schemaValidation.valid
+    ? validateProposalGrounding(toolName, args, opts.references, opts.referenceTime)
+    : schemaValidation;
   if (!validation.valid) {
     const code = validation.code ?? 'ERR_ARGS_INVALID';
     const errorPayload = JSON.stringify({

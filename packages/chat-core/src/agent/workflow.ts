@@ -35,8 +35,25 @@ export function isValidReleaseRef(value: unknown): value is string {
   return typeof value === 'string' && RELEASE_REF_PATTERN.test(value.trim());
 }
 
+/**
+ * What the user asks for. It decides which tools a turn offers (§2.3):
+ * - `download`, `delete` and `convert` end in a proposal the owner approves;
+ * - `queue`, `status`, `library`, `server` and `owner_only` are local reads;
+ * - `inspect` reads the streams of one file; `maintenance` is its own flow;
+ * - `other` is a catalog search or a question that fits none of the above.
+ */
+export type IntentKind =
+  | 'download' | 'delete' | 'convert' | 'inspect' | 'maintenance'
+  | 'status' | 'queue' | 'library' | 'server' | 'owner_only' | 'other';
+
+/** Intents whose request ends in a proposal the owner approves in the app. */
+export const PROPOSAL_INTENTS: ReadonlySet<IntentKind> = new Set<IntentKind>(['download', 'delete', 'convert']);
+
+/** Read-only intents. They never consume or clear references and never unlock a proposal. */
+export const READ_INTENTS: ReadonlySet<IntentKind> = new Set<IntentKind>(['queue', 'status', 'library', 'server', 'owner_only']);
+
 export interface WorkflowIntent {
-  kind: 'download' | 'delete' | 'convert' | 'inspect' | 'status' | 'other';
+  kind: IntentKind;
   summary: string;
   /**
    * Significant subject words of the request (titles, names), with verbs and
@@ -47,12 +64,29 @@ export interface WorkflowIntent {
   constraints?: Array<{ key: string; value: unknown; strict?: boolean }>;
 }
 
+/**
+ * Grounding observed by entitled reads within the TTL (§2.2). Each list is bounded
+ * and ordered from oldest to newest. A proposal may only use values found here;
+ * the MCP server still verifies every reference and path itself.
+ */
 export interface WorkflowReferences {
+  /** Media in focus: the owner's last selection or the first result of the last read. */
   mediaRef?: string;
+  /** Release in focus: the owner's selection or the top-ranked result of the last listing. */
   releaseRef?: string;
+  /** Every media reference returned by an entitled read. */
+  mediaRefs?: string[];
+  /** Every release reference returned by an entitled read or selected by the owner. */
+  releaseRefs?: string[];
+  /** Exact file paths from a complete library_ops.list or media_format.analyze. */
   paths?: string[];
+  /** Files with a successful, complete media_format.analyze. Missing in older v2 states: analyze again. */
+  inspectedPaths?: string[];
   expiresAt?: string;
 }
+
+/** Bounds of each observed list: enough for a season folder or one release listing. */
+export const REFERENCE_LIMITS = { mediaRefs: 16, releaseRefs: 32, paths: 40, inspectedPaths: 16 } as const;
 
 export interface ProposalRecord {
   planId: string;
@@ -100,6 +134,11 @@ export interface WorkflowState {
   selections: TypedSelection[];
   candidates: CandidateRecord[];
   proposals: ProposalRecord[];
+  /**
+   * What each plan of the conversation proposed (release refs or canonical path
+   * keys), by planId. A plan missing here predates this field.
+   */
+  proposalTargets?: Record<string, string[]>;
   lastToolCalls: ToolCallDigest[]; // window of 8
   budgetSnapshot?: BudgetSnapshot;
   calibration?: TokenizerCalibration;
@@ -112,7 +151,7 @@ export type WorkflowEvent =
   | { type: 'typed_selection'; selection: TypedSelection }
   | { type: 'tool_result'; tool: string; argsHash: string; resultDigest: string; references?: Partial<WorkflowReferences> }
   | { type: 'candidates_presented'; candidates: CandidateRecord[] }
-  | { type: 'proposal_created'; planId: string; operation: string; status: string; manifestHash: string; proposalKey: string }
+  | { type: 'proposal_created'; planId: string; operation: string; status: string; manifestHash: string; proposalKey: string; targets?: string[] }
   | { type: 'operation_status'; planId: string; status: string }
   | { type: 'phase_transition'; to: Phase; reason: string }
   | { type: 'calibration'; calibration: TokenizerCalibration }
@@ -227,7 +266,135 @@ function referencesExpired(refs: WorkflowReferences, now: string): boolean {
 }
 
 function hasLiveReference(refs: WorkflowReferences): boolean {
-  return Boolean(refs.mediaRef || refs.releaseRef || refs.paths?.length);
+  return Boolean(
+    refs.mediaRef || refs.releaseRef || refs.mediaRefs?.length || refs.releaseRefs?.length ||
+    refs.paths?.length || refs.inspectedPaths?.length,
+  );
+}
+
+export function isReferencePath(value: unknown): value is string {
+  return typeof value === 'string' && value.trim().length > 0 && value.length <= 300 && !/[\x00-\x1f\x7f]/.test(value);
+}
+
+/** Default container mounts of the MCP server (storage/namespace-map.ts), longest first. */
+const CONTAINER_MOUNTS: ReadonlyArray<readonly [prefix: string, root: string, subdir: string]> = [
+  ['/downloads', 'downloads', ''],
+  ['/movies', 'media', 'movies'],
+  ['/anime', 'media', 'anime'],
+  ['/music', 'media', 'music'],
+  ['/data', 'media', ''],
+  ['/tv', 'media', 'tv'],
+];
+
+/**
+ * Comparison key of a file path in every form the tools accept or report:
+ * "media:tv/x.mkv", "tv/x.mkv", "downloads/x" or a default container path such as
+ * "/data/tv/x.mkv". It mirrors the server's default namespace mapping. A form it
+ * cannot map (a host path, a custom mount) stays literal and only matches itself.
+ */
+export function canonicalPathKey(value: string): string {
+  let rest = value.normalize('NFC').replace(/\\/g, '/').trim();
+  let root = 'media';
+  const namespaced = rest.match(/^(media|downloads):(.*)$/);
+  if (namespaced) {
+    root = namespaced[1];
+    rest = namespaced[2];
+  } else if (rest.startsWith('/') && !rest.startsWith('//')) {
+    const mount = CONTAINER_MOUNTS.find(([prefix]) => rest === prefix || rest.startsWith(`${prefix}/`));
+    if (!mount) return `literal:${rest}`;
+    root = mount[1];
+    rest = `${mount[2]}/${rest.slice(mount[0].length)}`;
+  } else if (/^[A-Za-z]:/.test(rest) || rest.startsWith('//')) {
+    return `literal:${rest}`;
+  } else if (rest === 'downloads' || rest.startsWith('downloads/')) {
+    root = 'downloads';
+    rest = rest.slice('downloads'.length);
+  }
+  return `${root}:${rest.split('/').filter(segment => segment.length > 0 && segment !== '.').join('/')}`;
+}
+
+function unique(values: Iterable<string>): string[] {
+  return [...new Set(values)];
+}
+
+/** Media references the conversation observed, focus included. */
+export function observedMediaRefs(refs: WorkflowReferences): string[] {
+  return unique([...(refs.mediaRefs ?? []), refs.mediaRef ?? ''].filter(isValidMediaRef).map(ref => ref.trim()));
+}
+
+/** Release references the conversation observed or the owner selected, focus included. */
+export function observedReleaseRefs(refs: WorkflowReferences): string[] {
+  return unique([...(refs.releaseRefs ?? []), refs.releaseRef ?? ''].filter(isValidReleaseRef).map(ref => ref.trim()));
+}
+
+/** Appends values, keeping each one once (by key) and only the newest `limit`. */
+function mergeBounded(
+  existing: readonly string[] | undefined,
+  incoming: readonly string[],
+  limit: number,
+  keyOf: (value: string) => string = value => value,
+): string[] {
+  const merged = new Map<string, string>();
+  for (const value of [...(existing ?? []), ...incoming]) {
+    const key = keyOf(value);
+    merged.delete(key);
+    merged.set(key, value);
+  }
+  return [...merged.values()].slice(-limit);
+}
+
+/** Drops what was derived for a media entity: its releases, listings and analyses. */
+function clearDerived(refs: WorkflowReferences): void {
+  delete refs.releaseRef;
+  delete refs.releaseRefs;
+  delete refs.paths;
+  delete refs.inspectedPaths;
+}
+
+/** Observed values a proposal of this intent may target, as comparison keys. */
+export function groundingKeys(kind: IntentKind | undefined, refs: WorkflowReferences): string[] {
+  if (kind === 'download') return observedReleaseRefs(refs);
+  if (kind === 'delete') return unique((refs.paths ?? []).filter(isReferencePath).map(canonicalPathKey));
+  if (kind === 'convert') return unique((refs.inspectedPaths ?? []).filter(isReferencePath).map(canonicalPathKey));
+  return [];
+}
+
+/** Read-only intents never unlock a proposal, even when references exist. */
+export function hasProposalGrounding(kind: IntentKind | undefined, refs: WorkflowReferences): boolean {
+  return groundingKeys(kind, refs).length > 0;
+}
+
+function proposedKeys(state: Pick<WorkflowState, 'proposalTargets'>): Set<string> {
+  return new Set(Object.values(state.proposalTargets ?? {}).flat());
+}
+
+/**
+ * True when the grounding holds a target that no plan of the conversation has
+ * proposed. A plan recorded before targets were tracked counts as covering all
+ * current grounding, so after it only a new observation offers another proposal.
+ */
+export function hasFreshGrounding(
+  kind: IntentKind | undefined,
+  state: Pick<WorkflowState, 'references' | 'proposals' | 'proposalTargets'>,
+): boolean {
+  const keys = groundingKeys(kind, state.references);
+  if (keys.length === 0) return false;
+  const targets = state.proposalTargets ?? {};
+  if (state.proposals.some(proposal => !targets[proposal.planId])) return false;
+  const proposed = proposedKeys(state);
+  return keys.some(key => !proposed.has(key));
+}
+
+/** True when `after` observed a target that `before` lacked and no plan proposed. */
+function newUnproposedGrounding(
+  kind: IntentKind | undefined,
+  before: WorkflowReferences,
+  after: WorkflowReferences,
+  state: Pick<WorkflowState, 'proposalTargets'>,
+): boolean {
+  const known = new Set(groundingKeys(kind, before));
+  const proposed = proposedKeys(state);
+  return groundingKeys(kind, after).some(key => !known.has(key) && !proposed.has(key));
 }
 
 /** How far along the flow each phase is. `maintain` is a separate flow, not a step. */
@@ -245,14 +412,14 @@ const PHASE_RANK: Record<Phase, number> = {
  * the grounding that phase requires. This is what keeps a pasted or echoed
  * reference from unlocking the propose catalog (§2.3 / AGT-04).
  */
-export function groundPhase(target: Phase, state: Pick<WorkflowState, 'references' | 'candidates' | 'proposals'>): Phase {
+export function groundPhase(target: Phase, state: Pick<WorkflowState, 'references' | 'candidates' | 'proposals' | 'intent'>): Phase {
   switch (target) {
     case 'propose':
-      if (state.references.releaseRef || state.references.paths?.length) return 'propose';
-      if (state.references.mediaRef || state.candidates.length > 0) return 'select';
+      if (hasProposalGrounding(state.intent?.kind, state.references)) return 'propose';
+      if (hasLiveReference(state.references) || state.candidates.length > 0) return 'select';
       return 'discover';
     case 'select':
-      if (state.references.mediaRef || state.candidates.length > 0) return 'select';
+      if (hasLiveReference(state.references) || state.candidates.length > 0) return 'select';
       return 'discover';
     case 'monitor':
       return state.proposals.length > 0 ? 'monitor' : 'orient';
@@ -278,12 +445,13 @@ export function reduce(
 
   switch (event.type) {
     case 'user_message': {
-      const incoming = event.intent ? normalizeIntent(event.intent) : undefined;
+      const received = event.intent ? normalizeIntent(event.intent) : undefined;
       const previous = state.intent;
+      // A search without subject words ("look for another version") refines the
+      // current request instead of replacing it.
+      const incoming = received?.kind === 'other' && !received.subjects?.length && previous ? undefined : received;
+      const reads = incoming ? READ_INTENTS.has(incoming.kind) : false;
 
-      // A fresh explicit request supersedes the previous one: its references stop
-      // being valid, so the conversation can always return to discovery instead of
-      // being pinned in select/propose forever.
       // A request supersedes the previous one only when it names a different
       // subject. Escalating within the same subject ("now download the 1080p one")
       // must keep the references the previous turns established.
@@ -291,28 +459,49 @@ export function reduce(
 
       let references = state.references;
       let candidates = state.candidates;
-
-      if (startsNewRequest) {
-        references = {};
-        candidates = [];
-      } else if (referencesExpired(state.references, now)) {
+      if (startsNewRequest || referencesExpired(state.references, now)) {
         references = {};
         candidates = [];
       }
 
-      const grounded = { references, candidates, proposals: state.proposals };
+      // A read without subject words ("show the queue") keeps the subjects of the
+      // request it interrupts, and with them its references, so that request can
+      // resume afterwards ("ok, download it").
+      const intent = incoming && reads && !incoming.subjects?.length && previous?.subjects?.length
+        ? { ...incoming, subjects: previous.subjects }
+        : incoming ?? previous;
+      const grounded = { references, candidates, proposals: state.proposals, intent };
       let nextPhase = state.phase;
-      if (startsNewRequest) {
+      if (reads) {
+        // A read leaves an earlier proposal or monitor flow even without subject
+        // words ("show the queue"). Its catalog does not depend on the phase.
+        nextPhase = 'orient';
+      } else if (incoming?.kind === 'maintenance' || (!incoming && event.suggestedPhase === 'maintain')) {
+        nextPhase = 'maintain';
+      } else if (startsNewRequest) {
         // A different subject starts over from the suggested entry phase.
         nextPhase = groundPhase(event.suggestedPhase ?? 'discover', grounded);
-      } else if (event.suggestedPhase === 'maintain') {
-        nextPhase = 'maintain';
+      } else if (incoming && PROPOSAL_INTENTS.has(incoming.kind)) {
+        // Asking for a proposal moves as far as the verified grounding allows. From
+        // monitor it needs a target no plan proposed yet, so refining an existing
+        // plan does not propose the same release or files again.
+        const ready = state.phase === 'monitor'
+          ? hasFreshGrounding(incoming.kind, { references, proposals: state.proposals, proposalTargets: state.proposalTargets })
+          : hasProposalGrounding(incoming.kind, references);
+        if (ready) {
+          nextPhase = 'propose';
+        } else {
+          const target: Phase = hasLiveReference(references) || candidates.length > 0 ? 'select' : 'discover';
+          const current = groundPhase(state.phase, grounded);
+          nextPhase = PHASE_RANK[target] > PHASE_RANK[current] ? target : current;
+        }
       } else if (event.suggestedPhase) {
         // Continuing the same request may only move forward. A lexical hint must never
         // undo grounding the conversation already earned: "download the 1080p one" said
         // `discover`, which would have thrown away the release the user just picked.
         const suggested = groundPhase(event.suggestedPhase, grounded);
-        nextPhase = PHASE_RANK[suggested] > PHASE_RANK[state.phase] ? suggested : state.phase;
+        const current = groundPhase(state.phase, grounded);
+        nextPhase = PHASE_RANK[suggested] > PHASE_RANK[current] ? suggested : current;
       } else if (!hasLiveReference(references) && state.phase !== 'monitor' && state.phase !== 'maintain') {
         nextPhase = groundPhase(state.phase, grounded);
       }
@@ -320,7 +509,7 @@ export function reduce(
       return {
         ...state,
         phase: nextPhase,
-        intent: incoming ?? state.intent,
+        intent,
         references,
         candidates,
         updatedAt: now,
@@ -330,31 +519,39 @@ export function reduce(
     case 'typed_selection': {
       // AGT-05: Only verified typed selections from the server channel enter here
       const sel = event.selection;
-      const newRefs: WorkflowReferences = { ...state.references };
+      const newRefs: WorkflowReferences = referencesExpired(state.references, now) ? {} : { ...state.references };
       let touched = false;
 
       if (isValidMediaRef(sel.mediaRef)) {
-        newRefs.mediaRef = sel.mediaRef!.trim();
+        const media = sel.mediaRef!.trim();
+        // Choosing another entity drops what was derived for the previous one.
+        if (newRefs.mediaRef !== media) clearDerived(newRefs);
+        newRefs.mediaRef = media;
+        newRefs.mediaRefs = mergeBounded(newRefs.mediaRefs, [media], REFERENCE_LIMITS.mediaRefs);
         touched = true;
       }
       if (isValidReleaseRef(sel.releaseRef)) {
-        newRefs.releaseRef = sel.releaseRef!.trim();
+        const release = sel.releaseRef!.trim();
+        newRefs.releaseRef = release;
+        newRefs.releaseRefs = mergeBounded(newRefs.releaseRefs, [release], REFERENCE_LIMITS.releaseRefs);
         touched = true;
       }
       if (touched) {
         newRefs.expiresAt = refsExpiry(clock);
       }
 
-      let nextPhase = state.phase;
-      if (newRefs.releaseRef) {
-        nextPhase = 'propose';
-      } else if (newRefs.mediaRef) {
-        nextPhase = 'select';
-      }
+      // Selecting a release through the verified channel explicitly requests a
+      // download proposal; free-form selection text never supplies this intent.
+      const releaseChosen = (sel.type === 'select_release' || sel.type === 'propose_download') && isValidReleaseRef(sel.releaseRef);
+      const intent: WorkflowIntent | undefined = releaseChosen
+        ? { ...state.intent, kind: 'download', summary: state.intent?.summary ?? 'Selected release' }
+        : state.intent;
+      const nextPhase = groundPhase('propose', { ...state, references: newRefs, intent });
 
       return {
         ...state,
         phase: nextPhase,
+        intent,
         references: newRefs,
         selections: [...state.selections, sel].slice(-8),
         updatedAt: now,
@@ -374,36 +571,54 @@ export function reduce(
       // Defense in depth: even though the runtime only forwards references from
       // tools entitled to mint them, the reducer re-validates their shape (§2.7).
       const incoming = event.references ?? {};
-      const nextRefs: WorkflowReferences = { ...state.references };
+      const before: WorkflowReferences = referencesExpired(state.references, now) ? {} : state.references;
+      const nextRefs: WorkflowReferences = { ...before };
       let touched = false;
-      if (isValidMediaRef(incoming.mediaRef)) {
-        nextRefs.mediaRef = incoming.mediaRef!.trim();
+
+      const media = unique([incoming.mediaRef ?? '', ...(incoming.mediaRefs ?? [])].filter(isValidMediaRef).map(ref => ref.trim()));
+      if (media.length > 0) {
+        const known = observedMediaRefs(nextRefs);
+        // A read that resolves a different entity drops what was derived for the old one.
+        if (known.length > 0 && !media.some(ref => known.includes(ref))) clearDerived(nextRefs);
+        if (!nextRefs.mediaRef || !media.includes(nextRefs.mediaRef)) nextRefs.mediaRef = media[0];
+        nextRefs.mediaRefs = mergeBounded(nextRefs.mediaRefs, media, REFERENCE_LIMITS.mediaRefs);
         touched = true;
       }
-      if (isValidReleaseRef(incoming.releaseRef)) {
-        nextRefs.releaseRef = incoming.releaseRef!.trim();
+      const releases = unique([incoming.releaseRef ?? '', ...(incoming.releaseRefs ?? [])].filter(isValidReleaseRef).map(ref => ref.trim()));
+      if (releases.length > 0) {
+        nextRefs.releaseRef = releases[0];
+        nextRefs.releaseRefs = mergeBounded(nextRefs.releaseRefs, releases, REFERENCE_LIMITS.releaseRefs);
         touched = true;
       }
-      if (Array.isArray(incoming.paths) && incoming.paths.length > 0) {
-        nextRefs.paths = incoming.paths.slice(0, 20);
+      // Listings and analyses accumulate: each file stays an exact, verified target
+      // until the TTL or a new subject clears it. Only observed files can be proposed.
+      const paths = (incoming.paths ?? []).filter(isReferencePath);
+      if (paths.length > 0) {
+        nextRefs.paths = mergeBounded(nextRefs.paths, paths, REFERENCE_LIMITS.paths, canonicalPathKey);
+        touched = true;
+      }
+      const inspected = (incoming.inspectedPaths ?? []).filter(isReferencePath);
+      if (inspected.length > 0) {
+        nextRefs.inspectedPaths = mergeBounded(nextRefs.inspectedPaths, inspected, REFERENCE_LIMITS.inspectedPaths, canonicalPathKey);
         touched = true;
       }
       if (touched) {
         nextRefs.expiresAt = refsExpiry(clock);
       }
 
-      // Paths only unlock `propose` for intents that act on files; a plain listing
-      // must not hand the model the proposal catalog.
-      const pathIntent =
-        state.intent?.kind === 'delete' || state.intent?.kind === 'convert' || state.intent?.kind === 'inspect';
-
+      const kind = state.intent?.kind;
       let nextPhase = state.phase;
-      if (nextRefs.releaseRef && (state.phase === 'select' || state.phase === 'discover')) {
-        nextPhase = 'propose';
-      } else if (nextRefs.paths?.length && pathIntent && (state.phase === 'discover' || state.phase === 'select')) {
-        nextPhase = 'propose';
-      } else if (nextRefs.mediaRef && (state.phase === 'discover' || state.phase === 'orient')) {
-        nextPhase = 'select';
+      if (state.phase === 'monitor') {
+        // After a plan, only a newly observed target that no plan proposed offers
+        // another proposal. Reading the same results again keeps monitoring.
+        if (newUnproposedGrounding(kind, before, nextRefs, state)) nextPhase = 'propose';
+      } else if (state.phase !== 'maintain') {
+        if (hasProposalGrounding(kind, nextRefs)) nextPhase = 'propose';
+        else if (state.phase === 'propose') nextPhase = groundPhase('propose', { ...state, references: nextRefs });
+        else if ((state.phase === 'discover' || state.phase === 'orient') && hasLiveReference(nextRefs) &&
+          !(kind && READ_INTENTS.has(kind))) {
+          nextPhase = 'select';
+        }
       }
 
       return {
@@ -441,10 +656,18 @@ export function reduce(
         manifestHash: event.manifestHash,
         proposalKey: event.proposalKey,
       };
+      const proposals = [...state.proposals.filter(p => p.planId !== event.planId), record].slice(-16);
+      const targets = event.targets?.filter(target => typeof target === 'string' && target.length > 0).slice(0, REFERENCE_LIMITS.paths);
+      const proposalTargets: Record<string, string[]> = {};
+      for (const proposal of proposals) {
+        const known = proposal.planId === event.planId ? targets : state.proposalTargets?.[proposal.planId];
+        if (known) proposalTargets[proposal.planId] = known;
+      }
       return {
         ...state,
         phase: 'monitor',
-        proposals: [...state.proposals.filter(p => p.planId !== event.planId), record].slice(-16),
+        proposals,
+        proposalTargets,
         updatedAt: now,
       };
     }

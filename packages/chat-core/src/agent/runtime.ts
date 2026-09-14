@@ -16,6 +16,7 @@ import {
   type WorkflowState,
   type WorkflowStore,
   type WorkflowIntent,
+  type WorkflowReferences,
   type ClockFn,
   type CandidateRecord,
   defaultClock,
@@ -25,6 +26,10 @@ import {
   isValidMediaRef,
   isValidReleaseRef,
   InMemoryWorkflowStore,
+  READ_INTENTS,
+  REFERENCE_LIMITS,
+  canonicalPathKey,
+  type IntentKind,
 } from './workflow.js';
 import { getPhaseTools } from './phases.js';
 import { buildSystemPromptForPhase } from '../prompt.js';
@@ -112,6 +117,24 @@ const NON_SUBJECT_WORDS = new Set([
   'subtitulos', 'subtitles', 'audio', 'esta', 'este', 'esto',
   'este', 'tengo', 'hay', 'quiero', 'want', 'please', 'porfavor', 'ahora', 'now', 'todos', 'todas',
   'archivo', 'archivos', 'file', 'files', 'carpeta', 'folder', 'plan', 'estado', 'status',
+  // Words of reads and follow-ups: they never name what the request is about.
+  'descargas', 'descargado', 'descargados', 'descargada', 'descargadas', 'descargo', 'descargando',
+  'descargala', 'descargalo', 'descargarla', 'descargarlo', 'downloads', 'downloading', 'downloaded',
+  'cola', 'queue', 'curso', 'progreso', 'progress', 'mismo', 'cuanto', 'cuanta', 'cuantos', 'cuantas',
+  'episodios', 'episodes', 'temporadas', 'seasons', 'capitulos', 'pistas', 'tracks', 'subtitulo',
+  'which', 'what', 'have', 'many', 'much', 'alguien', 'viendo', 'watching', 'espacio', 'libre',
+  'disco', 'servidor', 'server', 'biblioteca', 'library', 'jellyfin', 'total', 'resumen', 'cual',
+  'cuales', 'tiene', 'tienen', 'completas', 'incompletas', 'termino', 'terminado', 'aprobe', 'aprobado',
+  'puedo', 'verla', 'verlo', 'dame', 'dime', 'como', 'donde', 'cuando', 'quien', 'para', 'sobre',
+  'desde', 'hasta', 'otra', 'otro', 'otras', 'otros', 'tambien', 'solo', 'pero', 'with', 'from',
+  'that', 'this', 'these', 'those', 'there', 'your', 'about', 'only', 'also', 'again', 'another',
+  'release', 'releases', 'resolucion', 'resolution', 'idioma', 'language', 'catalogo', 'catalog',
+  'conviertela', 'conviertelo', 'propon', 'proponer', 'propose', 'analizar', 'inspeccionar',
+  'restaura', 'restaurar', 'restore', 'cuarentena', 'quarantine', 'definitivamente', 'aprueba',
+  'approve', 'mueve', 'mover', 'move', 'doing', 'going',
+  // Fillers of a follow-up ("ok, download it"): never a new subject.
+  'vale', 'okay', 'bueno', 'venga', 'perfecto', 'genial', 'claro', 'gracias', 'thanks', 'sure',
+  'great', 'then', 'entonces', 'luego', 'listo',
 ]);
 
 /** Subject words of a request: long enough, not a verb or a quality word. */
@@ -132,6 +155,31 @@ export function extractSubjects(message: string): string[] {
   return subjects.slice(0, 8);
 }
 
+/* Lexical cues of classifyIntent, over lower-case text without accents. The order
+ * of the checks in classifyIntent is part of its contract (intent-corpus.test.ts). */
+const OWNER_ONLY_CUE = /\b(restaur\w*|restore\w*|purg\w*|aprueb\w*|aprobar|approve|authori[sz]e|autoriz\w*)\b/;
+const QUARANTINE_CUE = /\b(cuarentena|quarantine\w*)\b/;
+const PERMANENT_CUE = /\b(definitiv\w*|permanent\w*|vacia\w*|vaciar|empty)\b/;
+const PLAN_ID_CUE = /\bplan_[a-z0-9-]+/;
+const PLAN_CUE = /\b(plan|planes|operacion|operaciones|operation|operations|propuesta|propuestas|proposal|proposals)\b/;
+const PLAN_STATE_CUE = /\b(estado|status|progreso|progress|termin\w*|finish\w*|complet\w*|quedo|result\w*|aprobad\w*|rechazad\w*|approved|rejected|va|going|how|como|que paso|what happened)\b/;
+const DOWNLOAD_OUTCOME_CUE = /\b(se (ha |han )?descarg(o|ado|ada|ados|adas|aron)|ya (se )?(puedo|puede|podemos|pueden) ver|ya esta disponible|(termino|acabo|completo|finalizo) la descarga|(como|cuando) termino|downloaded yet|finished downloading|is it (ready|available)|can i (watch|see) it)\b/;
+const QUEUE_SUBJECT_CUE = /\b(cola|colas|queue|queues|descarga|descargas|descargando|download|downloads|downloading|torrent|torrents|qbittorrent|qbit)\b/;
+const QUEUE_QUESTION_CUE = /\b(que|cual|cuales|cuant\w*|como|what|which|how|estado|status|progreso|progress|curso|activas?|active|pendientes?|pending|lista\w*|list|muestra\w*|show|ver|check|revisa\w*|hay|current|now|ahora)\b/;
+const DOWNLOAD_COMMAND_CUE = /^(?:(?:por favor|please|oye|hey)[\s,]+)?(?:descarga(?:me|la|lo|las|los|r)?|baja(?:me|la|lo|r)?|download|grab|quiero descargar|i want to download|can you download|puedes descargar)\b/;
+const CONVERT_CUE = /\b(transcod\w*|remux\w*|convert\w*|conviert\w*|convirt\w*|optimiz\w*|recodific\w*|reencod\w*|encode)\b/;
+const MAINTENANCE_CUE = /\b(mantenimiento|maintenance|limpieza|limpia\w*|limpiar|cleanup|clean up|huerfan\w*|orphans?|temporales|cache|caches|jobs?|background)\b/;
+const DELETE_CUE = /\b(borra\w*|borrar|elimina\w*|eliminar|delete|remove|quita\w*|quitar|suprim\w*)\b/;
+const INSPECT_CUE = /\b(inspecciona\w*|inspect\w*|analiza\w*|analyze|analyse|ffprobe|codecs?|pistas?|tracks?|streams?|bitrate|formato|format)\b/;
+const DOWNLOAD_CUE = /\b(descarga|descargar|descargame|descargala|descargalo|descargalas|descargalos|descargarla|descargarlo|descargarlas|descargarlos|baja|bajar|bajame|bajala|bajalo|download|grab|consigue\w*|conseguir|agrega\w*|agregar|anade\w*|anadir|add)\b/;
+const SEARCH_CUE = /\b(busca\w*|buscar|encuentra\w*|encontrar|find|search\w*|look up|lookup|releases?|versiones)\b/;
+const SERVER_CUE = /\b(servidor|server|salud|health|cpu|ram|memoria|memory|espacio|space|almacenamiento|storage|sesion\w*|sessions?|viendo|watching|reproduc\w*|playing|playback|actividad|activity|historial|history|usuarios?|users?|uptime)\b/;
+const MEDIA_NOUN_CUE = /\b(peliculas?|movies?|films?|series|serie|shows?|episodios?|episodes?|capitulos?|temporadas?|seasons?|anime|biblioteca|library|coleccion|collection|jellyfin)\b/;
+const POSSESSION_CUE = /\b(tengo|tenemos|tienes|have|own|owned|descargad\w*|downloaded|on disk|en disco|en mi biblioteca|in my library|en jellyfin|in jellyfin)\b/;
+const LIST_CUE = /\b(cuant\w*|how many|lista\w*|list|todas|todos|all|resumen|summary|total)\b/;
+const WHICH_MEDIA_CUE = /\b(que|cuales|which|what)\s+(peliculas|series|episodios|temporadas|capitulos|movies|films|shows|episodes|seasons)\b/;
+const NUMBERED_ITEM_CUE = /\b(episodio|episode|capitulo|temporada|season)\s*\d+/;
+
 export function classifyIntent(message: string): WorkflowIntent | undefined {
   const text = message
     .toLowerCase()
@@ -140,28 +188,45 @@ export function classifyIntent(message: string): WorkflowIntent | undefined {
 
   const summary = message.trim();
   const subjects = extractSubjects(message);
-  if (/\b(borra\w*|borrar|elimina\w*|eliminar|delete|remove|quita\w*)\b/.test(text)) {
-    return { kind: 'delete', summary, subjects };
+  const intent = (kind: IntentKind): WorkflowIntent => ({ kind, summary, subjects });
+  // Imperatives are recognised at the start, after polite words and punctuation.
+  const opening = text.replace(/^[^a-z0-9]+/, '');
+
+  // Approval, restore and permanent purge belong to the owner in the app.
+  if (OWNER_ONLY_CUE.test(text) || (QUARANTINE_CUE.test(text) && (PERMANENT_CUE.test(text) || DELETE_CUE.test(text)))) {
+    return intent('owner_only');
   }
-  if (/\b(transcod\w*|remux\w*|convert\w*|subtitul\w*|subtitle|optimiza\w*|optimize)\b/.test(text)) {
-    return { kind: 'convert', summary, subjects };
+  // A plan, or what became of an approved download, is a status read.
+  if (PLAN_ID_CUE.test(text) || (PLAN_CUE.test(text) && PLAN_STATE_CUE.test(text)) || DOWNLOAD_OUTCOME_CUE.test(text)) {
+    return intent('status');
   }
-  if (/\b(inspeccion\w*|inspect|analiza\w*|analyze|ffprobe|formato|format|codec)\b/.test(text)) {
-    return { kind: 'inspect', summary, subjects };
+  if (QUEUE_SUBJECT_CUE.test(text) && QUEUE_QUESTION_CUE.test(text) && !DOWNLOAD_COMMAND_CUE.test(opening)) {
+    return intent('queue');
   }
-  if (
-    /\b(plan_[a-z0-9-]+|estado del plan|operation status|status of plan|progreso|progress)\b/.test(text) ||
-    /\b(status|estado)\b[^.]{0,24}\b(plan|operacion|operation)\b/.test(text)
-  ) {
-    return { kind: 'status', summary, subjects };
+  if (CONVERT_CUE.test(text)) return intent('convert');
+  if (MAINTENANCE_CUE.test(text)) return intent('maintenance');
+  if (DELETE_CUE.test(text)) return intent('delete');
+  if (INSPECT_CUE.test(text)) return intent('inspect');
+  if (DOWNLOAD_CUE.test(text)) return intent('download');
+  if (SEARCH_CUE.test(text)) return intent('other');
+  if (SERVER_CUE.test(text)) return intent('server');
+  // Questions about what is owned, and listings by type or year, are library
+  // reads: a year or a type is a filter, never a title to search for.
+  if (MEDIA_NOUN_CUE.test(text) &&
+      (POSSESSION_CUE.test(text) || LIST_CUE.test(text) || WHICH_MEDIA_CUE.test(text) || NUMBERED_ITEM_CUE.test(text))) {
+    return intent('library');
   }
-  if (/\b(descarga\w*|descargar|baja\w*|bajar|download|torrent|grab|agrega\w*|agregar|add)\b/.test(text)) {
-    return { kind: 'download', summary, subjects };
-  }
-  if (/\b(busca\w*|buscar|encuentra\w*|find|search|tengo|hay|pelicula|movie|serie\w*|series|anime|show)\b/.test(text)) {
-    return { kind: 'other', summary, subjects };
-  }
+  if (MEDIA_NOUN_CUE.test(text)) return intent('other');
   return undefined;
+}
+
+/** Phase a message starts from. The reducer only honours it with the grounding it needs. */
+function entryPhase(intent: WorkflowIntent | undefined, message: string, history: ChatMessage[]): Phase {
+  const kind = intent?.kind;
+  if (kind && READ_INTENTS.has(kind)) return 'orient';
+  if (kind === 'maintenance') return 'maintain';
+  if (kind === 'delete' || kind === 'convert' || kind === 'inspect') return 'discover';
+  return heuristicPhase(message, history);
 }
 
 /**
@@ -183,18 +248,19 @@ function actionOf(args: Record<string, unknown>): string {
   return typeof args.action === 'string' ? args.action : '';
 }
 
-function collectRefStrings(value: unknown, key: 'mediaRef' | 'releaseRef', out: string[], depth = 0): void {
-  if (out.length >= 4 || depth > 3 || !value) return;
+/** Collects up to `limit` values of `key`: every result of a listing, not only the first. */
+function collectRefStrings(value: unknown, key: 'mediaRef' | 'releaseRef', out: string[], limit: number, depth = 0): void {
+  if (out.length >= limit || depth > 3 || !value) return;
   if (Array.isArray(value)) {
-    for (const item of value.slice(0, 10)) collectRefStrings(item, key, out, depth + 1);
+    for (const item of value.slice(0, limit)) collectRefStrings(item, key, out, limit, depth + 1);
     return;
   }
   if (typeof value === 'object') {
     const record = value as Record<string, unknown>;
     const direct = record[key];
-    if (typeof direct === 'string') out.push(direct);
+    if (typeof direct === 'string' && out.length < limit) out.push(direct);
     for (const nestedKey of ['data', 'items', 'results']) {
-      if (record[nestedKey]) collectRefStrings(record[nestedKey], key, out, depth + 1);
+      if (record[nestedKey]) collectRefStrings(record[nestedKey], key, out, limit, depth + 1);
     }
   }
 }
@@ -204,14 +270,18 @@ function collectPaths(parsed: unknown, out: string[]): void {
   if (!record) return;
   const data = record.data;
   const candidates = Array.isArray(data) ? data : data ? [data] : [];
-  for (const item of candidates.slice(0, 20)) {
+  for (const item of candidates.slice(0, REFERENCE_LIMITS.paths)) {
     const p = item?.path ?? item?.relativePath ?? item?.logicalPath;
     if (typeof p === 'string' && p.length > 0 && p.length <= 300) out.push(p);
   }
-  // manage_files lists `{ path, items: [{ name, type }] }`: entries are relative to `path`.
+  // manage_files lists `{ path, items: [{ name, type, path }] }`. Each item carries its
+  // exact canonical path; older listings only had names relative to `path`.
   if (Array.isArray(record.items)) {
     const base = typeof record.path === 'string' ? record.path.replace(/[\\/]+$/, '') : '';
-    for (const item of record.items.slice(0, 20)) {
+    for (const item of record.items.slice(0, REFERENCE_LIMITS.paths)) {
+      // Directory entries remain available for browsing, but never ground a
+      // deletion proposal over all children of that directory.
+      if (item?.type !== 'file') continue;
       const own = item?.path ?? item?.relativePath;
       const name = typeof own === 'string' ? own : typeof item?.name === 'string' ? (base ? `${base}/${item.name}` : item.name) : undefined;
       if (typeof name === 'string' && name.length > 0 && name.length <= 300) out.push(name);
@@ -224,28 +294,39 @@ export function extractEntitledReferences(
   toolName: string,
   args: Record<string, unknown>,
   parsed: unknown,
-): { mediaRef?: string; releaseRef?: string; paths?: string[] } | undefined {
+): Partial<WorkflowReferences> | undefined {
   const entitlement = REFERENCE_SOURCES[toolName];
   if (!entitlement) return undefined;
   const action = actionOf(args);
-  const refs: { mediaRef?: string; releaseRef?: string; paths?: string[] } = {};
+  const refs: Partial<WorkflowReferences> = {};
 
   if (entitlement.media?.includes(action)) {
     const found: string[] = [];
-    collectRefStrings(parsed, 'mediaRef', found);
-    const valid = found.find(isValidMediaRef);
-    if (valid) refs.mediaRef = valid.trim();
+    collectRefStrings(parsed, 'mediaRef', found, REFERENCE_LIMITS.mediaRefs);
+    const valid = [...new Set(found.filter(isValidMediaRef).map(ref => ref.trim()))];
+    if (valid.length > 0) {
+      refs.mediaRef = valid[0];
+      refs.mediaRefs = valid;
+    }
   }
   if (entitlement.release?.includes(action)) {
     const found: string[] = [];
-    collectRefStrings(parsed, 'releaseRef', found);
-    const valid = found.find(isValidReleaseRef);
-    if (valid) refs.releaseRef = valid.trim();
+    collectRefStrings(parsed, 'releaseRef', found, REFERENCE_LIMITS.releaseRefs);
+    const valid = [...new Set(found.filter(isValidReleaseRef).map(ref => ref.trim()))];
+    if (valid.length > 0) {
+      refs.releaseRef = valid[0];
+      refs.releaseRefs = valid;
+    }
   }
   if (entitlement.paths?.includes(action)) {
     const paths: string[] = [];
     collectPaths(parsed, paths);
-    if (paths.length > 0) refs.paths = paths.slice(0, 20);
+    if (paths.length > 0) {
+      refs.paths = paths.slice(0, REFERENCE_LIMITS.paths);
+      if (toolName === 'media_format' && action === 'analyze') {
+        refs.inspectedPaths = [...refs.paths];
+      }
+    }
   }
 
   return Object.keys(refs).length > 0 ? refs : undefined;
@@ -263,6 +344,14 @@ function isProposalCall(toolName: string, args: Record<string, unknown>): boolea
     (toolName === 'library_ops' && action === 'propose_delete') ||
     (toolName === 'media_format' && action === 'propose')
   );
+}
+
+/** What a successful proposal targeted, as the keys the reducer compares (§2.8). */
+function proposalTargets(toolName: string, args: Record<string, unknown>): string[] {
+  if (toolName === 'catalog') return typeof args.releaseRef === 'string' ? [args.releaseRef.trim()] : [];
+  if (toolName === 'media_format') return typeof args.path === 'string' ? [canonicalPathKey(args.path)] : [];
+  const paths = typeof args.paths === 'string' ? [args.paths] : Array.isArray(args.paths) ? args.paths : [];
+  return paths.filter((path): path is string => typeof path === 'string').map(canonicalPathKey);
 }
 
 /**
@@ -367,8 +456,8 @@ export class AgentRuntime {
       history.push({ role: 'user', content: selection.value || message || `[selection: ${selection.type}]` });
       historyStore.set(conversationId, history);
     } else if (message) {
-      const suggestedPhase: Phase = heuristicPhase(message, history);
       const intent = classifyIntent(message);
+      const suggestedPhase = entryPhase(intent, message, history);
 
       const prevPhase = state.phase;
       state = reduce(state, { type: 'user_message', text: message, intent, suggestedPhase }, clock);
@@ -459,8 +548,9 @@ export class AgentRuntime {
         guards.checkInferenceAllowed();
 
         const currentPhase = state.phase;
-        const exposedTools = getPhaseTools(currentPhase, { intentKind: state.intent?.kind });
-        const systemPrompt = buildSystemPromptForPhase(locale, currentPhase);
+        const phaseOptions = { intentKind: state.intent?.kind, references: state.references };
+        const exposedTools = getPhaseTools(currentPhase, phaseOptions);
+        const systemPrompt = buildSystemPromptForPhase(locale, currentPhase, phaseOptions);
 
         // Enforce context budget (§2.4 / AGT-02 / AGT-07)
         const prepared = prepareContext({
@@ -607,6 +697,8 @@ export class AgentRuntime {
               args: tc.args,
               exposedTools,
               mcpCall,
+              references: state.references,
+              referenceTime: clock(),
               timeoutMs: Math.max(5_000, Math.min(150_000, remaining)),
               signal,
             });
@@ -642,16 +734,20 @@ export class AgentRuntime {
               hadInvalidArgs = true;
             }
 
-            let references: { mediaRef?: string; releaseRef?: string; paths?: string[] } | undefined;
+            let references: Partial<WorkflowReferences> | undefined;
             try {
               const parsed = JSON.parse(dispatchRes.result);
-              references = extractEntitledReferences(tc.name, tc.args, parsed);
+              // A failed or partial observation must not unlock a mutation.
+              // It can still be reported to the user as a partial read.
+              const completeResult = dispatchRes.ok && parsed?.status !== 'partial' &&
+                !parsed?.sources?.some((source: any) => source.completeness !== 'complete');
+              if (completeResult) references = extractEntitledReferences(tc.name, tc.args, parsed);
 
               const plan = (parsed?.planId ? parsed : parsed?.data?.planId ? parsed.data : undefined) as
                 | Record<string, any>
                 | undefined;
 
-              if (plan) {
+              if (plan && dispatchRes.ok) {
                 if (isProposalCall(tc.name, tc.args)) {
                   // Only a proposal call creates a proposal record; a status read may
                   // update one it already knows, never invent one.
@@ -665,6 +761,7 @@ export class AgentRuntime {
                         status: plan.status,
                         manifestHash: plan.manifestHash || '',
                         proposalKey: plan.proposalKey || plan.planId,
+                        targets: proposalTargets(tc.name, tc.args),
                       },
                       clock,
                     );
