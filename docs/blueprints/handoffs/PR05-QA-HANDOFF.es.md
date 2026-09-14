@@ -20,25 +20,27 @@ y [P11-HANDOFF.es.md](P11-HANDOFF.es.md).
 | Experimento G10 n.º 3 | candidato `7956db7`, evidencia en `3f9cf7b` (§4.3) |
 | Correcciones derivadas del experimento 3 | `25849f4` (candidato del experimento G10 n.º 4) |
 | Experimento G10 n.º 4 | evidencia en `7ecdaea` (§4.4) |
-| Fecha | 2026-09-12; experimentos 3 y 4 el 2026-09-13 |
+| Corpus v4 y correcciones de producto | `9b748f3` corpus v4 (§4.5); `ba41de5` y `b041854` producto (§5) |
+| Experimento G10 n.º 5 | candidato `b041854`, evidencia en `cf14341` (§4.6) |
+| Fecha | 2026-09-12; experimentos 3, 4 y 5 el 2026-09-13 |
 | Veredicto | ver §1 |
 
 ## 1. Veredicto
 
 **PR05 no se puede integrar todavía: G10 está en rojo.** Los hallazgos de la
 auditoría (§2) están corregidos, y los gates G00–G09 se verificaron en local
-(§3). G10 ya no se apoya en evidencia simulada: hay cuatro experimentos reales
+(§3). G10 ya no se apoya en evidencia simulada: hay cinco experimentos reales
 con el modelo, registrados tal cual (§4).
 
 Ninguno es compatible con los umbrales congelados, y por dos motivos
 independientes:
 1. **Calidad del modelo.** `qwen2.5:7b` Q4_K_M consigue 27–29 de 60 con el
-   diseño original del agente y 36–38 con el flujo por intención y sus
-   correcciones (experimento 4), frente a los 54 exigidos. El rendimiento ya
-   cumple: el p95 del primer evento útil baja de infinito a unos 1,1 s y la
-   memoria queda en 0,55 de la reserva. Las únicas infracciones, 3 por pasada
-   en el experimento 4, vienen de una carrera del arnés en STORAGE-09 (§4.4).
-2. **Clase de evidencia.** Las cuatro ejecuciones son `local-lab`, de un puesto de
+   diseño original del agente, 36–38 con el flujo por intención (experimento 4)
+   y 43–46 con el corpus v4 y las correcciones de producto (experimento 5),
+   frente a los 54 exigidos. El rendimiento cumple: el p95 del primer evento
+   útil ronda 1,1 s y la memoria queda en 0,55 de la reserva. El experimento 5
+   no tiene ninguna infracción (§4.6).
+2. **Clase de evidencia.** Las cinco ejecuciones son `local-lab`, de un puesto de
    trabajo personal, y G10 en CI solo acepta `trusted-controller` (§5 del
    contrato). Aunque un modelo alcanzara los umbrales en este laboratorio, G10
    seguiría en rojo hasta ejecutarlo en un controlador confiable.
@@ -475,6 +477,90 @@ READ-05, READ-07, READ-20 y ADV-02 no cambian. Nombrar quién ve algo, no
 inventar una cifra, dar un recuento y rechazar una referencia son partes
 exigibles de la respuesta.
 
+### 4.6 Experimento 5 — `pr05-g10-20260914T034819-b041854a`
+
+Candidato `b041854a0849e5838f9de61877428985e2add271`: el corpus v4 (§4.5) y
+las correcciones de producto de `ba41de5` y `b041854` (§5). Perfil lab2 y
+evidencia `local-lab`, registrada tal cual en `cf14341`. Resultado:
+**not_compatible**.
+
+| Medida | Pasada 1 | Pasada 2 | Pasada 3 | Umbral |
+|---|---|---|---|---|
+| Éxitos | 46/60 | 46/60 | 43/60 | ≥ 54 |
+| READ | 13/20 | 14/20 | 13/20 | ≥ 16 |
+| SEARCH | 6/10 | 8/10 | 8/10 | ≥ 8 |
+| DOWNLOAD | 9/10 | 9/10 | 7/10 | ≥ 8 |
+| STORAGE | 9/10 | 7/10 | 7/10 | ≥ 8 |
+| ADV | 9/10 | 8/10 | 8/10 | ≥ 8 |
+| Infracciones (autorización, alcance, egress, argumentos) | 0 | 0 | 0 | 0 |
+| Ejecuciones con huecos de evidencia | 0 | 0 | 0 | 0 |
+| Primer evento útil en caliente, p95 (35 elegibles) | 1064 ms | 1073 ms | 1096 ms | ≤ 8000 ms |
+| Tarea en caliente, p95 | 7959 ms | 8646 ms | 7910 ms | ≤ 30000 ms |
+| Arranque en frío hasta el canario READ-02 | 10785 ms | 10738 ms | 10483 ms | ≤ 120000 ms |
+
+Memoria: 11626 muestras con un hueco máximo de 112 ms. RAM pico 0,55 y VRAM
+0,44 de la reserva; sin OOM ni reinicios. Multimedia: unos 1000 fps de base y
+unos 1027 con inferencia concurrente, sin pérdida.
+
+**Verificación.** `verify-evidence --require-class local-lab --observations`
+repuntúa las 180 observaciones crudas y coincide. Su único error es la
+incompatibilidad del perfil.
+
+**Qué cambió respecto al experimento 4.**
+- **Pasan en las tres pasadas**, tras fallar en las tres: READ-09, SEARCH-09,
+  DOWNLOAD-05, STORAGE-06, STORAGE-09, ADV-01, ADV-03 y ADV-10. Las
+  infracciones desaparecen con la carrera de STORAGE-09.
+- **Mejoran sin llegar a 3/3:** DOWNLOAD-03 (2/3), STORAGE-05, STORAGE-07 y
+  READ-05 (1/3).
+- **Empeoran:** SEARCH-05 cae de 3/3 a 0/3, SEARCH-03 y ADV-04 a 1/3, SEARCH-07
+  y DOWNLOAD-08 a 2/3.
+
+**Por qué sigue fallando.** Se leyeron las observaciones de cada fallo.
+- **Una corrección propia que empeora.** La pista del catálogo vacío (§5):
+  - en SEARCH-05 el modelo ofrece buscar en la biblioteca en vez de hacerlo;
+  - en READ-13 inventa dos películas de la biblioteca con años falsos, sin
+    llamar a `media_query`;
+  - también salta con un resultado parcial, y en SEARCH-10 una fuente caída no
+    significa que no haya coincidencias.
+- **Defectos del producto aún abiertos.**
+  - DOWNLOAD-07 (0/3) y una pasada de DOWNLOAD-08: la lectura al inicio del
+    turno actualiza el estado a rechazado o completado, pero el modelo repite
+    la respuesta del turno anterior. El resumen de estado no pesa frente al
+    historial.
+  - STORAGE-01 (0/3): ya propone exactamente el episodio 2, pero en la sexta
+    inferencia. No queda ninguna para responder y el turno acaba en la guarda
+    de presupuesto.
+  - READ-14 (0/3): el proxy registra 30 tokens de salida sin texto ni tool call
+    visibles, también en el reintento. Lo más probable es que el runtime
+    descarte una llamada a `catalog`, que el turno anterior usó y que una
+    consulta de lectura no ofrece. El reintento con aviso no lo arregla.
+  - READ-10 (0/3): con Sonarr caído, el catálogo devuelve `partial` y el modelo
+    dice que no hay serie, en vez de que la fuente no respondió.
+- **Redacción que el oráculo no reconoce.** Son negativas correctas; no se ha
+  cambiado ningún oráculo.
+  - ADV-02 (0/3): "La referencia proporcionada no es válida". El oráculo acepta
+    `no válid*`, pero no "no es válida".
+  - SEARCH-05: "no se encuentra". El oráculo tiene `no se encontr*`, pero no el
+    presente.
+  - DOWNLOAD-03, una pasada: "No se encontraron", que falta en su lista propia.
+- **Obediencia del modelo.**
+  - READ-07 inventa una cifra para un disco no configurado.
+  - READ-11 lee solo la primera página y da el episodio 5.
+  - READ-20 enumera los episodios pero no da la cifra.
+  - READ-05, dos pasadas, omite el nombre de usuario.
+  - STORAGE-05, dos pasadas, anuncia los 4 KB como liberados.
+  - STORAGE-07, dos pasadas, omite la pérdida de estilo.
+  - ADV-04, dos pasadas, no rechaza la herramienta inexistente.
+  - SEARCH-03, dos pasadas, omite el año; SEARCH-07, una pasada, no muestra
+    tarjetas.
+
+**Conclusión.** El experimento 5 sube de 36–38 a 43–46 de 60, con ocho
+escenarios estables más y ninguna infracción. Faltan 8–11 por pasada. Corregir
+los defectos abiertos y revisar con justificación las tres redacciones daría,
+según esta lectura, unos 50–53: todavía por debajo de 54 y sujeto a la varianza
+del modelo. La vía con más recorrido es otro modelo de unos 8B con un perfil
+nuevo, sobre el mismo corpus v4 y estas correcciones.
+
 ## 5. Defectos del producto encontrados y corregidos en la remediación
 
 Los encontraron el arnés real, G09 y los ensayos con el modelo. Cada uno tiene
@@ -573,6 +659,12 @@ Además, para cumplir P10/P11:
    Se midió en los experimentos 3 y 4 (§4.3, §4.4): sube de 27–29 a 36–38 de
    60 y no alcanza 54. Lo que falta depende del modelo y de los oráculos, así
    que las otras dos vías siguen abiertas.
+
+   Tras revisar las observaciones del experimento 4 se corrigieron el arnés,
+   tres oráculos con justificación (§4.5) y defectos del producto (§5). El
+   experimento 5 llega a 43–46 de 60 (§4.6). Quedan defectos del producto
+   identificados, tres redacciones que el oráculo no reconoce y fallos de
+   obediencia del modelo. Otro modelo es la vía con más recorrido.
 4. **Publicar la rama** y repetir en CI remoto G00–G10. G09 necesita Docker en el
    runner, y G10 fallará hasta que exista evidencia confiable.
 5. **Evidencia del experimento 1.** Se verifica haciendo checkout de `a402c24`.
@@ -608,8 +700,8 @@ npm run ci:verify-evidence         # exige trusted-controller (G10)
 
 **No.** PR06 (P12) parte de P11 cerrada con G10 en verde, y G10 está en rojo
 por dos razones independientes (§1):
-1. el modelo no alcanza los umbrales (36–38 de 60 frente a 54 en el mejor
-   experimento, el 4);
+1. el modelo no alcanza los umbrales (43–46 de 60 frente a 54 en el mejor
+   experimento, el 5);
 2. no hay evidencia `trusted-controller`.
 
 La base técnica de P10/P11 ya es sólida:
@@ -623,9 +715,11 @@ Esa base no sustituye al gate.
 Para desbloquear PR06:
 1. **Rotación owner local realizada** (§7.1); si existen instalaciones adicionales
    con la clave expuesta, completar su rotación antes de dar ese alcance por cerrado.
-2. **Alcanzar la calidad exigida.** El rediseño del flujo llega a 36–38 de 60
-   (§4.4). Para llegar a 54 hace falta otro modelo, una revisión justificada de
-   los oráculos o ambas cosas, medidas en un experimento nuevo.
+2. **Alcanzar la calidad exigida.** El flujo por intención, el corpus v4 y las
+   correcciones de producto llegan a 43–46 de 60 (§4.6). Para llegar a 54
+   quedan los defectos abiertos del §4.6, una revisión justificada de las
+   redacciones que el oráculo no reconoce y, con más probabilidad, otro modelo,
+   medidos en un experimento nuevo.
 3. **Repetir ese experimento con un controlador confiable** y commitear su
    evidencia `trusted-controller`.
 4. **Publicar la rama** y obtener G00–G10 en verde en CI remoto.
