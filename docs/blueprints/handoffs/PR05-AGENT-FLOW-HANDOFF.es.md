@@ -11,7 +11,7 @@ ese documento (experimento G10 n.º 2, `132a45a`).
 | Base | `132a45a` |
 | Commits | `5d2aeaa` lecturas MCP y router; `c76dcb4` flujo del agente; `7956db7` corpus v3 y documentación; `25849f4` correcciones que destapó el experimento 3; `6f0d035`, `7c6b9a7` y `88831c7` pasos que completa el runtime (§2.4) |
 | Fecha | 2026-09-13 |
-| Estado | Medido en los experimentos G10 3 y 4 (§9) y, con el corpus v4 y correcciones de producto, en el 5: 43–46 de 60; con `qwen3.5:9b`, en el 6: 41–44. No compatible; G10 sigue en rojo. |
+| Estado | Medido en los experimentos G10 3 y 4 (§9) y, con el corpus v4 y correcciones de producto, en el 5: 43–46 de 60; con `qwen3.5:9b`, en el 6: 41–44; con los pasos que completa el runtime (§2.4), en el 7: 55, 54 y 57, con SEARCH en 7/10 en la pasada 2. No compatible; G10 sigue en rojo. |
 
 ## 1. Problema
 
@@ -268,9 +268,10 @@ Con los pasos que completa el runtime (§2.4), antes del experimento 7:
 
 ## 8. Límites y siguiente paso
 
-- **G10 no alcanza la calidad exigida** con `qwen2.5:7b` (§9). Hace falta otro
-  modelo, una revisión justificada de oráculos o ambas cosas, y después
-  evidencia de un controlador confiable (§7.2 del handoff de QA).
+- **G10 no alcanza todavía la calidad exigida.** Con `qwen3.5:9b` y los pasos
+  del runtime, el experimento 7 deja SEARCH en 7/10 en una de las tres pasadas
+  (§9). Después hace falta evidencia de un controlador confiable (§7.2 del
+  handoff de QA).
 - **Carrera de STORAGE-09.** El arnés cancela la conversión cuando ya terminó,
   y el oráculo lo cuenta como infracción de alcance (§9).
 - **Carpetas grandes.** La compactación muestra al modelo cinco entradas por
@@ -304,9 +305,9 @@ Con los pasos que completa el runtime (§2.4), antes del experimento 7:
   sobre MCP se traza como `ERR_TOOL_FAILURE`; la repetición y la nota lo
   reconocen por el código del sobre.
 
-## 9. Experimentos 3 a 6
+## 9. Experimentos 3 a 7
 
-El detalle está en los §4.3, §4.4, §4.6 y §4.8 de [PR05-QA-HANDOFF.es.md](PR05-QA-HANDOFF.es.md).
+El detalle está en los §4.3, §4.4, §4.6, §4.8 y §4.9 de [PR05-QA-HANDOFF.es.md](PR05-QA-HANDOFF.es.md).
 
 | Experimento | Candidato | Éxitos por pasada | STORAGE | DOWNLOAD | Primer evento útil, p95 |
 |---|---|---|---|---|---|
@@ -315,6 +316,7 @@ El detalle está en los §4.3, §4.4, §4.6 y §4.8 de [PR05-QA-HANDOFF.es.md](P
 | 4, con correcciones | `25849f4` | 38, 37, 36 | 4–5/10 | 6–7/10 | 1,0–1,1 s |
 | 5, corpus v4 y correcciones de producto | `b041854` | 46, 46, 43 | 7–9/10 | 7–9/10 | 1,1 s |
 | 6, `qwen3.5:9b` con corpus v5 | `1624dd8` | 44, 41, 43 | 7/10 | 3/10 | 1,9 s |
+| 7, pasos que completa el runtime (§2.4) | `5e16093` | 55, 54, 57 | 9/10 | 9–10/10 | 1,9–2,0 s |
 
 El experimento 3 destapó defectos del propio cambio, corregidos en `25849f4`:
 - la línea "Next" de descarga pedía el año, y el modelo lo inventaba;
@@ -340,3 +342,12 @@ El experimento 6 cambia el modelo a `qwen3.5:9b`. Recorre bien el flujo de este
 diseño hasta el objetivo exacto, pero pregunta antes de proponer y lista las
 opciones en texto en vez de usar `present_choices`. Por eso DOWNLOAD cae a 3/10
 (§4.8 del handoff de QA).
+
+El experimento 7 mide los pasos que completa el runtime (§2.4) con el mismo
+modelo, corpus y perfil. Con ellos pasan en las tres pasadas los nueve
+escenarios en los que el modelo preguntaba antes de proponer, las tarjetas de
+SEARCH-06/07, READ-07, READ-13 y ADV-02. Queda SEARCH en 7/10 en la pasada 2.
+Siguen fallando tres casos:
+- `paths` enviado como texto JSON (STORAGE-02);
+- la nota de fuente incompleta, que el modelo no transmite (READ-10, SEARCH-10);
+- la redacción de READ-04 (§4.9 del handoff de QA).

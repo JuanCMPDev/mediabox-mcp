@@ -14,9 +14,9 @@ corpus se han retirado. El estado consolidado del lote está en
 |---|---|
 | Fase | P11 — evaluación de modelos locales |
 | Lote | PR05, rama `work/local-agent/p10-p11-private-evals` |
-| Candidatos evaluados | `0e813214e817d7575122dd19bb053a4c5943ae82` (experimento 1, perfil lab1), `81c05f6` (experimento 2, perfil lab2, con las correcciones que salieron del 1), `7956db7` (experimento 3, flujo por intención y corpus v3), `25849f4` (experimento 4, con las correcciones que salieron del 3), `b041854` (experimento 5, corpus v4 y correcciones de producto) y `1624dd8` (experimento 6, `qwen3.5:9b` con el perfil lab3) |
+| Candidatos evaluados | `0e813214e817d7575122dd19bb053a4c5943ae82` (experimento 1, perfil lab1), `81c05f6` (experimento 2, perfil lab2, con las correcciones que salieron del 1), `7956db7` (experimento 3, flujo por intención y corpus v3), `25849f4` (experimento 4, con las correcciones que salieron del 3), `b041854` (experimento 5, corpus v4 y correcciones de producto), `1624dd8` (experimento 6, `qwen3.5:9b` con el perfil lab3) y `5e16093` (experimento 7, pasos que completa el runtime) |
 | Gates | G10 `gate/model-quality`; `test:eval-harness` en CI sin GPU |
-| Fecha | 2026-09-12; experimentos 3, 4 y 5 el 2026-09-13; experimento 6 el 2026-09-14 |
+| Fecha | 2026-09-12; experimentos 3, 4 y 5 el 2026-09-13; experimentos 6 y 7 el 2026-09-14 |
 
 ## 1. Camino real evaluado
 
@@ -188,8 +188,13 @@ Los números y el análisis de cada fallo están en
   con `qwen3.5:9b`. Resultado not_compatible, con 41–44 éxitos de 60, READ
   por encima de su umbral y ninguna infracción. El modelo pregunta antes de
   proponer y no usa tarjetas.
+- **§4.9, experimento 7** sobre `5e16093`: los pasos que completa el runtime
+  ([PR05-AGENT-FLOW-HANDOFF.es.md](PR05-AGENT-FLOW-HANDOFF.es.md) §2.4), con el
+  mismo corpus y el mismo perfil. Resultado not_compatible, con 55, 54 y 57 de
+  60 y ninguna infracción. Las tres pasadas alcanzan el total; solo SEARCH
+  queda en 7/10 en la pasada 2.
 
-**P11 no está cerrada:** G10 sigue en rojo por calidad y por clase de
+**P11 no está cerrada:** G10 sigue en rojo por ese umbral y por clase de
 evidencia (`local-lab`).
 
-Los seis se conservan en `evals/evidence/`, y `current.json` apunta al último.
+Los siete se conservan en `evals/evidence/`, y `current.json` apunta al último.

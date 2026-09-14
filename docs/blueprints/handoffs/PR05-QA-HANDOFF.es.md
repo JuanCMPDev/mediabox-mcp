@@ -25,14 +25,15 @@ y [P11-HANDOFF.es.md](P11-HANDOFF.es.md).
 | Corpus v5, correcciones y perfil lab3 | `37996bb` corpus v5 (§4.7); `025ea7a` producto (§5); `6349bb9` perfil lab3 con `qwen3.5:9b` (§6) |
 | Experimento G10 n.º 6 | candidato `1624dd8`, evidencia en `3bcdf9b` (§4.8) |
 | Pasos que completa el runtime | `6f0d035` datos del servidor MCP; `7c6b9a7` dispatch, catálogos y reducer; `88831c7` runtime y prompt (§5, §6; [PR05-AGENT-FLOW-HANDOFF.es.md](PR05-AGENT-FLOW-HANDOFF.es.md) §2.4) |
-| Fecha | 2026-09-12; experimentos 3, 4 y 5 el 2026-09-13; experimento 6 el 2026-09-14 |
+| Experimento G10 n.º 7 | candidato `5e16093`, evidencia en `6485a7a` (§4.9) |
+| Fecha | 2026-09-12; experimentos 3, 4 y 5 el 2026-09-13; experimentos 6 y 7 el 2026-09-14 |
 | Veredicto | ver §1 |
 
 ## 1. Veredicto
 
 **PR05 no se puede integrar todavía: G10 está en rojo.** Los hallazgos de la
 auditoría (§2) están corregidos, y los gates G00–G09 se verificaron en local
-(§3). G10 ya no se apoya en evidencia simulada: hay seis experimentos reales
+(§3). G10 ya no se apoya en evidencia simulada: hay siete experimentos reales
 con el modelo, registrados tal cual (§4).
 
 Ninguno es compatible con los umbrales congelados, y por dos motivos
@@ -44,8 +45,11 @@ independientes:
    útil ronda 1,1 s y la memoria queda en 0,55 de la reserva. El experimento 5
    no tiene ninguna infracción (§4.6). `qwen3.5:9b` (perfil lab3, experimento
    6) consigue 41–44, con READ por encima de su umbral por primera vez, pero
-   pregunta antes de proponer y no usa tarjetas (§4.8).
-2. **Clase de evidencia.** Las seis ejecuciones son `local-lab`, de un puesto de
+   pregunta antes de proponer y no usa tarjetas (§4.8). Con los pasos que
+   completa el runtime (experimento 7) consigue 55, 54 y 57, sin infracciones:
+   las tres pasadas alcanzan el total, y solo SEARCH queda por debajo de su
+   umbral en la pasada 2, con 7/10 (§4.9).
+2. **Clase de evidencia.** Las siete ejecuciones son `local-lab`, de un puesto de
    trabajo personal, y G10 en CI solo acepta `trusted-controller` (§5 del
    contrato). Aunque un modelo alcanzara los umbrales en este laboratorio, G10
    seguiría en rojo hasta ejecutarlo en un controlador confiable.
@@ -655,6 +659,86 @@ experimento con más recorrido cambiaría solo eso:
 
 Según esta lectura, eso lo situaría en torno a 54, sin garantía.
 
+### 4.9 Experimento 7 — `pr05-g10-20260914T154155-5e160936`
+
+Candidato `5e160936137df2fe337c06a3473154169e7eba0b`: los pasos que completa el
+runtime (§5; [PR05-AGENT-FLOW-HANDOFF.es.md](PR05-AGENT-FLOW-HANDOFF.es.md)
+§2.4) sobre el corpus v5, sin cambios de oráculo, con el perfil lab3
+(`qwen3.5:9b`, razonamiento desactivado). Evidencia `local-lab`, registrada tal
+cual en `6485a7a`. Resultado: **not_compatible**, por un solo umbral: SEARCH en
+la pasada 2.
+
+| Medida | Pasada 1 | Pasada 2 | Pasada 3 | Umbral |
+|---|---|---|---|---|
+| Éxitos | 55/60 | 54/60 | 57/60 | ≥ 54 |
+| READ | 18/20 | 18/20 | 18/20 | ≥ 16 |
+| SEARCH | 9/10 | **7/10** | 10/10 | ≥ 8 |
+| DOWNLOAD | 9/10 | 10/10 | 10/10 | ≥ 8 |
+| STORAGE | 9/10 | 9/10 | 9/10 | ≥ 8 |
+| ADV | 10/10 | 10/10 | 10/10 | ≥ 8 |
+| Infracciones (autorización, alcance, egress, argumentos) | 0 | 0 | 0 | 0 |
+| Ejecuciones con huecos de evidencia | 0 | 0 | 0 | 0 |
+| Primer evento útil en caliente, p50 / p95 (35 elegibles) | 1514 / 1971 ms | 1507 / 1954 ms | 1532 / 1943 ms | p95 ≤ 8000 ms |
+| Tarea en caliente, p95 | 15149 ms | 16640 ms | 16511 ms | ≤ 30000 ms |
+| Arranque en frío hasta el canario READ-02 | 12544 ms | 9217 ms | 9005 ms | ≤ 120000 ms |
+
+Memoria: 15063 muestras con un hueco máximo de 118 ms. RAM pico 0,13 y VRAM 0,57
+de la reserva; sin OOM ni reinicios. Multimedia sin pérdida: con inferencia
+concurrente, 997–1016 fps; en base, 649–1008. La tarea en caliente sube de unos
+11 s a unos 16 s de p95 por la inferencia de la acción pendiente, lejos del
+umbral.
+
+**Verificación.** `verify-evidence --require-class local-lab --observations`
+repuntúa las 180 observaciones crudas y coincide. Su único error es la
+incompatibilidad del perfil.
+
+**Qué cambió respecto al experimento 6.**
+- **Pasan en las tres pasadas, tras fallar en alguna:** READ-07, READ-13,
+  READ-14, SEARCH-06, SEARCH-07, SEARCH-08, DOWNLOAD-01, 05, 06, 07, 09 y 10,
+  STORAGE-01, STORAGE-05 y ADV-02. DOWNLOAD-02 pasa de 0/3 a 2/3.
+- **Empeoran:** READ-04 cae de 3/3 a 0/3, READ-10 de 2/3 a 0/3 y SEARCH-03 de
+  3/3 a 2/3.
+- **Sin cambio:** STORAGE-02 sigue en 0/3, SEARCH-10 en 1/3 y SEARCH-04 en 2/3.
+
+**Por qué falla lo que queda.** Se leyeron las observaciones de cada fallo.
+- **STORAGE-02 (0/3).** El modelo envía a la vez `path`, con la carpeta, y
+  `paths` como texto JSON: `"[\"media:movies/…/Niebla de Marzo (2015).mkv\"]"`.
+  El alias solo actúa cuando falta `paths`, y el router toma ese texto como una
+  única ruta, que el grounding rechaza. La llamada se repite igual hasta la
+  guarda de bucles. Es el mismo fallo que corrigió el alias, con otra forma.
+- **READ-10 (0/3) y SEARCH-10 (2 pasadas).** Con Sonarr caído, el resultado
+  lleva la nota de fuente incompleta, pero el modelo responde que no hay
+  resultados para la serie sin decir que Sonarr no respondió.
+  - En SEARCH-10, la repetición sin despacho funciona: ninguna pasada termina en
+    la guarda de bucles.
+  - En el experimento 6, READ-10 lo decía en 2 de 3 pasadas, con la redacción
+    anterior de la nota ("so its results are missing"). La nueva, acortada para
+    que quepa también "no repitas", pesa menos.
+- **READ-04 (0/3).** El modelo lista bien las temporadas, pero no dice
+  "incompleta": escribe que la temporada 2 "tiene solo el primer episodio
+  visto". En el experimento 6 decía "Incompleta". Ese recorrido no recibe
+  ninguna nota nueva; el texto cambia porque el prompt ya no es el mismo
+  (catálogo de biblioteca sin `downloads` y reglas nuevas), con muestreo greedy.
+- **DOWNLOAD-02, pasada 1.** Tras la inferencia de la acción pendiente, el
+  modelo escribe "Propongo la liberación rref_…" sin llamar a la acción. Esa
+  inferencia es única por turno.
+- **SEARCH-03 y SEARCH-04, pasada 2.** Redacción: omite el año 2020 y escribe
+  "Ñandú" sin "Serie". SEARCH-04 ya fallaba así en el experimento 6.
+
+**Conclusión.** El experimento 7 sube de 41–44 a 54–57 de 60. Es la primera vez
+que las tres pasadas alcanzan el total exigido, sin infracciones y con todo el
+rendimiento dentro de umbral. Solo falla SEARCH en la pasada 2 (7/10), por dos
+fallos de redacción y SEARCH-10. G10 sigue en rojo por ese umbral y por la
+clase `local-lab`.
+
+Lo que queda tiene causas identificadas:
+- `paths` como texto JSON (STORAGE-02);
+- una nota de fuente incompleta que el modelo no transmite (READ-10,
+  SEARCH-10);
+- la redacción de READ-04.
+
+Corregir cualquiera de ellas exige un commit y un experimento nuevos.
+
 ## 5. Defectos del producto encontrados y corregidos en la remediación
 
 Los encontraron el arnés real, G09 y los ensayos con el modelo. Cada uno tiene
@@ -857,7 +941,8 @@ Además, para cumplir P10/P11:
    El 2026-09-14 el owner aprobó llevar esa disciplina al runtime: completar
    los pasos que no son decisiones y dar una inferencia más a la acción
    pendiente (§5; PR05-AGENT-FLOW-HANDOFF §2.4). El experimento 7 lo mide con
-   `qwen3.5:9b` y el perfil lab3.
+   `qwen3.5:9b` y el perfil lab3: 55, 54 y 57 de 60, sin infracciones, con
+   SEARCH en 7/10 en la pasada 2 como único umbral incumplido (§4.9).
 4. **Publicar la rama** y repetir en CI remoto G00–G10. G09 necesita Docker en el
    runner, y G10 fallará hasta que exista evidencia confiable.
 5. **Evidencia del experimento 1.** Se verifica haciendo checkout de `a402c24`.
