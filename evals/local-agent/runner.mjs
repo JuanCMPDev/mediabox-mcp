@@ -277,6 +277,8 @@ export async function runScenario(scenario, ctx) {
           toolNames: i.toolNames, maxTokens: i.maxTokens, promptTokens: i.promptTokens, completionTokens: i.completionTokens,
           tStartMs: Math.round(i.tStart - t0), tFirstByteMs: i.tFirstByte ? Math.round(i.tFirstByte - t0) : null,
           status: i.status, finishReason: i.finishReason,
+          contentChars: i.contentChars, toolCalls: i.toolCalls,
+          ...(i.emptySample !== undefined ? { emptySample: i.emptySample } : {}),
         })),
       });
       return r;

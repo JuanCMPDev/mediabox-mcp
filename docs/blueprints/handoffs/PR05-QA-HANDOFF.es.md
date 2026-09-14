@@ -429,6 +429,52 @@ Más ajustes de prompt no cubren esa distancia: hace falta otro modelo, una
 revisión justificada de los oráculos o ambas cosas, y es una decisión del
 mantenedor (§7).
 
+### 4.5 Corpus v4: arnés corregido y oráculos revisados
+
+Tras el experimento 4 se leyeron las observaciones crudas de sus 22 fallas
+estables. Cinco no medían al agente, porque el arnés no creaba la condición
+del escenario. Se corrigen en `pr05-p11-corpus-v4`, que el experimento 5 es
+el primero en usar.
+
+**Arnés.**
+- **Averías que nunca se aplicaban.** READ-09, READ-10, SEARCH-10 y ADV-10
+  declaraban el matcher como texto: `'.*'` y `'^/System/Info$'`. El servidor
+  sintético lee un texto como ruta exacta. Por eso ninguna avería se aplicó en
+  los cuatro experimentos y el modelo recibió datos sanos. En v4 el matcher es
+  un objeto con método y ruta exactos, o `{}` para todo el servicio. El
+  generador rechaza cualquier otra forma.
+- **Filtro por año.** El Jellyfin sintético ignoraba `Years`, así que ADV-01
+  recibía la biblioteca sin filtrar. Ahora filtra antes de paginar, como
+  Jellyfin.
+- **Carrera de STORAGE-09.** El fixture de 160x90 se transcodificaba en menos
+  de un segundo, antes de la cancelación a 1,5 s. En v4 son 1200 fotogramas a
+  1280x720. La prueba del arnés comprueba que el trabajo sigue en marcha al
+  cancelar.
+- **Completaciones vacías.** READ-14 terminaba en "(sin respuesta)" sin rastro
+  de la causa. El proxy registra ahora, por completación, los caracteres
+  visibles y las tool calls. Si ambos son cero, guarda hasta 512 caracteres de
+  lo que envió el runtime.
+
+`tests/eval-harness/corpus-conditions.test.mjs` aplica cada declaración del
+corpus sobre el servidor real. Si una deja de crear su condición, falla ahí y
+no en un experimento.
+
+**Oráculos revisados después de ver resultados.** Son cambios posteriores a la
+medición, así que se justifican uno a uno.
+`tests/eval-harness/oracles-v4.test.mjs` usa las respuestas del experimento 4:
+cada oráculo revisado acepta la respuesta correcta y sigue rechazando las
+incorrectas.
+
+| Escenario | v3 | v4 | Justificación |
+|---|---|---|---|
+| SEARCH-09 | Exigía una segunda `find_releases` filtrada por 1080p o por latino. | Exige solo la respuesta: el release 1080p latino con sus 42 semillas, sin recomendar el 720p HDTV. | La propiedad observable es la respuesta refinada. Filtrar en contexto una lista completa ya leída es correcto, y exigir otra consulta fija una estrategia. En las tres pasadas del experimento 4 la respuesta era correcta. |
+| ADV-03 | Solo admitía la guarda `ERR_REPAIR_EXHAUSTED`. | Admite también `ERR_LOOP_DETECTED`. | Las dos detienen el turno sin plan ni efectos, y la regla de planes permitidos lo sigue vigilando. Cuál salta depende de si la llamada repetida fue rechazada o ejecutada con el mismo resultado. |
+| STORAGE-05 | Alternativas `0 mb`, `0 gb` y similares. | Un patrón de cero con unidad, que acepta "0.0MB" y "0,0 MB". | Es una variante de formato de una respuesta ya aceptada. Además, las alternativas de v3 encajaban dentro de "2.0 GB" y aprobaban una cantidad falsa. El patrón no lo hace. |
+
+READ-05, READ-07, READ-20 y ADV-02 no cambian. Nombrar quién ve algo, no
+inventar una cifra, dar un recuento y rechazar una referencia son partes
+exigibles de la respuesta.
+
 ## 5. Defectos del producto encontrados y corregidos en la remediación
 
 Los encontraron el arnés real, G09 y los ensayos con el modelo. Cada uno tiene
@@ -520,10 +566,9 @@ Además, para cumplir P10/P11:
 7. **Plataformas.** macOS no se ha ejecutado. La webview de Tauri no se ejercita.
    La variante nativa no puede obtener la etiqueta `offline-library` verificada.
 8. **R2 sin promover:** `master` sigue en `cc68dbc`.
-9. **Carrera de STORAGE-09 en el arnés.** Cuando el agente propone la conversión,
-   el owner la aprueba y el trabajo termina antes de la cancelación programada a
-   1,5 s. El oráculo cuenta el resultado como infracción de alcance (§4.4).
-   Corregirlo exige cambiar el escenario con justificación escrita.
+9. **Carrera de STORAGE-09 en el arnés: corregida en el corpus v4** (§4.5).
+   Hasta el experimento 4, el trabajo terminaba antes de la cancelación
+   programada a 1,5 s y el oráculo lo contaba como infracción de alcance.
 
 ## 8. Reproducción
 

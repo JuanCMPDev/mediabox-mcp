@@ -11,6 +11,51 @@
 
 import http from 'node:http';
 
+/** A completion is at most outputReserve tokens; this bounds a runaway stream. */
+const MAX_CHAT_BODY_BYTES = 4 * 1024 * 1024;
+/** Characters kept from an empty completion so it can be diagnosed. */
+export const EMPTY_SAMPLE_CHARS = 512;
+
+const hasValue = (v) => v !== null && v !== undefined && v !== '' && !(Array.isArray(v) && v.length === 0);
+
+/**
+ * Reads a chat completion (SSE stream or JSON body) and returns what the runtime
+ * reported (usage, finish reason) and what the model emitted: visible content
+ * characters and tool calls. An empty completion (no content, no tool call) also
+ * keeps `emptySample`, the non-empty delta fields the runtime sent, so a turn
+ * that ends in "(sin respuesta)" can be told apart from a swallowed tool call.
+ */
+export function summarizeCompletion(body) {
+  const out = { contentChars: 0, toolCalls: 0 };
+  const payloads = body.split('\n').map((l) => l.trim()).filter((l) => l.startsWith('data:')).map((l) => l.slice(5).trim());
+  if (payloads.length === 0 && body.trim().startsWith('{')) payloads.push(body.trim());
+  const calls = new Set();
+  const meaningful = [];
+  for (const p of payloads) {
+    if (p === '[DONE]') continue;
+    let json;
+    try { json = JSON.parse(p); } catch { continue; }
+    // Usage arrives in the last SSE chunk (stream_options.include_usage) or the JSON body.
+    if (json?.usage && typeof json.usage === 'object') {
+      out.promptTokens = json.usage.prompt_tokens;
+      out.completionTokens = json.usage.completion_tokens;
+    }
+    for (const choice of Array.isArray(json?.choices) ? json.choices : []) {
+      if (choice?.finish_reason) out.finishReason = choice.finish_reason;
+      const delta = choice?.delta ?? choice?.message;
+      if (!delta || typeof delta !== 'object') continue;
+      if (typeof delta.content === 'string') out.contentChars += delta.content.length;
+      if (Array.isArray(delta.tool_calls)) {
+        delta.tool_calls.forEach((tc, i) => calls.add(`${choice.index ?? 0}:${tc?.index ?? tc?.id ?? i}`));
+      }
+      if (Object.entries(delta).some(([k, v]) => k !== 'role' && hasValue(v))) meaningful.push(JSON.stringify(delta));
+    }
+  }
+  out.toolCalls = calls.size;
+  if (out.contentChars === 0 && out.toolCalls === 0) out.emptySample = meaningful.join('').slice(0, EMPTY_SAMPLE_CHARS);
+  return out;
+}
+
 export async function startInferenceProxy({ targetBaseUrl }) {
   const target = new URL(targetBaseUrl);
   const records = [];
@@ -59,34 +104,20 @@ export async function startInferenceProxy({ targetBaseUrl }) {
       }, (up) => {
         rec.status = up.statusCode;
         res.writeHead(up.statusCode, up.headers);
-        let tail = '';
+        const parts = [];
+        let kept = 0;
         up.on('data', (d) => {
           if (rec.tFirstByte === undefined) rec.tFirstByte = performance.now();
           res.write(d);
-          if (rec.kind === 'chat') {
-            tail = (tail + d.toString('utf8')).slice(-8192);
+          if (rec.kind === 'chat' && kept < MAX_CHAT_BODY_BYTES) {
+            parts.push(d);
+            kept += d.length;
           }
         });
         up.on('end', () => {
           rec.tEnd = performance.now();
           res.end();
-          if (rec.kind === 'chat') {
-            // Usage arrives in the last SSE chunk (stream_options.include_usage) or the JSON body;
-            // it may contain nested objects, so every `data:` line is parsed as JSON.
-            const payloads = tail.split('\n').map((l) => l.trim()).filter((l) => l.startsWith('data:')).map((l) => l.slice(5).trim());
-            if (payloads.length === 0 && tail.trim().startsWith('{')) payloads.push(tail.trim());
-            for (const p of payloads) {
-              if (p === '[DONE]') continue;
-              let json;
-              try { json = JSON.parse(p); } catch { continue; }
-              if (json?.usage && typeof json.usage === 'object') {
-                rec.promptTokens = json.usage.prompt_tokens;
-                rec.completionTokens = json.usage.completion_tokens;
-              }
-              const fin = json?.choices?.find?.((c) => c?.finish_reason)?.finish_reason;
-              if (fin) rec.finishReason = fin;
-            }
-          }
+          if (rec.kind === 'chat') Object.assign(rec, summarizeCompletion(Buffer.concat(parts).toString('utf8')));
         });
         up.on('error', () => { rec.error = 'upstream-stream-error'; res.destroy(); });
       });

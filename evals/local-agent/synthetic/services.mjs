@@ -616,6 +616,12 @@ function jellyfinRouter(ctx, env) {
       const set = new Set(types.split(',').map((s) => s.trim().toLowerCase()));
       items = items.filter((it) => set.has(String(it.Type).toLowerCase()));
     }
+    // Like Jellyfin's ItemsController: Years filters by ProductionYear before paging.
+    const years = q('Years');
+    if (years) {
+      const wanted = new Set(String(years).split(',').map((s) => Number(s.trim())).filter(Number.isFinite));
+      items = items.filter((it) => wanted.has(Number(it.ProductionYear)));
+    }
     const term = q('searchTerm');
     if (term) {
       const t = foldText(term);
