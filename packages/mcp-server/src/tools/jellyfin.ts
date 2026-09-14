@@ -5,6 +5,53 @@ import { jfApi, jfCountByParent, textResult } from "../helpers/api.js";
 import { MEDIA_PATH } from "../config.js";
 import { formatBytes } from "../fetchers/utils.js";
 
+/** Block counts of the media disk, as statfs reports them. */
+export interface MediaDiskStats {
+  blocks: number | bigint;
+  bsize:  number | bigint;
+  bfree:  number | bigint;
+}
+
+export interface MediaDisk {
+  name:        "media library";
+  path:        string;
+  total:       string;
+  used:        string;
+  free:        string;
+  usedPercent: number;
+}
+
+// READ-07, experiments 5 and 6: asked about the external backup disk, both models
+// reported the free space of the one unnamed disk as the backup's. The disk is named
+// and the note says what its figures do not cover. Review finding D3: server_status
+// only knows MEDIA_PATH, so the notes must not claim that no other disk is configured,
+// and "no disk space is available" read as a full disk. Both notes stay within the 120
+// characters compaction keeps of a string (chat-core agent/budget.ts).
+export const MEDIA_DISK_NOTE = "These figures are for the media library disk only; any other disk (backup, external) is unknown here.";
+export const NO_DISK_NOTE    = "Disk space is unknown: the media library disk could not be read; any other disk (backup, external) is unknown too.";
+
+/**
+ * The disk part of server_status. `disk` keeps the shape its readers know (the
+ * object, or "N/A" when statfs failed) and only gains `name`; `diskNote` is new.
+ */
+export function describeMediaDisk(mediaPath: string, stats: MediaDiskStats | null): { disk: MediaDisk | "N/A"; diskNote: string } {
+  if (!stats) return { disk: "N/A", diskNote: NO_DISK_NOTE };
+  const total = Number(stats.blocks) * Number(stats.bsize);
+  const free  = Number(stats.bfree)  * Number(stats.bsize);
+  const used  = total - free;
+  return {
+    disk: {
+      name:        "media library",
+      path:        mediaPath,
+      total:       formatBytes(total),
+      used:        formatBytes(used),
+      free:        formatBytes(free),
+      usedPercent: total > 0 ? Math.round((used / total) * 100) : 0,
+    },
+    diskNote: MEDIA_DISK_NOTE,
+  };
+}
+
 export function registerJellyfinTools(server: McpServer): void {
   // 1. SERVER STATUS
   server.registerTool("server_status", {
@@ -31,23 +78,12 @@ export function registerJellyfinTools(server: McpServer): void {
       return out;
     }));
 
-    let disk: unknown = "N/A";
-    try {
-      const s     = await statfs(MEDIA_PATH);
-      const total = Number(s.blocks) * Number(s.bsize);
-      const free  = Number(s.bfree)  * Number(s.bsize);
-      const used  = total - free;
-      disk = {
-        path:        MEDIA_PATH,
-        total:       formatBytes(total),
-        used:        formatBytes(used),
-        free:        formatBytes(free),
-        usedPercent: total > 0 ? Math.round((used / total) * 100) : 0,
-      };
-    } catch { /* MEDIA_PATH unavailable */ }
+    const stats = await statfs(MEDIA_PATH).catch(() => null); // MEDIA_PATH unavailable
+    const { disk, diskNote } = describeMediaDisk(MEDIA_PATH, stats);
     return textResult({
       server: { name: sysInfo.ServerName, version: sysInfo.Version, os: sysInfo.OperatingSystem },
       disk,
+      diskNote,
       libraries: libraryStats,
       activeSessions: sessions.filter((s: any) => s.NowPlayingItem).map((s: any) => ({
         user: s.UserName, device: s.DeviceName, playing: s.NowPlayingItem?.Name,

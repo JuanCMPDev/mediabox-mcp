@@ -79,6 +79,21 @@ describe("manage_files list", () => {
     }
   });
 
+  it("reports file sizes in readable units and gives folders no size", async () => {
+    // STORAGE-05, experiments 5 and 6: a 4096-byte file was listed as "0.0MB".
+    const folder = path.join(roots.media, "tv", "Tamaños");
+    await fs.mkdir(path.join(folder, "Sub"), { recursive: true });
+    await fs.writeFile(path.join(folder, "bloque.nfo"), Buffer.alloc(4096));
+    await fs.writeFile(path.join(folder, "nota.txt"), "x");
+    await fs.writeFile(path.join(folder, "vacío.txt"), "");
+    expect((await list("tv/Tamaños")).items).toEqual([
+      { name: "Sub", type: "dir", path: "media:tv/Tamaños/Sub" },
+      { name: "bloque.nfo", type: "file", size: "4 KB", path: "media:tv/Tamaños/bloque.nfo" },
+      { name: "nota.txt", type: "file", size: "1 B", path: "media:tv/Tamaños/nota.txt" },
+      { name: "vacío.txt", type: "file", size: "0 B", path: "media:tv/Tamaños/vacío.txt" },
+    ]);
+  });
+
   it("lists the folder of a file path and names the requested file", async () => {
     for (const form of [`/data/${SEASON}/Serie Ñandú - S01E01.mkv`, `media:${SEASON}/Serie Ñandú - S01E01.mkv`]) {
       const listing = await list(form);

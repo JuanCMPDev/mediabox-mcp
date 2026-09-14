@@ -111,14 +111,14 @@ export function registerLibraryTools(server: McpServer, context: McpToolContext 
       entries.sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
       const prefix = `${target.rootId}:${target.relativePath ? `${target.relativePath}/` : ""}`;
       const items = await Promise.all(entries.map(async (e) => {
+        // Exact canonical path: what inspect_format reports and proposals accept.
+        const entryPath = `${prefix}${e.name}`;
+        // A folder gets no size: its stat size is the directory entry, not its content.
+        if (e.isDirectory()) return { name: e.name, type: "dir", path: entryPath };
         const s = await fs.stat(path.join(target.full, e.name)).catch(() => null);
-        return {
-          name: e.name,
-          type: e.isDirectory() ? "dir" : "file",
-          size: s ? `${(s.size / 1024 / 1024).toFixed(1)}MB` : "?",
-          // Exact canonical path: what inspect_format reports and proposals accept.
-          path: `${prefix}${e.name}`,
-        };
+        // STORAGE-05, experiments 5 and 6: a 4096-byte file listed as "0.0MB" was taken
+        // for a wrong size (qwen3.5) or for the space a cleanup frees (qwen2.5).
+        return { name: e.name, type: "file", size: s ? formatBytes(s.size) : "?", path: entryPath };
       }));
       return textResult({ path: `${target.rootId}:${target.relativePath}`, ...(requestedFile ? { file: requestedFile } : {}), items });
     }
@@ -202,6 +202,9 @@ export function registerLibraryTools(server: McpServer, context: McpToolContext 
           // Top level so compaction keeps them: the agent must relay both before approval.
           warnings,
           selectedSize: formatBytes(details.selectedBytes),
+          // Quarantine frees no space until an approved purge, so this reads "0 B":
+          // STORAGE-05, experiment 5, announced the selected size as freed.
+          freedNow: formatBytes(details.reclaimableBytes),
           summary: details,
           message: duplicate
             ? `Plan ${effective.id} for these paths is already awaiting owner approval; no second plan was created.`

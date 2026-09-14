@@ -2,7 +2,10 @@ export function formatBytes(bytes: number): string {
   if (bytes >= 1_099_511_627_776) return `${(bytes / 1_099_511_627_776).toFixed(1)} TB`;
   if (bytes >= 1_073_741_824)     return `${(bytes / 1_073_741_824).toFixed(1)} GB`;
   if (bytes >= 1_048_576)         return `${(bytes / 1_048_576).toFixed(1)} MB`;
-  return `${Math.round(bytes / 1024)} KB`;
+  if (bytes >= 1024)              return `${Math.round(bytes / 1024)} KB`;
+  // Below 1 KB the exact byte count, never "0 KB": the models read a size that looks
+  // like zero as a wrong figure or as space a cleanup frees (STORAGE-05, experiments 5 and 6).
+  return `${bytes} B`;
 }
 
 export function formatEta(seconds: number): string {

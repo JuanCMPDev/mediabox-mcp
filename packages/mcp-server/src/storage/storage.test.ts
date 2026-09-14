@@ -379,6 +379,9 @@ describe("DEL-08: MCP proposal, REST approval and the single executor share one 
     expect(envelope.status).toBe("ok");
     expect(envelope.data.status).toBe("awaiting_approval");
     expect(envelope.data.summary.files).toBe(1);
+    // STORAGE-05, experiment 5: the selected size was announced as freed. The result
+    // says in bytes what is selected and that quarantine frees nothing now.
+    expect(envelope.data).toMatchObject({ selectedSize: "7 B", freedNow: "0 B" });
     expect(JSON.parse(result.content[0].text)).toEqual(envelope);
 
     const ownerHeaders = { Authorization: `Bearer ${INTERNAL_API_KEY}`, "Content-Type": "application/json" };
