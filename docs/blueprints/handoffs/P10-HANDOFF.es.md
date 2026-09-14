@@ -100,7 +100,8 @@ auditoría y el estado consolidado del lote están en
   - `VITE_INTERNAL_API_KEY` solo se lee en el servidor de desarrollo de Vite, y
     un build de producción ya no incluye la clave de owner;
   - `packages/ui/.env.local` deja de estar versionado. Contenía una clave de
-    owner, que sigue en el historial de git y debe rotarse.
+    owner, que sigue en el historial de git. Su copia local de desarrollo se
+    sustituyó el 2026-09-12; ver el [registro de rotación y alcance](OWNER-CREDENTIAL-ROTATION-2026-09-12.es.md).
 - Cuarentena en el sistema de archivos del propio archivo
   (`packages/mcp-server/src/storage/quarantine.ts`). El despliegue generado monta
   `/data/movies`, `/data/tv`… por separado bajo `MEDIA_PATH=/data`, y la papelera

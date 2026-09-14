@@ -321,8 +321,12 @@ Además, para cumplir P10/P11:
 
 ## 7. Límites y acciones pendientes
 
-1. **Rotar la clave de owner** que estuvo en `packages/ui/.env.local`. Sigue en el
-   historial de git desde `eae8b10`; dejar de versionarla no la invalida.
+1. **Credencial owner: rotación local realizada el 2026-09-12.** Se sustituyó la
+   copia expuesta en la UI de desarrollo y se creó la configuración coincidente
+   del backend local. La clave del stack Desktop identificado era diferente.
+   Ver [inventario, revocación y pruebas HTTP](OWNER-CREDENTIAL-ROTATION-2026-09-12.es.md).
+   El historial de Git permanece intacto; otros equipos no quedan cubiertos por
+   esta verificación local.
 2. **Controlador confiable.** G10 solo puede ponerse en verde con evidencia de un
    controlador aislado y desechable (§5): sin datos personales, red doméstica ni
    claves del controlador. La infraestructura es decisión del mantenedor.
@@ -379,7 +383,8 @@ La base técnica de P10/P11 ya es sólida:
 Esa base no sustituye al gate.
 
 Para desbloquear PR06:
-1. **Rotar la clave de owner** expuesta en el historial (§7.1).
+1. **Rotación owner local realizada** (§7.1); si existen instalaciones adicionales
+   con la clave expuesta, completar su rotación antes de dar ese alcance por cerrado.
 2. **Decidir la vía de calidad** (§7.3) y medirla en un experimento nuevo que
    cumpla los umbrales.
 3. **Repetir ese experimento con un controlador confiable** y commitear su
