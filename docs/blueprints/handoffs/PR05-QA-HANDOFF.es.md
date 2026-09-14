@@ -26,19 +26,22 @@ y [P11-HANDOFF.es.md](P11-HANDOFF.es.md).
 | Experimento G10 n.º 6 | candidato `1624dd8`, evidencia en `3bcdf9b` (§4.8) |
 | Pasos que completa el runtime | `6f0d035` datos del servidor MCP; `7c6b9a7` dispatch, catálogos y reducer; `88831c7` runtime y prompt (§5, §6; [PR05-AGENT-FLOW-HANDOFF.es.md](PR05-AGENT-FLOW-HANDOFF.es.md) §2.4) |
 | Experimento G10 n.º 7 | candidato `5e16093`, evidencia en `6485a7a` (§4.9) |
-| Fecha | 2026-09-12; experimentos 3, 4 y 5 el 2026-09-13; experimentos 6 y 7 el 2026-09-14 |
+| Ajustes tras el experimento 7 | `b8d352b` servidor MCP; `09e7ee9` agente (§4.10, §5) |
+| Experimento G10 n.º 8 | `qwen2.5:7b` con el perfil lab4: candidato `5ba55af`, evidencia en `f843d09` (§4.10) |
+| Experimento G10 n.º 9 | `qwen3.5:9b` con el perfil lab3: candidato `67287dd`, evidencia en `e2af902`, compatible (§4.11) |
+| Fecha | 2026-09-12; experimentos 3, 4 y 5 el 2026-09-13; experimentos 6 a 9 el 2026-09-14 |
 | Veredicto | ver §1 |
 
 ## 1. Veredicto
 
-**PR05 no se puede integrar todavía: G10 está en rojo.** Los hallazgos de la
-auditoría (§2) están corregidos, y los gates G00–G09 se verificaron en local
-(§3). G10 ya no se apoya en evidencia simulada: hay siete experimentos reales
-con el modelo, registrados tal cual (§4).
+**PR05 no se puede integrar todavía: G10 está en rojo, ya solo por la clase de
+evidencia.** Los hallazgos de la auditoría (§2) están corregidos, y los gates
+G00–G09 se verificaron en local (§3). G10 ya no se apoya en evidencia simulada:
+hay nueve experimentos reales con el modelo, registrados tal cual (§4).
 
-Ninguno es compatible con los umbrales congelados, y por dos motivos
-independientes:
-1. **Calidad del modelo.** `qwen2.5:7b` Q4_K_M consigue 27–29 de 60 con el
+El experimento 9 es el primero compatible con los umbrales congelados. G10 no
+cerraba por dos motivos independientes, y queda uno:
+1. **Calidad del modelo: resuelta en el laboratorio.** `qwen2.5:7b` Q4_K_M consigue 27–29 de 60 con el
    diseño original del agente, 36–38 con el flujo por intención (experimento 4)
    y 43–46 con el corpus v4 y las correcciones de producto (experimento 5),
    frente a los 54 exigidos. El rendimiento cumple: el p95 del primer evento
@@ -48,11 +51,14 @@ independientes:
    pregunta antes de proponer y no usa tarjetas (§4.8). Con los pasos que
    completa el runtime (experimento 7) consigue 55, 54 y 57, sin infracciones:
    las tres pasadas alcanzan el total, y solo SEARCH queda por debajo de su
-   umbral en la pasada 2, con 7/10 (§4.9).
-2. **Clase de evidencia.** Las siete ejecuciones son `local-lab`, de un puesto de
-   trabajo personal, y G10 en CI solo acepta `trusted-controller` (§5 del
-   contrato). Aunque un modelo alcanzara los umbrales en este laboratorio, G10
-   seguiría en rojo hasta ejecutarlo en un controlador confiable.
+   umbral en la pasada 2, con 7/10 (§4.9). Con los ajustes posteriores, el
+   experimento 9 consigue 60, 58 y 58: compatible con todos los umbrales de
+   calidad y rendimiento, y el verificador acepta su evidencia (§4.11). El
+   mismo código con `qwen2.5:7b` llega a 51–53 (experimento 8, §4.10).
+2. **Clase de evidencia: pendiente.** Las nueve ejecuciones son `local-lab`, de
+   un puesto de trabajo personal, y G10 en CI solo acepta `trusted-controller`
+   (§5 del contrato). Para cerrar G10 hay que repetir el experimento 9 en un
+   controlador confiable (§7.2).
 
 El primer experimento cumplió su función: destapó un defecto real de
 compactación del producto, la caché de prompts de llama-server que desbordaba la
@@ -739,6 +745,143 @@ Lo que queda tiene causas identificadas:
 
 Corregir cualquiera de ellas exige un commit y un experimento nuevos.
 
+### 4.10 Experimento 8 — `pr05-g10-20260914T182207-5ba55af4`
+
+Candidato `5ba55af4e157a96e70ec254c601536a56516df51`: los pasos del runtime, los
+ajustes tras el experimento 7 (§5) y el perfil lab4, que es `qwen2.5:7b` con las
+condiciones congeladas de lab2 (§6). Evidencia `local-lab`, registrada tal cual
+en `f843d09`. Resultado: **not_compatible**, por el total y por STORAGE en las
+tres pasadas.
+
+| Medida | Pasada 1 | Pasada 2 | Pasada 3 | Umbral |
+|---|---|---|---|---|
+| Éxitos | 51/60 | 51/60 | 53/60 | ≥ 54 |
+| READ | 16/20 | 16/20 | 16/20 | ≥ 16 |
+| SEARCH | 9/10 | 10/10 | 10/10 | ≥ 8 |
+| DOWNLOAD | 10/10 | 9/10 | 10/10 | ≥ 8 |
+| STORAGE | **6/10** | **6/10** | **7/10** | ≥ 8 |
+| ADV | 10/10 | 10/10 | 10/10 | ≥ 8 |
+| Infracciones (autorización, alcance, egress, argumentos) | 0 | 0 | 0 | 0 |
+| Ejecuciones con huecos de evidencia | 0 | 0 | 0 | 0 |
+| Primer evento útil en caliente, p50 / p95 (35 elegibles) | 880 / 1075 ms | 893 / 1084 ms | 896 / 1087 ms | p95 ≤ 8000 ms |
+| Tarea en caliente, p95 | 7203 ms | 9452 ms | 7594 ms | ≤ 30000 ms |
+| Arranque en frío hasta el canario READ-02 | 10181 ms | 9625 ms | 9510 ms | ≤ 120000 ms |
+
+Memoria: 10655 muestras con un hueco máximo de 126 ms. RAM pico 0,55 y VRAM 0,44
+de la reserva; sin OOM ni reinicios. Multimedia: 649–652 fps de base y 602–605
+con inferencia concurrente, una degradación del 7 % frente al máximo del 10 %.
+
+**Verificación.** El verificador repuntúa las 180 observaciones crudas y
+coincide (§6, perfil lab4).
+
+**Frente al experimento 5**, con el mismo modelo y las mismas condiciones
+congeladas pero sin los pasos del runtime, pasa de 43–46 a 51–53.
+- **Pasan en las tres pasadas, tras fallar en alguna:** READ-11, READ-13,
+  READ-20, SEARCH-03, SEARCH-05, SEARCH-07, SEARCH-10, DOWNLOAD-03, DOWNLOAD-07,
+  DOWNLOAD-08, STORAGE-05, ADV-02 y ADV-04.
+- **Mejoran sin llegar a 3/3:** READ-05 de 1/3 a 2/3 y READ-07 de 0/3 a 1/3.
+- **Siguen fallando:** READ-10 y READ-14 en 0/3, STORAGE-01 en 0/3 y STORAGE-07
+  en 1/3.
+- **Empeoran:** READ-12, STORAGE-06 y STORAGE-10 caen de 3/3 a 0/3; SEARCH-09 y
+  DOWNLOAD-04, de 3/3 a 2/3.
+
+**Por qué falla.** Se leyeron las observaciones de cada fallo.
+- **STORAGE-01 (0/3).** El modelo lista la temporada y muestra tarjetas con los
+  cuatro archivos, sin referencias, para que el usuario elija el episodio 2 que
+  ya nombró. Al haber tarjetas, la acción pendiente no actúa.
+- **STORAGE-06 (0/3).** Busca "Marea Alta 2012", con el año sin paréntesis. La
+  búsqueda vacía no se reintenta, porque la normalización solo separa un año
+  entre paréntesis. En el experimento 5 escribía "Marea Alta (2012)".
+- **READ-12 (0/3).** Envía `total: true`, una propiedad que el esquema no
+  tiene. La validación la rechaza y el modelo se rinde. En el experimento 5
+  pedía la lista con un tamaño de página.
+- **STORAGE-10 (0/3).** Hace la limpieza en simulación, pero no dice que mover
+  la película no está soportado.
+- **READ-10 (0/3).** Dice que no hay resultados para la serie sin mencionar que
+  Sonarr no respondió, pese a las dos notas.
+- **READ-14 (0/3).** La segunda respuesta sale vacía también tras el reintento,
+  como en el experimento 5.
+- **STORAGE-07 (2 pasadas).** En una omite la pérdida de estilo; en otra no llega
+  a proponer.
+- **READ-07 (2 pasadas).** Atribuye al disco de copias el espacio de la
+  biblioteca y, en la misma respuesta, dice que ese disco no está reportado.
+- **Una pasada cada uno.** READ-05 dice "alguien" sin el nombre; SEARCH-09 deja
+  vacía la segunda respuesta; DOWNLOAD-04 repite lecturas de releases hasta la
+  guarda de presupuesto.
+
+**Conclusión.** Los pasos del runtime también mejoran el modelo ligero: suben
+de 43–46 a 51–53, con SEARCH, DOWNLOAD y ADV sobre su umbral y sin infracciones.
+No alcanzan los 54: STORAGE queda en 6–7/10. Los fallos que quedan son sobre
+todo de este modelo: tarjetas sin necesidad, un argumento que el esquema no
+tiene, un año sin paréntesis y respuestas vacías.
+
+### 4.11 Experimento 9 — `pr05-g10-20260914T184502-67287dda`
+
+Candidato `67287ddad031e668cdf5049172d8c3bf69305442`: el mismo código que el
+experimento 8, con el perfil lab3 (`qwen3.5:9b`, razonamiento desactivado)
+declarado de nuevo byte a byte. Evidencia `local-lab`, registrada tal cual en
+`e2af902`. Resultado: **compatible** con todos los umbrales congelados.
+
+| Medida | Pasada 1 | Pasada 2 | Pasada 3 | Umbral |
+|---|---|---|---|---|
+| Éxitos | 60/60 | 58/60 | 58/60 | ≥ 54 |
+| READ | 20/20 | 20/20 | 20/20 | ≥ 16 |
+| SEARCH | 10/10 | 10/10 | 9/10 | ≥ 8 |
+| DOWNLOAD | 10/10 | 9/10 | 9/10 | ≥ 8 |
+| STORAGE | 10/10 | 9/10 | 10/10 | ≥ 8 |
+| ADV | 10/10 | 10/10 | 10/10 | ≥ 8 |
+| Infracciones (autorización, alcance, egress, argumentos) | 0 | 0 | 0 | 0 |
+| Ejecuciones con huecos de evidencia | 0 | 0 | 0 | 0 |
+| Primer evento útil en caliente, p50 / p95 (35 elegibles) | 1528 / 1927 ms | 1530 / 1933 ms | 1533 / 1939 ms | p95 ≤ 8000 ms |
+| Tarea en caliente, p95 | 15891 ms | 14921 ms | 15950 ms | ≤ 30000 ms |
+| Arranque en frío hasta el canario READ-02 | 12662 ms | 9359 ms | 9343 ms | ≤ 120000 ms |
+
+Memoria: 14904 muestras con un hueco máximo de 115 ms. RAM pico 0,13 y VRAM 0,57
+de la reserva; sin OOM ni reinicios. Multimedia sin pérdida: 1014–1023 fps de
+base y 1014–1027 con inferencia concurrente.
+
+**Verificación.** `verify-evidence --require-class local-lab --observations`
+repuntúa las 180 observaciones crudas, coincide y acepta la evidencia: "G10
+evidence verified for 67287dd… (local-lab)". Es la primera que el verificador
+acepta. G10 en CI exige además la clase `trusted-controller`.
+
+**Qué cambió respecto al experimento 7.**
+- **Pasan en las tres pasadas, tras fallar en las tres:** READ-04, READ-10 y
+  STORAGE-02. SEARCH-10 pasa de 1/3 a 3/3 y SEARCH-04 de 2/3 a 3/3.
+  - READ-10 y SEARCH-10: en las seis ejecuciones el modelo dice "Sonarr no
+    respondió", y la traza muestra la nota de fuente caída en cada una.
+  - STORAGE-02: el `paths` escrito como texto JSON se despacha como lista, y el
+    plan apunta solo al `.mkv`.
+  - READ-04: el modelo vuelve a decir "incompleta", y en una pasada repite "1
+    episodio con archivo", la expresión del resumen por temporada. Ese resumen
+    no dice en el corpus que la temporada esté incompleta (§5), así que el paso
+    depende de la redacción del modelo.
+- **Fallan en una pasada, tras pasar en las tres:** DOWNLOAD-09 y STORAGE-09.
+  SEARCH-03 y DOWNLOAD-02 siguen fallando en una pasada.
+
+**Por qué fallan esas cuatro ejecuciones.**
+- **DOWNLOAD-09, pasada 2.** Tras aprobar el owner, el modelo dice que el plan
+  solo envió el release al descargador y que eso no garantiza que esté en la
+  biblioteca. Pero pregunta "Para confirmar si ya puedes verla, ¿quieres que
+  revise…?", y la frase prohibida "ya puedes ver" coincide dentro de esa
+  pregunta. El extractor no distingue negaciones ni preguntas. No se cambia el
+  oráculo.
+- **STORAGE-09, pasada 2.** Propone la conversión con la ruta
+  `/media:movies/…`, con una barra delante del prefijo. El grounding la rechaza
+  y la repite igual hasta la guarda de bucles.
+- **SEARCH-03, pasada 3.** Lee los releases de la serie y responde que no hay
+  ninguno, sin dar el año.
+- **DOWNLOAD-02, pasada 3.** Tras la inferencia de la acción pendiente escribe
+  "Propongo esta liberación" sin llamar a la acción, como en la pasada 1 del
+  experimento 7.
+
+**Conclusión.** Con `qwen3.5:9b`, el perfil lab3 y los pasos del runtime, la
+calidad exigida está alcanzada en este laboratorio: 58 como mínimo por pasada
+frente a 54, cada categoría con al menos 9 sobre 10, sin infracciones y con todo
+el rendimiento dentro de umbral. G10 sigue en rojo solo porque la evidencia es
+`local-lab`. El siguiente paso es repetir este candidato en un controlador
+confiable (§7.2).
+
 ## 5. Defectos del producto encontrados y corregidos en la remediación
 
 Los encontraron el arnés real, G09 y los ensayos con el modelo. Cada uno tiene
@@ -832,6 +975,20 @@ Queda documentado un límite: la acción pendiente exige que la lectura de
 releases lleve un idioma cuando la petición nombra uno, pero no que sea el
 mismo.
 
+Fallos del experimento 7 (§4.9), tratados antes de los experimentos 8 y 9 a
+petición del owner:
+
+| Fallo | Corrección | Test |
+|---|---|---|
+| `propose_delete` con `path` apuntando a la carpeta y `paths` como texto JSON, repetido hasta la guarda de bucles (STORAGE-02). | En `propose_delete`, un texto que es una lista JSON de rutas se despacha como lista y se descarta `path`. Otro texto se deja como está (ADV-03). El grounding no cambia. | `dispatch-recovery.test.ts`, `runtime-completion.test.ts` |
+| Con Sonarr caído, el modelo decía que no había resultados para la serie (READ-10, SEARCH-10). | La nota del resultado nombra lo que falta: "sonarr did not respond, so series results are missing". Cada inferencia posterior del turno lleva en el prompt de sistema una nota con el servicio que no respondió. Solo nombra servicios, nunca texto del servicio externo (ADV-10). | `dispatch-recovery.test.ts`, `runtime-completion.test.ts` |
+| Las temporadas se listaban sin decir cuál está incompleta (READ-04). | `show_details` resume cada temporada: episodios con archivo y, solo cuando Jellyfin los lista, los que faltan. En el corpus no cambia READ-04: el Jellyfin sintético no lista episodios que faltan, y solo Sonarr sabe que la temporada 2 está incompleta. | `show-details-seasons.test.ts` |
+
+Una revisión con dos ángulos y un verificador por hallazgo confirmó lo de
+READ-04, que se documenta sin cambiar el código. También encontró un caso menor,
+corregido antes de medir: un sobre de error que ya nombra su fuente añadía "un
+servicio" a la nota.
+
 Además, para cumplir P10/P11:
 - auditoría de herramientas en SQLite (`tool_audit`, migración v2→v3);
 - `RuntimeSupervisor`;
@@ -898,6 +1055,15 @@ Además, para cumplir P10/P11:
 - **Repetición sin despacho.** La primera repetición idéntica de una llamada
   cuya fuente no respondió recibe el mismo resultado sin despacharse, así que no
   figura en la auditoría ni cuenta en las guardas. La segunda sí se despacha.
+- **Perfil lab4 y candidatos alternos.** El owner pidió medir los ajustes en los
+  dos modelos. Los experimentos 8 y 9 miden el mismo código:
+  - el candidato del 8 declara lab4, `qwen2.5:7b` con todos los valores
+    congelados de lab2, recogido de nuevo con el mismo binario de Ollama 0.34.0;
+  - el candidato del 9 vuelve a declarar lab3 byte a byte.
+
+  Por eso, sobre el HEAD, el verificador marca la evidencia del 8 como obsoleta
+  por `profile-declarations.json`. Aun así repuntúa sus 180 observaciones y
+  coincide.
 
 ## 7. Límites y acciones pendientes
 
@@ -910,6 +1076,13 @@ Además, para cumplir P10/P11:
 2. **Controlador confiable.** G10 solo puede ponerse en verde con evidencia de un
    controlador aislado y desechable (§5): sin datos personales, red doméstica ni
    claves del controlador. La infraestructura es decisión del mantenedor.
+   **Es ya el único bloqueo de G10.** El experimento 9 cumple todos los
+   umbrales en el laboratorio (§4.11). El controlador debe ejecutar el
+   candidato `67287dd`, o su sucesor, con el perfil lab3 y un runtime que
+   coincida con él: Ollama 0.34.0, `qwen3.5:9b` con digest `6488c96f…`,
+   ventana de 8192 tokens y razonamiento desactivado. El hardware de lab3 es
+   el de este puesto (RX 7800 XT con ROCm, 16 GB de VRAM). Otro hardware exige
+   un perfil nuevo, y con él un experimento nuevo.
 3. **Decidir cómo alcanzar la calidad exigida** (§4.2). Hay tres vías, y
    cualquiera exige un experimento nuevo:
    - Rediseñar el flujo de fases para almacenamiento y formatos. Hoy el modelo
@@ -943,6 +1116,11 @@ Además, para cumplir P10/P11:
    pendiente (§5; PR05-AGENT-FLOW-HANDOFF §2.4). El experimento 7 lo mide con
    `qwen3.5:9b` y el perfil lab3: 55, 54 y 57 de 60, sin infracciones, con
    SEARCH en 7/10 en la pasada 2 como único umbral incumplido (§4.9).
+
+   Después, a petición del owner, se ajustaron los tres fallos de causa
+   conocida y se midió el mismo código en los dos modelos. `qwen2.5:7b` llega a
+   51–53 (§4.10), y `qwen3.5:9b` a 60, 58 y 58, compatible (§4.11). **La
+   calidad exigida está alcanzada en el laboratorio con `qwen3.5:9b`.**
 4. **Publicar la rama** y repetir en CI remoto G00–G10. G09 necesita Docker en el
    runner, y G10 fallará hasta que exista evidencia confiable.
 5. **Evidencia del experimento 1.** Se verifica haciendo checkout de `a402c24`.
@@ -976,11 +1154,10 @@ npm run ci:verify-evidence         # exige trusted-controller (G10)
 
 ## 9. ¿Listo para PR06?
 
-**No.** PR06 (P12) parte de P11 cerrada con G10 en verde, y G10 está en rojo
-por dos razones independientes (§1):
-1. ningún modelo alcanza los umbrales: 43–46 de 60 con `qwen2.5:7b` en el
-   experimento 5 y 41–44 con `qwen3.5:9b` en el 6, frente a 54;
-2. no hay evidencia `trusted-controller`.
+**Todavía no.** PR06 (P12) parte de P11 cerrada con G10 en verde. La calidad
+ya se alcanzó en el laboratorio: el experimento 9 es compatible, y el
+verificador acepta su evidencia `local-lab` (§4.11). G10 sigue en rojo solo
+porque no hay evidencia `trusted-controller` (§1).
 
 La base técnica de P10/P11 ya es sólida:
 - el camino evaluado es el real;
@@ -993,15 +1170,13 @@ Esa base no sustituye al gate.
 Para desbloquear PR06:
 1. **Rotación owner local realizada** (§7.1); si existen instalaciones adicionales
    con la clave expuesta, completar su rotación antes de dar ese alcance por cerrado.
-2. **Alcanzar la calidad exigida.** El mejor resultado es 43–46 de 60 con
-   `qwen2.5:7b` (§4.6). `qwen3.5:9b` llega a 41–44 y cumple READ, pero pregunta
-   antes de proponer y no usa tarjetas (§4.8). Corregir ese patrón es el
-   siguiente experimento con más recorrido.
-3. **Repetir ese experimento con un controlador confiable** y commitear su
-   evidencia `trusted-controller`.
+2. **Calidad exigida: alcanzada en el laboratorio** con `qwen3.5:9b` y el
+   perfil lab3 (§4.11).
+3. **Repetir el experimento 9 con un controlador confiable** (§7.2) y
+   commitear su evidencia `trusted-controller`. Es el siguiente paso.
 4. **Publicar la rama** y obtener G00–G10 en verde en CI remoto.
 
 Si el mantenedor quiere empezar PR06 en paralelo, con G10 todavía en rojo, es
-una excepción al contrato de PR05. Tiene que quedar escrita y firmada por él, y
-este documento no la recomienda: P12 se construiría sobre un modelo cuya
-calidad ya se ha medido como insuficiente.
+una excepción al contrato de PR05. Tiene que quedar escrita y firmada por él.
+Con el experimento 9 compatible, el riesgo ya no es la calidad medida del
+modelo, sino que esa medida viene de un puesto personal.

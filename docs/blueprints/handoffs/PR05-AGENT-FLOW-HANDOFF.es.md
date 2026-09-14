@@ -11,7 +11,7 @@ ese documento (experimento G10 n.º 2, `132a45a`).
 | Base | `132a45a` |
 | Commits | `5d2aeaa` lecturas MCP y router; `c76dcb4` flujo del agente; `7956db7` corpus v3 y documentación; `25849f4` correcciones que destapó el experimento 3; `6f0d035`, `7c6b9a7` y `88831c7` pasos que completa el runtime (§2.4) |
 | Fecha | 2026-09-13 |
-| Estado | Medido en los experimentos G10 3 y 4 (§9) y, con el corpus v4 y correcciones de producto, en el 5: 43–46 de 60; con `qwen3.5:9b`, en el 6: 41–44; con los pasos que completa el runtime (§2.4), en el 7: 55, 54 y 57, con SEARCH en 7/10 en la pasada 2. No compatible; G10 sigue en rojo. |
+| Estado | Medido en los experimentos G10 3 y 4 (§9) y, con el corpus v4 y correcciones de producto, en el 5: 43–46 de 60; con `qwen3.5:9b`, en el 6: 41–44; con los pasos que completa el runtime (§2.4), en el 7: 55, 54 y 57, con SEARCH en 7/10 en la pasada 2; con los ajustes, en el 8 (`qwen2.5:7b`): 51, 51 y 53; en el 9 (`qwen3.5:9b`): 60, 58 y 58, **compatible**. G10 sigue en rojo solo por la clase de evidencia `local-lab`. |
 
 ## 1. Problema
 
@@ -173,6 +173,17 @@ rechazados, la línea "Next" dice que ninguno cumple lo pedido. Pide decirlo, si
 buscar de nuevo sin la restricción del usuario ni proponer otro release
 (DOWNLOAD-03).
 
+**Desde el experimento 8.**
+- En `propose_delete`, un `paths` escrito como texto que es una lista JSON de
+  rutas se despacha como lista y se descarta `path`. Otro texto se deja como
+  está, y el grounding no cambia (STORAGE-02).
+- La nota de un resultado parcial nombra lo que falta: "sonarr did not respond,
+  so series results are missing".
+- Tras un fallo de fuente, cada inferencia posterior del turno lleva en el
+  prompt de sistema una nota con el servicio que no respondió. Solo nombra
+  servicios conocidos, nunca texto del servicio externo (READ-10, SEARCH-10,
+  ADV-10). No añade ninguna inferencia.
+
 **Qué grupo recibe tarjetas.** Solo el de los títulos iguales a la consulta,
 con el año entre paréntesis separado como hace el router. La forma normalizada
 del título solo cuenta cuando el resultado es el del reintento.
@@ -193,6 +204,7 @@ que aún no está disponible (DOWNLOAD-08 y 09).
 | `server_status` | Desde el experimento 7, el disco lleva `name: "media library"` y el resultado un `diskNote`: cualquier otro disco, de copias o externo, es desconocido (READ-07). |
 | `manage_files list`, tamaños | Desde el experimento 7, en unidades legibles: "4 KB", no "0.0MB". Las carpetas no llevan tamaño (STORAGE-05). |
 | `propose_cleanup` | Desde el experimento 7 devuelve `freedNow: "0 B"` junto a los avisos: la cuarentena no libera espacio hasta una purga aprobada (STORAGE-05). |
+| `show_details` | Desde el experimento 8, un `seasonSummary` por temporada: episodios con archivo y, solo cuando Jellyfin lista episodios sin archivo, cuántos faltan. Cuenta toda la temporada, no la página. Nunca deduce un total esperado. |
 
 ## 4. Clasificación de intención
 
@@ -268,10 +280,11 @@ Con los pasos que completa el runtime (§2.4), antes del experimento 7:
 
 ## 8. Límites y siguiente paso
 
-- **G10 no alcanza todavía la calidad exigida.** Con `qwen3.5:9b` y los pasos
-  del runtime, el experimento 7 deja SEARCH en 7/10 en una de las tres pasadas
-  (§9). Después hace falta evidencia de un controlador confiable (§7.2 del
-  handoff de QA).
+- **G10 cumple la calidad en el laboratorio, pero sigue en rojo.** El
+  experimento 9, con `qwen3.5:9b`, es compatible con todos los umbrales (§9).
+  Falta evidencia de un controlador confiable (§7.2 del handoff de QA).
+- **El modelo ligero no alcanza el umbral.** Con `qwen2.5:7b`, el experimento 8
+  llega a 51–53 de 60 y deja STORAGE en 6–7/10 (§4.10 del handoff de QA).
 - **Carrera de STORAGE-09.** El arnés cancela la conversión cuando ya terminó,
   y el oráculo lo cuenta como infracción de alcance (§9).
 - **Carpetas grandes.** La compactación muestra al modelo cinco entradas por
@@ -305,9 +318,9 @@ Con los pasos que completa el runtime (§2.4), antes del experimento 7:
   sobre MCP se traza como `ERR_TOOL_FAILURE`; la repetición y la nota lo
   reconocen por el código del sobre.
 
-## 9. Experimentos 3 a 7
+## 9. Experimentos 3 a 9
 
-El detalle está en los §4.3, §4.4, §4.6, §4.8 y §4.9 de [PR05-QA-HANDOFF.es.md](PR05-QA-HANDOFF.es.md).
+El detalle está en los §4.3, §4.4, §4.6 y §4.8 a §4.11 de [PR05-QA-HANDOFF.es.md](PR05-QA-HANDOFF.es.md).
 
 | Experimento | Candidato | Éxitos por pasada | STORAGE | DOWNLOAD | Primer evento útil, p95 |
 |---|---|---|---|---|---|
@@ -317,6 +330,8 @@ El detalle está en los §4.3, §4.4, §4.6, §4.8 y §4.9 de [PR05-QA-HANDOFF.e
 | 5, corpus v4 y correcciones de producto | `b041854` | 46, 46, 43 | 7–9/10 | 7–9/10 | 1,1 s |
 | 6, `qwen3.5:9b` con corpus v5 | `1624dd8` | 44, 41, 43 | 7/10 | 3/10 | 1,9 s |
 | 7, pasos que completa el runtime (§2.4) | `5e16093` | 55, 54, 57 | 9/10 | 9–10/10 | 1,9–2,0 s |
+| 8, `qwen2.5:7b` con el perfil lab4 y los ajustes | `5ba55af` | 51, 51, 53 | 6–7/10 | 9–10/10 | 1,1 s |
+| 9, `qwen3.5:9b` con el perfil lab3 y los ajustes | `67287dd` | 60, 58, 58, **compatible** | 9–10/10 | 9–10/10 | 1,9 s |
 
 El experimento 3 destapó defectos del propio cambio, corregidos en `25849f4`:
 - la línea "Next" de descarga pedía el año, y el modelo lo inventaba;
@@ -351,3 +366,11 @@ Siguen fallando tres casos:
 - `paths` enviado como texto JSON (STORAGE-02);
 - la nota de fuente incompleta, que el modelo no transmite (READ-10, SEARCH-10);
 - la redacción de READ-04 (§4.9 del handoff de QA).
+
+Los ajustes de §2.4 "Desde el experimento 8" se midieron en los dos modelos
+con el mismo código:
+- con `qwen2.5:7b` (experimento 8), 51–53 de 60 frente a los 43–46 del
+  experimento 5;
+- con `qwen3.5:9b` (experimento 9), 60, 58 y 58: compatible con todos los
+  umbrales. READ-04, READ-10, SEARCH-10 y STORAGE-02 pasan en las tres pasadas,
+  y solo quedan cuatro fallos sueltos, cada uno en una pasada.

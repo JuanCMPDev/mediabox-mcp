@@ -14,9 +14,9 @@ corpus se han retirado. El estado consolidado del lote está en
 |---|---|
 | Fase | P11 — evaluación de modelos locales |
 | Lote | PR05, rama `work/local-agent/p10-p11-private-evals` |
-| Candidatos evaluados | `0e813214e817d7575122dd19bb053a4c5943ae82` (experimento 1, perfil lab1), `81c05f6` (experimento 2, perfil lab2, con las correcciones que salieron del 1), `7956db7` (experimento 3, flujo por intención y corpus v3), `25849f4` (experimento 4, con las correcciones que salieron del 3), `b041854` (experimento 5, corpus v4 y correcciones de producto), `1624dd8` (experimento 6, `qwen3.5:9b` con el perfil lab3) y `5e16093` (experimento 7, pasos que completa el runtime) |
+| Candidatos evaluados | `0e813214e817d7575122dd19bb053a4c5943ae82` (experimento 1, perfil lab1), `81c05f6` (experimento 2, perfil lab2, con las correcciones que salieron del 1), `7956db7` (experimento 3, flujo por intención y corpus v3), `25849f4` (experimento 4, con las correcciones que salieron del 3), `b041854` (experimento 5, corpus v4 y correcciones de producto), `1624dd8` (experimento 6, `qwen3.5:9b` con el perfil lab3), `5e16093` (experimento 7, pasos que completa el runtime), `5ba55af` (experimento 8, `qwen2.5:7b` con el perfil lab4) y `67287dd` (experimento 9, `qwen3.5:9b` con el perfil lab3) |
 | Gates | G10 `gate/model-quality`; `test:eval-harness` en CI sin GPU |
-| Fecha | 2026-09-12; experimentos 3, 4 y 5 el 2026-09-13; experimentos 6 y 7 el 2026-09-14 |
+| Fecha | 2026-09-12; experimentos 3, 4 y 5 el 2026-09-13; experimentos 6 a 9 el 2026-09-14 |
 
 ## 1. Camino real evaluado
 
@@ -193,8 +193,17 @@ Los números y el análisis de cada fallo están en
   mismo corpus y el mismo perfil. Resultado not_compatible, con 55, 54 y 57 de
   60 y ninguna infracción. Las tres pasadas alcanzan el total; solo SEARCH
   queda en 7/10 en la pasada 2.
+- **§4.10, experimento 8** sobre `5ba55af`: los mismos pasos más los ajustes
+  del experimento 7, con `qwen2.5:7b` en las condiciones de lab2 (perfil lab4).
+  Resultado not_compatible, con 51, 51 y 53 de 60 y ninguna infracción, frente a
+  los 43–46 del experimento 5. STORAGE queda en 6–7/10.
+- **§4.11, experimento 9** sobre `67287dd`: el mismo código con `qwen3.5:9b` y
+  el perfil lab3. Resultado **compatible**, con 60, 58 y 58 de 60, ninguna
+  infracción y todo el rendimiento dentro de umbral. El verificador lo acepta
+  como evidencia `local-lab`.
 
-**P11 no está cerrada:** G10 sigue en rojo por ese umbral y por clase de
-evidencia (`local-lab`).
+**P11 no está cerrada:** G10 solo sigue en rojo por la clase de evidencia. El
+experimento 9 cumple todos los umbrales en este laboratorio. Falta repetirlo en
+un controlador confiable, que produzca evidencia `trusted-controller` (§5).
 
-Los siete se conservan en `evals/evidence/`, y `current.json` apunta al último.
+Los nueve se conservan en `evals/evidence/`, y `current.json` apunta al último.
