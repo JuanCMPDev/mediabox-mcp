@@ -349,6 +349,16 @@ el candidato en máquina/VM desechable sin datos personales, red doméstica, soc
 del host ni claves del controlador. Pesos preaprovisionados. Un workflow de fork no
 se ejecuta en una GPU personal con secretos, ni usa `pull_request_target` con su código.
 
+Revisión del 2026-09-14 (mantenedor; blueprint §7.5): con un único equipo con GPU, el
+controlador confiable puede ser ese puesto a través de una cuenta estándar dedicada, un
+runner efímero de un solo job lanzado por una etiqueta `g10/` sobre el commit revisado, y
+un cortafuegos que deja la cuenta fuera de las redes privadas y los binarios evaluados en
+loopback. La cuenta no puede leer el perfil del mantenedor, sus credenciales ni sus datos.
+El controlador lo comprueba desde la cuenta antes de medir (`controller-isolation.mjs`) y el
+manifiesto guarda el resultado. El verificador confirma con GitHub el run, su runner y el
+estado que publica el digest del paquete. Diseño, límites y operación en
+[PR05-LOCAL-CONTROLLER.es.md](PR05-LOCAL-CONTROLLER.es.md).
+
 `ExperimentManifest` registra repo, lote, baseRef/baseSha, headSha, checkoutSha, treeSha,
 workflowRef/workflowSha, runId/runAttempt o ID verificable del controlador, hashes de
 lockfiles/política/corpus/fixtures/scorer/thresholds/perfil, versiones de toolchain,

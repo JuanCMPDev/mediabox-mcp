@@ -29,6 +29,7 @@ y [P11-HANDOFF.es.md](P11-HANDOFF.es.md).
 | Ajustes tras el experimento 7 | `b8d352b` servidor MCP; `09e7ee9` agente (§4.10, §5) |
 | Experimento G10 n.º 8 | `qwen2.5:7b` con el perfil lab4: candidato `5ba55af`, evidencia en `f843d09` (§4.10) |
 | Experimento G10 n.º 9 | `qwen3.5:9b` con el perfil lab3: candidato `67287dd`, evidencia en `e2af902`, compatible (§4.11) |
+| Controlador confiable local | `1f396ac` mecanismo y verificador, `2ae5a5f` scripts; [runbook](PR05-LOCAL-CONTROLLER.es.md) (§6, §7.2) |
 | Fecha | 2026-09-12; experimentos 3, 4 y 5 el 2026-09-13; experimentos 6 a 9 el 2026-09-14 |
 | Veredicto | ver §1 |
 
@@ -58,7 +59,10 @@ cerraba por dos motivos independientes, y queda uno:
 2. **Clase de evidencia: pendiente.** Las nueve ejecuciones son `local-lab`, de
    un puesto de trabajo personal, y G10 en CI solo acepta `trusted-controller`
    (§5 del contrato). Para cerrar G10 hay que repetir el experimento 9 en un
-   controlador confiable (§7.2).
+   controlador confiable (§7.2). El 2026-09-14 el mantenedor admitió como
+   controlador confiable su propio puesto con una cuenta dedicada (§6). El
+   controlador está construido y sus ficheros preparados; faltan el
+   aprovisionamiento como administrador y el run.
 
 El primer experimento cumplió su función: destapó un defecto real de
 compactación del producto, la caché de prompts de llama-server que desbordaba la
@@ -1016,6 +1020,19 @@ Además, para cumplir P10/P11:
   arrancar).
 - **Clase de evidencia.** Una ejecución en un puesto de trabajo personal es
   `local-lab`. G10 en CI solo acepta `trusted-controller`, conforme a §5.
+- **Controlador confiable local (revisión del 2026-09-14).** El contrato (§5)
+  pedía una máquina o VM desechable. El mantenedor tiene un solo equipo con GPU
+  y no puede dedicar espacio a otro sistema, así que admitió su propio puesto
+  como controlador confiable, con estas condiciones:
+  - una cuenta estándar dedicada sin acceso a su perfil, credenciales ni datos;
+  - un runner efímero de un solo job lanzado por etiqueta;
+  - un cortafuegos que deja la cuenta fuera de las redes privadas y los binarios
+    evaluados en loopback.
+
+  El controlador lo comprueba desde la cuenta antes de medir, y el verificador
+  confirma el run con GitHub. No es un sandbox frente al candidato: la
+  confianza descansa en que el candidato es un commit revisado del mantenedor.
+  Detalle en [PR05-LOCAL-CONTROLLER.es.md](PR05-LOCAL-CONTROLLER.es.md).
 - **Lectura de planes al inicio del turno.** Desde el experimento 5, una
   pregunta sobre estado lee el estado de los planes abiertos que propuso el
   agente en esa conversación. Esa lectura figura en la auditoría como un
@@ -1074,15 +1091,31 @@ Además, para cumplir P10/P11:
    El historial de Git permanece intacto; otros equipos no quedan cubiertos por
    esta verificación local.
 2. **Controlador confiable.** G10 solo puede ponerse en verde con evidencia de un
-   controlador aislado y desechable (§5): sin datos personales, red doméstica ni
-   claves del controlador. La infraestructura es decisión del mantenedor.
-   **Es ya el único bloqueo de G10.** El experimento 9 cumple todos los
-   umbrales en el laboratorio (§4.11). El controlador debe ejecutar el
+   controlador confiable (§5): sin datos personales, red doméstica ni claves del
+   controlador. **Es ya el único bloqueo de G10.** El experimento 9 cumple todos
+   los umbrales en el laboratorio (§4.11). El controlador debe ejecutar el
    candidato `67287dd`, o su sucesor, con el perfil lab3 y un runtime que
    coincida con él: Ollama 0.34.0, `qwen3.5:9b` con digest `6488c96f…`,
    ventana de 8192 tokens y razonamiento desactivado. El hardware de lab3 es
    el de este puesto (RX 7800 XT con ROCm, 16 GB de VRAM). Otro hardware exige
    un perfil nuevo, y con él un experimento nuevo.
+
+   El 2026-09-14 el mantenedor descartó una partición o una VM y admitió su
+   propio puesto como controlador confiable (§6). Estado:
+   - **Construido** en `1f396ac` y `2ae5a5f`: comprobaciones de aislamiento
+     desde la cuenta, campos del run en el manifiesto, comparación con el perfil
+     sellado, workflow `g10-controller.yml`, verificación del run con GitHub y
+     `fetch-depth: 0` en el job de G10
+     ([runbook](PR05-LOCAL-CONTROLLER.es.md)).
+   - **Preparado**: el runtime, los pesos y el toolchain de lab3 están copiados
+     en `E:\mediabox-g10` y coinciden con el perfil. Un ensayo `dev` con esas
+     copias, en modo laboratorio (`pr05-g10-20260914T224836-2ae5a5fa`), pasó
+     de extremo a extremo sin deriva del perfil.
+   - **Pendiente del mantenedor**: ejecutar `Install-G10Controller.ps1` en una
+     PowerShell elevada. Crea la cuenta y deniega los discos de datos, lo que
+     reescribe los permisos heredados de D:\ y E:\.
+   - **Después**: ensayo, ejecución real sobre el sucesor de `67287dd` que
+     contiene el controlador, y commit de la evidencia `trusted-controller`.
 3. **Decidir cómo alcanzar la calidad exigida** (§4.2). Hay tres vías, y
    cualquiera exige un experimento nuevo:
    - Rediseñar el flujo de fases para almacenamiento y formatos. Hoy el modelo
@@ -1121,8 +1154,11 @@ Además, para cumplir P10/P11:
    conocida y se midió el mismo código en los dos modelos. `qwen2.5:7b` llega a
    51–53 (§4.10), y `qwen3.5:9b` a 60, 58 y 58, compatible (§4.11). **La
    calidad exigida está alcanzada en el laboratorio con `qwen3.5:9b`.**
-4. **Publicar la rama** y repetir en CI remoto G00–G10. G09 necesita Docker en el
-   runner, y G10 fallará hasta que exista evidencia confiable.
+4. **Rama publicada** el 2026-09-14 y mergeada en integración como PR #13
+   (`314c6d7`). En CI remoto pasan G00–G09, la auditoría y el build Docker.
+   G10 falló por dos motivos: la evidencia es `local-lab` y el job hacía un
+   checkout superficial en el que el candidato no existía. El segundo está
+   corregido en `1f396ac` con `fetch-depth: 0`.
 5. **Evidencia del experimento 1.** Se verifica haciendo checkout de `a402c24`.
    En HEAD, el verificador la rechaza porque hay código posterior a su
    candidato (`81c05f6`), y así debe ser. `evals/evidence/current.json` apunta
@@ -1133,7 +1169,11 @@ Además, para cumplir P10/P11:
    verificó que compose lo declara.
 7. **Plataformas.** macOS no se ha ejecutado. La webview de Tauri no se ejercita.
    La variante nativa no puede obtener la etiqueta `offline-library` verificada.
-8. **R2 sin promover:** `master` sigue en `cc68dbc`.
+8. **R2 sin promover:** `master` sigue en `cc68dbc`. Desde el merge de PR05 en
+   integración, un PR de integración a `master` ejecuta también G10, así que
+   la promoción espera a la evidencia `trusted-controller`, salvo que el
+   mantenedor promueva el merge de PR04 (`79d2d16`), que es el alcance de R2.
+   Es decisión suya.
 9. **Carrera de STORAGE-09 en el arnés: corregida en el corpus v4** (§4.5).
    Hasta el experimento 4, el trabajo terminaba antes de la cancelación
    programada a 1,5 s y el oráculo lo contaba como infracción de alcance.
@@ -1150,6 +1190,12 @@ node evals/local-agent/profile.mjs validate ci/model-profiles/qwen2.5-7b-q4km-ol
 node evals/local-agent/controller.mjs --sha <commit> --storage <directorio fuera del repo> --class local-lab
 node scripts/ci/verify-evidence.mjs --require-class local-lab --observations <storage>/<experimentId>
 npm run ci:verify-evidence         # exige trusted-controller (G10)
+
+# Controlador confiable local (PR05-LOCAL-CONTROLLER.es.md)
+powershell -ExecutionPolicy Bypass -File scripts\controller\Install-G10Controller.ps1 -StageOnly   # sin administrador
+powershell -ExecutionPolicy Bypass -File scripts\controller\Install-G10Controller.ps1              # una vez, elevado
+powershell -ExecutionPolicy Bypass -File scripts\controller\Start-G10Controller.ps1 -Rehearsal
+powershell -ExecutionPolicy Bypass -File scripts\controller\Start-G10Controller.ps1 -Sha <commit>
 ```
 
 ## 9. ¿Listo para PR06?
@@ -1172,9 +1218,12 @@ Para desbloquear PR06:
    con la clave expuesta, completar su rotación antes de dar ese alcance por cerrado.
 2. **Calidad exigida: alcanzada en el laboratorio** con `qwen3.5:9b` y el
    perfil lab3 (§4.11).
-3. **Repetir el experimento 9 con un controlador confiable** (§7.2) y
-   commitear su evidencia `trusted-controller`. Es el siguiente paso.
-4. **Publicar la rama** y obtener G00–G10 en verde en CI remoto.
+3. **Repetir el experimento 9 en el controlador confiable local** (§7.2) y
+   commitear su evidencia `trusted-controller`. El controlador está construido
+   y ensayado con el runtime preparado. Falta que el mantenedor aprovisione la
+   cuenta como administrador (`Install-G10Controller.ps1`) y lanzar el run.
+4. **Obtener G00–G10 en verde en CI remoto** sobre el PR del controlador, con
+   esa evidencia commiteada, y mergearlo en integración.
 
 Si el mantenedor quiere empezar PR06 en paralelo, con G10 todavía en rojo, es
 una excepción al contrato de PR05. Tiene que quedar escrita y firmada por él.

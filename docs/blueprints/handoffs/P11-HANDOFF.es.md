@@ -149,7 +149,10 @@ owner (harness, credencial owner) ──REST──► aprobar / rechazar / cance
   recibe las observaciones crudas, vuelve a puntuarlas.
 - **Clase de evidencia.** G10 en CI solo acepta evidencia `trusted-controller`
   vinculada a una ejecución verificable. Un puesto de trabajo personal produce
-  `local-lab`.
+  `local-lab`. Desde el 2026-09-14, el controlador confiable es ese mismo puesto
+  a través de una cuenta dedicada y un runner efímero, con el aislamiento
+  comprobado antes de cada ejecución
+  ([PR05-LOCAL-CONTROLLER.es.md](PR05-LOCAL-CONTROLLER.es.md)).
 
 ## 6. Resultados de los experimentos
 
@@ -204,6 +207,9 @@ Los números y el análisis de cada fallo están en
 
 **P11 no está cerrada:** G10 solo sigue en rojo por la clase de evidencia. El
 experimento 9 cumple todos los umbrales en este laboratorio. Falta repetirlo en
-un controlador confiable, que produzca evidencia `trusted-controller` (§5).
+un controlador confiable, que produzca evidencia `trusted-controller` (§5). El
+controlador confiable local está construido y sus ficheros preparados; queda
+aprovisionar la cuenta como administrador y lanzar el run
+([PR05-LOCAL-CONTROLLER.es.md](PR05-LOCAL-CONTROLLER.es.md)).
 
 Los nueve se conservan en `evals/evidence/`, y `current.json` apunta al último.
