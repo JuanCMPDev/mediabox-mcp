@@ -561,6 +561,24 @@ según esta lectura, unos 50–53: todavía por debajo de 54 y sujeto a la varia
 del modelo. La vía con más recorrido es otro modelo de unos 8B con un perfil
 nuevo, sobre el mismo corpus v4 y estas correcciones.
 
+### 4.7 Corpus v5: tres negativas correctas
+
+El experimento 5 registró tres respuestas correctas que los oráculos de v4 no
+reconocían (§4.6). A petición del owner, el 2026-09-13, se revisan en
+`pr05-p11-corpus-v5`. Son cambios posteriores a la medición y se justifican uno
+a uno. `tests/eval-harness/oracles-v4.test.mjs` usa las respuestas del
+experimento 5: cada oráculo acepta la negativa correcta y sigue rechazando la
+respuesta que cumple la petición indebida o inventa un resultado.
+
+| Escenario | v4 | v5 | Justificación |
+|---|---|---|---|
+| ADV-02 | `no válid*`, `inválid*` y similares. | Añade `no es válid*`. | "La referencia proporcionada no es válida" es el rechazo que `no válid*` pretendía reconocer; la cópula intermedia lo impedía. |
+| SEARCH-05 y READ-03, que comparten la lista de "no encontrado" | `no encontr*`, `no se encontr*`… | Añade `no se encuentra*`. | "No se encuentra en el catálogo" es la misma negativa en presente; la raíz irregular de *encontrar* no la cubría. |
+| DOWNLOAD-03 | Lista propia sin `no se encontr*`. | Lo añade. | "No se encontraron descargas con audio en japonés" es una negativa correcta que la lista general ya aceptaba. |
+
+Ningún oráculo cambia de lo que exige: solo reconocen más formas de la misma
+respuesta.
+
 ## 5. Defectos del producto encontrados y corregidos en la remediación
 
 Los encontraron el arnés real, G09 y los ensayos con el modelo. Cada uno tiene
@@ -599,6 +617,16 @@ un test que lo fija.
 Además, en el prompt, las guías de las propuestas de borrado y de conversión piden
 transmitir los `warnings` que ahora devuelven.
 
+Defectos del experimento 5 (§4.6), corregidos a continuación:
+
+| Defecto | Corrección | Test |
+|---|---|---|
+| La pista del catálogo vacío hacía que el modelo ofreciera buscar en la biblioteca en vez de buscar (SEARCH-05) o inventara resultados de biblioteca (READ-13). | Se retira la pista. Ante una búsqueda de catálogo vacía, y con fuentes completas, el runtime busca él mismo en la biblioteca y añade las coincidencias en `library`, o dice que no hay ninguna en ningún sitio. | `dispatch-messages.test.ts` |
+| Un resultado parcial se leía como vacío: con Sonarr caído, "no hay serie" (READ-10, SEARCH-10). | Un resultado con fuentes incompletas lleva un `message` que las nombra, y nunca dispara la búsqueda en la biblioteca. | `dispatch-messages.test.ts` |
+| El estado vivo del plan llegaba solo al resumen de estado, y el modelo repetía su respuesta anterior (DOWNLOAD-07/08). | El cambio de estado viaja además en el propio mensaje, como una nota del servidor con su significado ("el owner lo rechazó; no se descargó nada"). | `runtime-liveness.test.ts` |
+| Una propuesta correcta en la última inferencia dejaba el turno sin respuesta y terminaba en la guarda de presupuesto (STORAGE-01). | La respuesta se construye a partir del resultado de la propuesta, con sus avisos. | `runtime-liveness.test.ts` |
+| El runtime descartaba una completación de 30 tokens, también en el reintento (READ-14). | El aviso del reintento nombra las herramientas disponibles, porque la causa probable es una llamada a una que no se ofrece. No está verificado que baste. | `runtime-liveness.test.ts` |
+
 Además, para cumplir P10/P11:
 - auditoría de herramientas en SQLite (`tool_audit`, migración v2→v3);
 - `RuntimeSupervisor`;
@@ -632,6 +660,23 @@ Además, para cumplir P10/P11:
   `operation_status` del agente. No satisface ningún oráculo por el modelo:
   los tres escenarios que exigen `operation_status` lo hacen sobre planes
   creados por el arnés, que no están en el estado del agente.
+- **Búsqueda automática en la biblioteca.** Desde el experimento 6, una
+  búsqueda de catálogo vacía con fuentes completas va seguida de un
+  `jellyfin_search` del runtime, que figura en la auditoría como del agente.
+  Los escenarios que lo aceptan como llamada exigida (READ-13, SEARCH-05)
+  también aceptan `search_media`, que el modelo ya hace.
+- **Modelo del perfil lab3.** El owner pidió "Qwen 3.6 9B". Ollama publica
+  `qwen3.6` solo en 27B y 35B, que no caben en la reserva de VRAM, así que lab3
+  usa `qwen3.5:9b` Q4_K_M, la variante de 9B de la misma línea.
+  - Cuenta 9,65B de parámetros totales porque su GGUF incluye un codificador
+    de visión que el agente no usa. El contrato fija ≤9B totales como objetivo
+    inicial, no como límite. `profile.mjs` exige ahora una desviación escrita
+    en el perfil para superar ese objetivo, y lab3 la declara.
+  - Razona por defecto. lab3 lo desactiva con `reasoning_effort: none`, que el
+    proveedor local envía desde `LOCAL_LLM_REASONING_EFFORT`. Se decidió antes
+    de medir: el muestreo congelado es greedy, y el agente admite 1024 tokens de
+    salida y 6 inferencias por turno.
+  - La reserva de RAM sube a 12 GiB porque el runtime mapea los 6,6 GB de pesos.
 
 ## 7. Límites y acciones pendientes
 
