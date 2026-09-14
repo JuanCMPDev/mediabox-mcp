@@ -61,6 +61,25 @@ function getValidator(toolDef: VirtualToolDef): any {
   return validator;
 }
 
+/**
+ * One validation error in words a small model can act on. An unknown property is
+ * named first, with the exposed tool that declares it and the properties this tool
+ * accepts: "root must NOT have additional properties" alone made the model repeat
+ * the same call until the loop guard stopped the turn.
+ */
+function describeValidationError(e: any, toolDef: VirtualToolDef, exposedTools: VirtualToolDef[]): string {
+  const fromFallback = e?.message === 'must NOT have additional properties' && typeof e?.instancePath === 'string' && e.instancePath.length > 1
+    ? e.instancePath.slice(1)
+    : undefined;
+  const unknown = e?.keyword === 'additionalProperties' ? e?.params?.additionalProperty : fromFallback;
+  if (typeof unknown === 'string') {
+    const allowed = Object.keys((toolDef.parameters as any)?.properties ?? {});
+    const owner = exposedTools.find(t => t.name !== toolDef.name && (t.parameters as any)?.properties?.[unknown] !== undefined);
+    return `unknown property '${unknown}'${owner ? ` (${owner.name} accepts it)` : ''}; ${toolDef.name} accepts: ${allowed.join(', ')}`;
+  }
+  return `${e?.instancePath || 'root'} ${e?.message}`;
+}
+
 export interface DispatchValidationResult {
   valid: boolean;
   error?: string;
@@ -97,7 +116,7 @@ export function validateToolCall(
   const isValid = validator(args);
   if (!isValid && validator.errors) {
     const errorDetails = validator.errors
-      .map((e: any) => `${e.instancePath || 'root'} ${e.message}`)
+      .map((e: any) => describeValidationError(e, toolDef, exposedTools))
       .join('; ');
     return {
       valid: false,
@@ -199,6 +218,26 @@ export function validateProposalGrounding(
   return { valid: true };
 }
 
+export const EMPTY_CATALOG_HINT = 'No catalog match. A title already in the library is found with media_query(action:"search").';
+
+/**
+ * An empty catalog search says where else the title can be: the catalog covers
+ * Radarr/Sonarr, and a title that only exists in the library is found by
+ * media_query. The hint goes in `message`, which compaction keeps.
+ */
+function withEmptyCatalogHint(toolName: string, args: Record<string, unknown>, raw: string, exposedTools: VirtualToolDef[]): string {
+  if (toolName !== 'catalog' || args.action !== 'search' || !exposedTools.some(t => t.name === 'media_query')) return raw;
+  try {
+    const parsed = JSON.parse(raw);
+    if (parsed && typeof parsed === 'object' && Array.isArray(parsed.data) && parsed.data.length === 0 && parsed.message === undefined) {
+      return JSON.stringify({ ...parsed, message: EMPTY_CATALOG_HINT });
+    }
+  } catch {
+    /* not JSON: leave it */
+  }
+  return raw;
+}
+
 export async function dispatchToolCall(opts: {
   toolName: string;
   args: Record<string, unknown>;
@@ -297,14 +336,15 @@ export async function dispatchToolCall(opts: {
   const durationMs = Date.now() - t0;
   const failed = detectToolFailure(rawResult);
   const ok = !failed && !errorMessage;
+  const resultText = ok ? withEmptyCatalogHint(toolName, args, rawResult, exposedTools) : rawResult;
 
   return {
     tool: toolName,
     args,
     mcpTool,
     argsHash,
-    result: rawResult,
-    resultDigest: computeResultDigest(rawResult),
+    result: resultText,
+    resultDigest: computeResultDigest(resultText),
     ok,
     rejected: false,
     errorCode,

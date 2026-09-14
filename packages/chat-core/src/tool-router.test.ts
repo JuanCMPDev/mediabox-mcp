@@ -97,6 +97,14 @@ const ROUTING_TABLE: Row[] = [
   ['media_query', { action: 'details', showId: 'jf-1', seasonNumber: 1, page: 1, pageSize: 50 }, 'show_details', { showId: 'jf-1', seasonNumber: 1, page: 1, pageSize: 50 }],
 
   ['catalog', { action: 'search', query: 'Dark', type: 'series', year: 2017, cursor: 'c1', pageSize: 10 }, 'search_media', { query: 'Dark', type: 'series', year: 2017, cursor: 'c1', pageSize: 10 }],
+  // "Title (year)": the year becomes the filter; an explicit year leaves the query alone.
+  ['media_query', { action: 'search', query: 'Marea Alta (2012)', type: 'Movie' }, 'jellyfin_search', { query: 'Marea Alta', type: 'Movie', year: 2012 }],
+  ['catalog', { action: 'search', query: 'Eclipse (2017)' }, 'search_media', { query: 'Eclipse', year: 2017 }],
+  ['catalog', { action: 'search', query: '1917 (2019)', year: 2019 }, 'search_media', { query: '1917 (2019)', year: 2019 }],
+  ['catalog', { action: 'search', query: 'Blade Runner 2049' }, 'search_media', { query: 'Blade Runner 2049' }],
+  // A requested language is strict unless the model says otherwise.
+  ['catalog', { action: 'releases', mediaRef: 'mref_1', audioLanguage: 'ja' }, 'find_releases', { mediaRef: 'mref_1', audioLanguage: 'ja', strictLanguage: true }],
+  ['catalog', { action: 'releases', mediaRef: 'mref_1', audioLanguage: 'es', strictLanguage: false }, 'find_releases', { mediaRef: 'mref_1', audioLanguage: 'es', strictLanguage: false }],
   ['catalog', { action: 'details', mediaRef: 'mref_1' }, 'media_details', { mediaRef: 'mref_1' }],
   ['catalog', { action: 'releases', mediaRef: 'mref_1', resolution: '1080p', audioLanguage: 'es', strictLanguage: true, minSeeders: 2 }, 'find_releases', { mediaRef: 'mref_1', resolution: '1080p', audioLanguage: 'es', strictLanguage: true, minSeeders: 2 }],
   ['catalog', { action: 'propose_download', releaseRef: 'rref_1', mediaRef: 'mref_1', replacement: true }, 'propose_download', { releaseRef: 'rref_1', mediaRef: 'mref_1', replacement: true }],

@@ -128,7 +128,25 @@ const SHORT_ITEM_KEYS = new Set([
   'id', 'title', 'name', 'year', 'mediaRef', 'releaseRef', 'score', 'status', 'resolution',
   'size', 'sizeBytes', 'seeders', 'quality', 'language', 'indexer', 'reason', 'reasons',
   'season', 'episode', 'path', 'planId', 'operation', 'state',
+  // Release verdicts: without them the model could not see that a release was
+  // rejected, or in which language it is.
+  'rejected', 'rejections', 'languages',
 ]);
+
+/** Error messages carry the reason the model must act on; they get more room than data strings. */
+const TOOL_ERROR_STRING_CAP = 300;
+
+function compactError(error: unknown): unknown {
+  if (typeof error === 'string') return truncateString(error, TOOL_ERROR_STRING_CAP);
+  if (error && typeof error === 'object' && !Array.isArray(error)) {
+    const out: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(error as Record<string, unknown>)) {
+      out[k] = typeof v === 'string' ? truncateString(v, TOOL_ERROR_STRING_CAP) : shortenValue(v, 1);
+    }
+    return out;
+  }
+  return shortenValue(error);
+}
 
 function truncateString(val: unknown, maxLen: number): string {
   if (typeof val !== 'string') return String(val ?? '');
@@ -183,7 +201,7 @@ function compactEnvelope(parsed: Record<string, unknown>, itemLimit: number): Re
   if ('status' in parsed) compacted.status = parsed.status;
   if ('sources' in parsed) compacted.sources = shortenValue(parsed.sources);
   if ('page' in parsed) compacted.page = parsed.page;
-  if ('error' in parsed) compacted.error = shortenValue(parsed.error);
+  if ('error' in parsed) compacted.error = compactError(parsed.error);
   if ('message' in parsed) compacted.message = truncateString(parsed.message, TOOL_RESULT_STRING_CAP);
   if ('planId' in parsed) compacted.planId = parsed.planId;
   if ('operation' in parsed) compacted.operation = parsed.operation;

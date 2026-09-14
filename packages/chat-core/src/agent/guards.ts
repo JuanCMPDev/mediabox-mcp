@@ -80,6 +80,16 @@ export class TurnGuards {
     }
   }
 
+  /** True while another inference fits in the turn budget. */
+  hasInferenceBudget(): boolean {
+    return this.inferencesCount < this.config.maxInferences;
+  }
+
+  /** The runtime's single nudged retry of an empty completion is not a stall of the model. */
+  forgiveEmptyInference(): void {
+    this.consecutiveEmptyOrStalledInferences = 0;
+  }
+
   recordInference(text: string, toolCallsCount: number): void {
     this.inferencesCount++;
 

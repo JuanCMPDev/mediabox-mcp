@@ -36,9 +36,9 @@ const ACTION_GUIDANCE: Record<string, string> = {
   'catalog.releases': 'Find the releases of the exact mediaRef. Pass the resolution and audioLanguage the user asked for, with strictLanguage when that language is required, and search again when the user adds a constraint. If no release meets a stated constraint, say so and do not propose.',
   'catalog.propose_download': 'Propose one returned release with its exact releaseRef and mediaRef; the owner reviews the resulting plan in the app.',
   'library_ops.list': 'List a folder with path; any path returned by media_query works, even a file path. Each file comes with its exact path: take the requested episode or movie and leave extras and neighbors out.',
-  'library_ops.propose_delete': 'Propose quarantine with paths holding only the exact requested files, copied from the listing. Quarantine frees no disk space until the owner purges it; never promise freed bytes.',
+  'library_ops.propose_delete': 'Propose quarantine with paths holding only the exact requested files, copied from the listing. Quarantine frees no disk space until the owner purges it; never promise freed bytes. Relay every warning the proposal returns.',
   'media_format.analyze': 'Inspect one exact file path from a listing before any conversion; read streams, codecs, supported profiles and warnings.',
-  'media_format.propose': 'Propose an analyzed path with job remux, subtitle-convert or transcode. Omit profileName for the job default, or pick a supported profileName from the schema; disclose subtitle style loss when reported.',
+  'media_format.propose': 'Propose an analyzed path with job remux, subtitle-convert or transcode. Omit profileName for the job default, or pick a supported profileName from the schema. Relay every warning the proposal returns, such as what the profile loses.',
   'downloads.status': 'Read current queues by source. source=all is the default; use page/pageSize. Keep sources distinct and disclose unavailable sources.',
   'downloads.list_queue': 'Read queue entries with source=all|sonarr|radarr|qbittorrent and page/pageSize. Never sum duplicated client/manager entries or treat an unavailable queue as empty.',
   'operations.status': 'Read the actual plan state using its returned planId; submitted or queued does not mean media is available.',
@@ -55,11 +55,11 @@ function nextRequirement(options: PhasePromptOptions, available: Set<string>): s
   const refs = options.references ?? {};
   switch (options.intentKind) {
     case 'delete':
-      if (has('library_ops.propose_delete')) return 'Next: propose quarantine of only the exact requested files, copying each path from the listing, then report the returned approval state. Quarantine frees no disk space until the owner purges it.';
+      if (has('library_ops.propose_delete')) return 'Next: propose quarantine of only the exact requested files, copying each path from the listing, then report the returned approval state and its warnings. Quarantine frees no disk space until the owner purges it.';
       if (has('media_query.search', 'library_ops.list')) return 'Next: find the title with media_query(action:"search"), call library_ops(action:"list") on its folder (a returned path works) and pick the exact files. A deletion can be proposed only after that listing.';
       break;
     case 'convert':
-      if (has('media_format.propose')) return 'Next: propose the analyzed file with the requested job and a supported profile, then report the returned approval state.';
+      if (has('media_format.propose')) return 'Next: propose the analyzed file with the requested job and a supported profile, then report the returned approval state and its warnings, such as what the profile loses.';
       if (refs.paths?.length && has('media_format.analyze')) return 'Next: call media_format(action:"analyze") on the exact file path from the listing. A listed path is not an analysis.';
       if (has('media_query.search', 'library_ops.list', 'media_format.analyze')) return 'Next: find the title with media_query(action:"search"), list its folder with library_ops(action:"list"), then call media_format(action:"analyze") on the exact file. A conversion can be proposed only after that analysis.';
       break;
@@ -72,9 +72,9 @@ function nextRequirement(options: PhasePromptOptions, available: Set<string>): s
     case 'status':
       if (has('operations.status')) {
         const availability = has('downloads.list_queue', 'media_query.search')
-          ? ' For a download, also check downloads(action:"list_queue") and media_query(action:"search") before saying it is available; approved or queued does not mean available.'
+          ? ' For a download, also check downloads(action:"list_queue") and media_query(action:"search") before saying it is available; approved, queued or succeeded only means the release was sent to the downloader.'
           : '';
-        return `Next: read the plan with operations(action:"status") using its planId from the message or RecentPlans.${availability}`;
+        return `Next: read the plan with operations(action:"status") using its planId from the message or RecentPlans, which shows its live status. A rejected or cancelled plan changed nothing.${availability}`;
       }
       break;
     case 'library':
@@ -98,7 +98,10 @@ function nextRequirement(options: PhasePromptOptions, available: Set<string>): s
       break;
   }
   if ((!options.intentKind || options.intentKind === 'other') && has('catalog.search')) {
-    return 'Next: to find a title, search with catalog(action:"search"), which also covers titles not in the library; media_query only covers the local library. Ask when the exact target is unclear.';
+    const library = has('media_query.search')
+      ? ' If the catalog finds nothing, search the library with media_query(action:"search") before saying it does not exist.'
+      : '';
+    return `Next: to find a title, search with catalog(action:"search"), which also covers titles not in the library; media_query only covers the local library.${library} Ask when the exact target is unclear.`;
   }
   return 'Next: use the relevant available read to establish the requested facts. Ask for clarification when the exact target cannot be determined.';
 }

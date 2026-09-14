@@ -502,6 +502,16 @@ un test que lo fija.
 | **Corpus v4.** Una excepción de una herramienta llegaba al agente con su mensaje crudo: el cuerpo del servicio externo o rutas del host. En ADV-10 ese cuerpo lleva un canario y una URL de exfiltración. No se notaba porque hasta v4 las averías no se aplicaban. | `instrumentToolErrors` devuelve un sobre de error con código estable. De un servicio externo solo conserva el nombre y el código HTTP, y la auditoría registra ese código. | `tool-errors.test.ts`, `corpus-conditions.test.mjs` (ADV-10), `stack.test.mjs` (test 6) |
 | **Experimento 4.** Las propuestas solo marcaban con booleanos que un archivo es un enlace duro o que el perfil pierde información, y el agente no lo contaba (STORAGE-05/07). | Las propuestas de borrado y de conversión llevan `warnings` legibles en el nivel superior del resultado, donde la compactación los conserva. | `storage.test.ts`, `media-jobs.test.ts` |
 | **Experimento 4.** El ranking de releases solo entendía latino, español e inglés. Un requisito de audio japonés se ignoraba aunque fuera estricto, y se proponía un release latino (DOWNLOAD-03). | Política de ranking 1.1.0: reconoce ocho idiomas más por el nombre que da Radarr/Sonarr y por el título. Un idioma estricto que no se puede confirmar rechaza el release. | `queries.test.ts` |
+| **Experimento 4.** El cliente MCP envolvía un sobre de error como texto, y la compactación lo cortaba a 120 caracteres, antes del código y del mensaje. El modelo solo veía "status: error" ante una descarga ya en cola (DOWNLOAD-05) o una referencia falsa (ADV-02). | El sobre sigue siendo un objeto, y los textos de error admiten hasta 300 caracteres al compactar. | `mcp-client.test.ts` |
+| **Experimento 4.** Una llamada rechazada decía "root must NOT have additional properties", y el modelo la repetía hasta la guarda de bucles (STORAGE-01, ADV-03, SEARCH-10). | El error nombra primero la propiedad desconocida, la herramienta expuesta que la acepta y las permitidas. | `dispatch-messages.test.ts` |
+| **Experimento 4.** "Marea Alta (2012)" se buscaba como título y no encontraba nada (STORAGE-06). | Un año entre paréntesis al final de la consulta pasa a ser el filtro de año. | `tool-router.test.ts` |
+| **Experimento 4.** Un idioma pedido no era estricto, y la compactación descartaba de cada release `rejected`, `rejections` y `languages`. El modelo no podía ver que un release estaba rechazado (DOWNLOAD-03). | Un idioma pedido es estricto salvo que el modelo diga lo contrario, y la compactación conserva esos tres campos. | `tool-router.test.ts`, `compaction-verdicts.test.ts` |
+| **Experimento 4.** Una búsqueda de catálogo vacía terminaba el turno aunque el título estuviera en la biblioteca (READ-13). | El resultado vacío indica que un título de la biblioteca se busca con `media_query`, y la guía lo pide antes de decir que no existe. | `dispatch-messages.test.ts` |
+| **Experimento 4.** Una completación vacía, sin texto ni tool call, terminaba en "(sin respuesta)" (READ-14). | Un reintento, con un aviso en el prompt de sistema: con muestreo fijo, la misma petición devolvería lo mismo. | `runtime-liveness.test.ts` |
+| **Experimento 4.** Tras rechazar o aprobar el owner, el agente repetía el estado del turno de la propuesta (DOWNLOAD-07/09). Además, un `operation_status` leído por el modelo no actualizaba el estado: la respuesta usa `id` y el runtime buscaba `planId`. | Una pregunta sobre estado lee primero el estado vivo de hasta tres planes abiertos de la conversación, y la lectura del modelo se registra. | `runtime-liveness.test.ts` |
+
+Además, en el prompt, las guías de las propuestas de borrado y de conversión piden
+transmitir los `warnings` que ahora devuelven.
 
 Además, para cumplir P10/P11:
 - auditoría de herramientas en SQLite (`tool_audit`, migración v2→v3);
@@ -530,6 +540,12 @@ Además, para cumplir P10/P11:
   arrancar).
 - **Clase de evidencia.** Una ejecución en un puesto de trabajo personal es
   `local-lab`. G10 en CI solo acepta `trusted-controller`, conforme a §5.
+- **Lectura de planes al inicio del turno.** Desde el experimento 5, una
+  pregunta sobre estado lee el estado de los planes abiertos que propuso el
+  agente en esa conversación. Esa lectura figura en la auditoría como un
+  `operation_status` del agente. No satisface ningún oráculo por el modelo:
+  los tres escenarios que exigen `operation_status` lo hacen sobre planes
+  creados por el arnés, que no están en el estado del agente.
 
 ## 7. Límites y acciones pendientes
 

@@ -466,6 +466,17 @@ export class AgentRuntime {
       }
       history.push({ role: 'user', content: message });
       historyStore.set(conversationId, history);
+
+      // Live status of this conversation's open plans (§2.2), for a question about
+      // state. The owner approves, rejects or cancels in the app between turns;
+      // without this read the agent repeated the status of the proposal turn. A
+      // proposal or a selection acts instead, and the server checks duplicates.
+      if (intent && PLAN_STATUS_INTENTS.has(intent.kind)) {
+        for (const update of await readOpenPlanStatuses(state.proposals, mcpCall, signal)) {
+          state = reduce(state, { type: 'operation_status', planId: update.planId, status: update.status }, clock);
+          stateNotes.push(`plan ${update.planId} is ${update.status}`);
+        }
+      }
     }
 
     // 4. Initialize trace (§2.10 / AGT-10). turnId is deterministic (§6.12).
@@ -487,6 +498,8 @@ export class AgentRuntime {
 
     let repairAttempted = false;
     let turnCompleted = false;
+    let emptyRetried = false;
+    let emptyNudge = false;
 
     // Pending tool calls announced to the provider but whose results are not yet
     // in the history. Any exit path must flush them (§2.5).
@@ -568,7 +581,10 @@ export class AgentRuntime {
         );
         trace.budgetUsed.inputBudget = budget.inputBudget;
 
-        const combinedSystemPrompt = `${prepared.systemPrompt}\n\n${prepared.stateSummary}`;
+        // Only the retry right after an empty completion carries the nudge.
+        const nudge = emptyNudge;
+        emptyNudge = false;
+        const combinedSystemPrompt = `${prepared.systemPrompt}\n\n${prepared.stateSummary}${nudge ? `\n\n${EMPTY_REPLY_NUDGE}` : ''}`;
 
         let accText = '';
         const accCalls: ToolCallInfo[] = [];
@@ -745,7 +761,11 @@ export class AgentRuntime {
                 !parsed?.sources?.some((source: any) => source.completeness !== 'complete');
               if (completeResult) references = extractEntitledReferences(tc.name, effectiveArgs, parsed);
 
-              const plan = (parsed?.planId ? parsed : parsed?.data?.planId ? parsed.data : undefined) as
+              // operation_status answers with the plan summary, keyed by `id`.
+              const summaryPlan = typeof parsed?.id === 'string' && parsed.id.startsWith('plan_') && typeof parsed?.status === 'string'
+                ? { planId: parsed.id, status: parsed.status }
+                : undefined;
+              const plan = (parsed?.planId ? parsed : parsed?.data?.planId ? parsed.data : summaryPlan) as
                 | Record<string, any>
                 | undefined;
 
@@ -822,6 +842,16 @@ export class AgentRuntime {
         }
 
         // ── Final Natural Language Response ──────────────────────────────────
+        // An empty completion (no text, no tool call) gets one retry. With fixed
+        // sampling the identical request returns the same empty reply, so the retry
+        // carries a nudge in the system prompt.
+        if (!accText.trim() && !emptyRetried && guards.hasInferenceBudget()) {
+          emptyRetried = true;
+          emptyNudge = true;
+          guards.forgiveEmptyInference();
+          trace.guardDecisions.push('empty completion: retried once with a nudge');
+          continue;
+        }
         const finalText = accText || fallbacks.empty;
         history.push({ role: 'assistant', content: finalText });
         persistHistory();
@@ -876,6 +906,48 @@ export class AgentRuntime {
       }
     }
   }
+}
+
+const EMPTY_REPLY_NUDGE = 'Your previous reply was empty. Reply to the last user message now: answer it with the data you have, or call one of the available tools.';
+
+const OPEN_PLAN_STATUSES = new Set(['planned', 'awaiting_approval', 'queued', 'running', 'verifying', 'cancel_requested']);
+/** Questions about state, where a stale plan status would reach the answer. */
+const PLAN_STATUS_INTENTS: ReadonlySet<IntentKind> = new Set<IntentKind>(['status', 'queue', 'library', 'server']);
+const MAX_PLAN_STATUS_READS = 3;
+
+/** Status of `planId` in an operation_status result: the plan summary ({id, status}) or an envelope. */
+function planStatusOf(parsed: unknown, planId: string): string | undefined {
+  if (!parsed || typeof parsed !== 'object') return undefined;
+  const root = parsed as Record<string, any>;
+  for (const candidate of [root, root.data]) {
+    if (candidate && typeof candidate === 'object' && (candidate.id === planId || candidate.planId === planId) && typeof candidate.status === 'string') {
+      return candidate.status;
+    }
+  }
+  return undefined;
+}
+
+/**
+ * Reads the live status of the most recent open plans of the conversation. A
+ * failed read keeps the recorded status: the model can still read it itself.
+ */
+export async function readOpenPlanStatuses(
+  proposals: WorkflowState['proposals'],
+  mcpCall: StreamChatOptions['mcpCall'],
+  signal?: AbortSignal,
+): Promise<Array<{ planId: string; status: string }>> {
+  const open = proposals.filter(p => OPEN_PLAN_STATUSES.has(p.status)).slice(-MAX_PLAN_STATUS_READS);
+  const updates: Array<{ planId: string; status: string }> = [];
+  for (const proposal of open) {
+    if (signal?.aborted) break;
+    try {
+      const status = planStatusOf(JSON.parse(await mcpCall('operation_status', { planId: proposal.planId }, { signal })), proposal.planId);
+      if (status && status !== proposal.status) updates.push({ planId: proposal.planId, status });
+    } catch {
+      /* keep the recorded status */
+    }
+  }
+  return updates;
 }
 
 function guardMessage(code: string, fallbacks: Fallbacks, detail: string): string {

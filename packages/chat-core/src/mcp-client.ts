@@ -50,14 +50,28 @@ function planChangedLibrary(name: string, text: string): boolean {
   }
 }
 
-interface ToolCallResultLike {
+export interface ToolCallResultLike {
   content?: unknown;
   isError?: boolean;
   structuredContent?: unknown;
 }
 
+/** A JSON object that reports an error (an error envelope), or null for plain text. */
+function parseErrorObject(text: string): Record<string, unknown> | null {
+  try {
+    const parsed = JSON.parse(text) as unknown;
+    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+      const obj = parsed as Record<string, unknown>;
+      if (obj.error !== undefined || obj.status === 'error') return obj;
+    }
+  } catch {
+    /* plain text */
+  }
+  return null;
+}
+
 /** Flatten an MCP tool result into bounded text for the LLM. */
-function normalizeResult(name: string, result: ToolCallResultLike): string {
+export function normalizeResult(name: string, result: ToolCallResultLike): string {
   const content = Array.isArray(result.content)
     ? (result.content as Array<{ type?: string; text?: unknown }>)
     : [];
@@ -71,6 +85,11 @@ function normalizeResult(name: string, result: ToolCallResultLike): string {
   }
 
   if (result.isError === true) {
+    // An error envelope stays an object, so compaction keeps its code and message.
+    // Wrapped as a string, it was cut at 120 characters, before the code and the
+    // message ("already in the radarr queue"), and the model saw only "status: error".
+    const structured = parseErrorObject(text);
+    if (structured) return boundToolResultText(JSON.stringify({ ...structured, isError: true }));
     return boundToolResultText(JSON.stringify({ isError: true, error: text || `Tool ${name} failed` }));
   }
   return boundToolResultText(text);

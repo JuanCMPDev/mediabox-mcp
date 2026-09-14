@@ -123,7 +123,8 @@ describe('Prompt follows the capabilities of the active request', () => {
     expect(owner).not.toMatch(/propose_(download|delete)|media_format\(action:"propose"\)/);
     const status = buildSystemPromptForPhase('en', 'orient', { intentKind: 'status' });
     expect(status).toContain('operations(action:"status")');
-    expect(status).toContain('approved or queued does not mean available');
+    expect(status).toContain('approved, queued or succeeded only means the release was sent to the downloader');
+    expect(status).toContain('RecentPlans, which shows its live status');
     const server = buildSystemPromptForPhase('en', 'orient', { intentKind: 'server' });
     expect(server).toContain('server_info(action:"status")');
     expect(server).toContain('A disk that is not reported is unknown');
