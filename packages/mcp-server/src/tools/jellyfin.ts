@@ -52,6 +52,47 @@ export function describeMediaDisk(mediaPath: string, stats: MediaDiskStats | nul
   };
 }
 
+/**
+ * One season of show_details, counted over every episode of the season, never only
+ * the page of episodes the result lists (READ-11 pages an 80-episode season).
+ */
+export interface SeasonSummary {
+  season?:          number;
+  name?:            string;
+  episodesWithFile: number;
+  /** Present only when Jellyfin itself lists episodes of the season without a file. */
+  missingEpisodes?: number;
+  /** Present, and false, only in that same case. */
+  complete?:        boolean;
+}
+
+/**
+ * Jellyfin lists an episode it knows of but has no file for as a virtual item
+ * (LocationType "Virtual"; `IsMissing` where a server reports it).
+ */
+export function isMissingEpisode(episode: any): boolean {
+  return episode?.LocationType === "Virtual" || episode?.IsMissing === true;
+}
+
+// READ-04, G10 experiment 7 (pr05-g10-20260914T154155-5e160936): asked which seasons
+// were complete, the model listed the episodes of each season but wrote that season 2
+// "tiene solo el primer episodio visto" and never called it incomplete. The summary
+// says, per season, how many episodes have a file. It never assumes how many episodes
+// a season should have: `missingEpisodes` and `complete: false` appear only when
+// Jellyfin lists episodes of that season without a file, and a season with none gets
+// no completeness claim, because Jellyfin may simply not report missing episodes.
+// The synthetic Jellyfin of the G10 corpus lists no such episode, so for READ-04 the
+// summary gives 3 and 1 episodes with a file and says nothing about completeness.
+export function summarizeSeason(season: { IndexNumber?: number; Name?: string }, episodes: any[]): SeasonSummary {
+  const missing = episodes.filter(isMissingEpisode).length;
+  const summary: SeasonSummary = { season: season.IndexNumber, name: season.Name, episodesWithFile: episodes.length - missing };
+  if (missing > 0) {
+    summary.missingEpisodes = missing;
+    summary.complete = false;
+  }
+  return summary;
+}
+
 export function registerJellyfinTools(server: McpServer): void {
   // 1. SERVER STATUS
   server.registerTool("server_status", {
@@ -163,13 +204,20 @@ export function registerJellyfinTools(server: McpServer): void {
 
       // Collect all episodes from requested seasons
       const allEpisodes: { season: string; seasonNumber: number; episode: any }[] = [];
+      const seasonSummary: SeasonSummary[] = [];
       for (const s of filteredSeasons) {
         const eps = await jfApi(`/Shows/${showId}/Episodes?SeasonId=${s.Id}&Fields=Path,MediaSources`);
+        // Counted from every episode of the season, before pagination cuts the list (READ-04).
+        seasonSummary.push(summarizeSeason(s, eps.Items));
         for (const e of eps.Items) {
           allEpisodes.push({
             season: s.Name,
             seasonNumber: s.IndexNumber,
-            episode: { id: e.Id, number: e.IndexNumber, name: e.Name, hasSubtitles: e.HasSubtitles, path: e.Path },
+            episode: {
+              id: e.Id, number: e.IndexNumber, name: e.Name, hasSubtitles: e.HasSubtitles, path: e.Path,
+              // An episode Jellyfin lists without a file is not one the owner has.
+              ...(isMissingEpisode(e) ? { missing: true } : {}),
+            },
           });
         }
       }
@@ -190,6 +238,10 @@ export function registerJellyfinTools(server: McpServer): void {
         name: show.Name, year: show.ProductionYear, overview: show.Overview, genres: show.Genres,
         rating: show.CommunityRating, status: show.Status,
         totalSeasons: seasons.Items.length,
+        // A top-level list, so the agent's compaction (chat-core agent/budget.ts) keeps
+        // it for this non-envelope payload whatever page of episodes is listed. It keeps
+        // as many seasons as any other list and then says how many more there are.
+        seasonSummary,
         seasons: [...seasonMap.values()],
         pagination: { page, pageSize, totalPages, totalItems },
       });
