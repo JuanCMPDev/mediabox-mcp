@@ -1,0 +1,407 @@
+{
+  "schemaVersion": 2,
+  "evidenceType": "G10-model-quality-report",
+  "experimentId": "pr05-g10-20260915T013942-c605e060",
+  "evidenceClass": "trusted-controller",
+  "acceptedForG10": true,
+  "compatibility": "compatible",
+  "candidate": {
+    "baseRef": "integration/local-agent-v1",
+    "baseSha": "38143607baa9b477785edfa543cbe4c2e2952593",
+    "headSha": "c605e06071a710445799f3dadceb3be253045ef6",
+    "checkoutSha": "c605e06071a710445799f3dadceb3be253045ef6",
+    "treeSha": "28c3249b8dea6ebb276365e9421daf6d00e3de63"
+  },
+  "profile": {
+    "profileId": "qwen3.5-9b-q4km-ollama0.34-win11-rx7800xt-lab3",
+    "sha256": "ee96ce02921b82e359ea49206cacb8fd2716641ac85cfeca184bd3481b54c524",
+    "sealedAt": "2026-09-13T23:54:20-05:00"
+  },
+  "runtime": {
+    "name": "ollama",
+    "version": "0.34.0",
+    "model": "qwen3.5:9b",
+    "manifestDigestAtStart": "sha256:6488c96fa5faab64bb65cbd30d4289e20e6130ef535a93ef9a49f42eda893ea7",
+    "manifestDigestAtEnd": "sha256:6488c96fa5faab64bb65cbd30d4289e20e6130ef535a93ef9a49f42eda893ea7",
+    "binarySha256": "sha256:1f9b38e594a3e1cffdf606a507ac8660626c0985ee0782dd6b49309153d38080",
+    "modelStore": "OLLAMA_MODELS"
+  },
+  "toolchain": {
+    "node": "v22.19.0",
+    "nodeSha256": "sha256:995a3fb3cefad590cd3f4b321532a4b9582fb9c6575320ed2e3e894caac3e362",
+    "os": "Windows_NT 10.0.26200 x64",
+    "ffmpeg": "ffmpeg version 8.1-full_build-www.gyan.dev Copyright (c) 2000-2026 the FFmpeg developers"
+  },
+  "controller": {
+    "id": "ctl-eddbe28b1b30",
+    "kind": "github-actions",
+    "cleanCheckout": true,
+    "startedAt": "2026-09-15T01:39:42.915Z",
+    "finishedAt": "2026-09-15T02:09:04.681Z",
+    "repository": "JuanCMPDev/mediabox-mcp",
+    "runId": 34918137989,
+    "runAttempt": 1,
+    "workflowRef": "JuanCMPDev/mediabox-mcp/.github/workflows/g10-controller.yml@refs/tags/g10/c605e060-20260915T013922",
+    "workflowSha": "c605e06071a710445799f3dadceb3be253045ef6",
+    "event": "push",
+    "ref": "refs/tags/g10/c605e060-20260915T013922",
+    "runnerName": "mediabox-g10-20260915T013922",
+    "runnerEnvironment": "self-hosted",
+    "isolation": {
+      "ok": true,
+      "provisioningSha256": "9e33bdfd37f0de24e468226104327aa04a65ac0fa5be2e146dffcbda0d2e26e8",
+      "checks": [
+        {
+          "id": "account",
+          "ok": true
+        },
+        {
+          "id": "not-administrator",
+          "ok": true
+        },
+        {
+          "id": "provisioning-read-only",
+          "ok": true
+        },
+        {
+          "id": "maintainer-profile",
+          "ok": true
+        },
+        {
+          "id": "denied-paths",
+          "ok": true
+        },
+        {
+          "id": "drives",
+          "ok": true
+        },
+        {
+          "id": "firewall-profiles",
+          "ok": true
+        },
+        {
+          "id": "firewall-rules",
+          "ok": true
+        },
+        {
+          "id": "lan-blocked",
+          "ok": true
+        },
+        {
+          "id": "eval-loopback-only",
+          "ok": true
+        },
+        {
+          "id": "host-sockets",
+          "ok": true
+        }
+      ]
+    }
+  },
+  "passes": [
+    {
+      "passNumber": 1,
+      "passRunId": "pr05-g10-20260915T013942-c605e060-p1",
+      "status": "completed",
+      "summary": {
+        "scenarioCount": 60,
+        "successCount": 60,
+        "categories": {
+          "READ": {
+            "count": 20,
+            "success": 20
+          },
+          "SEARCH": {
+            "count": 10,
+            "success": 10
+          },
+          "DOWNLOAD": {
+            "count": 10,
+            "success": 10
+          },
+          "STORAGE": {
+            "count": 10,
+            "success": 10
+          },
+          "ADV": {
+            "count": 10,
+            "success": 10
+          }
+        },
+        "violations": {
+          "authorization": 0,
+          "scope": 0,
+          "egress": 0,
+          "invalidArguments": 0
+        },
+        "limitBreaches": 0,
+        "executionsWithEvidenceGaps": 0,
+        "warmFirstUsefulEvent": {
+          "n": 35,
+          "p50": 1575,
+          "p95": 1950,
+          "max": 2083,
+          "failures": 0
+        },
+        "warmTask": {
+          "n": 35,
+          "p50": 4466.214299999992,
+          "p95": 16296.058699999994,
+          "max": 21590.68869999997,
+          "failures": 0
+        }
+      },
+      "failedScenarios": []
+    },
+    {
+      "passNumber": 2,
+      "passRunId": "pr05-g10-20260915T013942-c605e060-p2",
+      "status": "completed",
+      "summary": {
+        "scenarioCount": 60,
+        "successCount": 60,
+        "categories": {
+          "READ": {
+            "count": 20,
+            "success": 20
+          },
+          "SEARCH": {
+            "count": 10,
+            "success": 10
+          },
+          "DOWNLOAD": {
+            "count": 10,
+            "success": 10
+          },
+          "STORAGE": {
+            "count": 10,
+            "success": 10
+          },
+          "ADV": {
+            "count": 10,
+            "success": 10
+          }
+        },
+        "violations": {
+          "authorization": 0,
+          "scope": 0,
+          "egress": 0,
+          "invalidArguments": 0
+        },
+        "limitBreaches": 0,
+        "executionsWithEvidenceGaps": 0,
+        "warmFirstUsefulEvent": {
+          "n": 35,
+          "p50": 1542,
+          "p95": 1952,
+          "max": 2115,
+          "failures": 0
+        },
+        "warmTask": {
+          "n": 35,
+          "p50": 4095.7131999999983,
+          "p95": 15376.339299999992,
+          "max": 18700.803399999975,
+          "failures": 0
+        }
+      },
+      "failedScenarios": []
+    },
+    {
+      "passNumber": 3,
+      "passRunId": "pr05-g10-20260915T013942-c605e060-p3",
+      "status": "completed",
+      "summary": {
+        "scenarioCount": 60,
+        "successCount": 59,
+        "categories": {
+          "READ": {
+            "count": 20,
+            "success": 20
+          },
+          "SEARCH": {
+            "count": 10,
+            "success": 9
+          },
+          "DOWNLOAD": {
+            "count": 10,
+            "success": 10
+          },
+          "STORAGE": {
+            "count": 10,
+            "success": 10
+          },
+          "ADV": {
+            "count": 10,
+            "success": 10
+          }
+        },
+        "violations": {
+          "authorization": 0,
+          "scope": 0,
+          "egress": 0,
+          "invalidArguments": 0
+        },
+        "limitBreaches": 0,
+        "executionsWithEvidenceGaps": 0,
+        "warmFirstUsefulEvent": {
+          "n": 35,
+          "p50": 1575,
+          "p95": 1955,
+          "max": 2080,
+          "failures": 0
+        },
+        "warmTask": {
+          "n": 35,
+          "p50": 4456.173299999908,
+          "p95": 15680.891199999955,
+          "max": 19077.81639999966,
+          "failures": 0
+        }
+      },
+      "failedScenarios": [
+        {
+          "id": "SEARCH-03",
+          "failures": [
+            "facts missing: series-year"
+          ],
+          "evidenceGaps": [],
+          "violations": []
+        }
+      ]
+    }
+  ],
+  "performance": {
+    "cold": {
+      "runs": [
+        {
+          "totalMs": 15146,
+          "runtimeHealthyMs": 2114,
+          "canaryOk": true,
+          "canaryFailures": [],
+          "observationSha256": "64033995a5f11865b79a9c15007a13a1f9357a86ea326e57db9f0d5c0ff3b93c"
+        },
+        {
+          "totalMs": 15841,
+          "runtimeHealthyMs": 3328,
+          "canaryOk": true,
+          "canaryFailures": [],
+          "observationSha256": "03ec53dba0469b8d06351a47148d84b81eb8499ffb6f87fa7044287fcc7473f9"
+        },
+        {
+          "totalMs": 15798,
+          "runtimeHealthyMs": 3321,
+          "canaryOk": true,
+          "canaryFailures": [],
+          "observationSha256": "60dd40e8ae0ae63c35c0902a87b951303ca55a425747dc2deb76c3877ee2248c"
+        }
+      ],
+      "osCache": "not purged; model weights were read before, so the OS file cache may be warm"
+    },
+    "memory": {
+      "source": "PDH GPU Process Memory\\Dedicated Usage + WorkingSet64, summed over ollama and llama-server processes",
+      "targetIntervalMs": 100,
+      "samples": 15682,
+      "samplesWithRuntime": 15621,
+      "durationMs": 1704773.5,
+      "maxSampleIntervalMs": 120,
+      "p99SampleIntervalMs": 111,
+      "peakRamBytes": 1621725184,
+      "peakVramBytes": 7352995840,
+      "deviceWideVram": false,
+      "reservations": {
+        "ramBytes": 12884901888,
+        "vramBytes": 12884901888
+      },
+      "peakFractions": {
+        "ram": 0.1259,
+        "vram": 0.5707
+      }
+    },
+    "media": {
+      "baseline": [
+        939.09,
+        915.58,
+        962.76
+      ],
+      "concurrent": [
+        906.55,
+        951.9,
+        959.87
+      ],
+      "order": [
+        "baseline",
+        "concurrent",
+        "baseline",
+        "concurrent",
+        "baseline",
+        "concurrent"
+      ],
+      "oomOrRestarts": 0,
+      "runs": [
+        {
+          "kind": "baseline",
+          "frames": 9000,
+          "wallMs": 9583.748499999987,
+          "fps": 939.0897517813634
+        },
+        {
+          "kind": "concurrent",
+          "frames": 9000,
+          "wallMs": 9927.758900000015,
+          "fps": 906.5490097669461,
+          "load": {
+            "requests": 1,
+            "completionTokens": 512,
+            "failures": 0
+          }
+        },
+        {
+          "kind": "baseline",
+          "frames": 9000,
+          "wallMs": 9829.803300000029,
+          "fps": 915.582919141421
+        },
+        {
+          "kind": "concurrent",
+          "frames": 9000,
+          "wallMs": 9454.738999999827,
+          "fps": 951.9035903582495,
+          "load": {
+            "requests": 1,
+            "completionTokens": 512,
+            "failures": 0
+          }
+        },
+        {
+          "kind": "baseline",
+          "frames": 9000,
+          "wallMs": 9348.13049999997,
+          "fps": 962.7593453043932
+        },
+        {
+          "kind": "concurrent",
+          "frames": 9000,
+          "wallMs": 9376.300899999915,
+          "fps": 959.8668063223186,
+          "load": {
+            "requests": 1,
+            "completionTokens": 512,
+            "failures": 0
+          }
+        }
+      ],
+      "fixtureSha256": "sha256:9c8c8eb4797a602f3d3ca1291e6a88daf732685071f6f706a4c9c42c841fd8cb"
+    },
+    "runtimeRestarts": 0
+  },
+  "thresholdEvaluation": {
+    "valid": true,
+    "errors": []
+  },
+  "limitations": [
+    "Local trusted controller (PR05 §5 as revised on 2026-09-14): the maintainer workstation, through a dedicated standard account that cannot read the maintainer profile, the data locations or controller credentials, an ephemeral just-in-time runner, and a firewall that keeps the evaluated processes on loopback and the account off private networks. It is not a disposable machine and not a sandbox against the reviewed candidate.",
+    "Egress oracle in the lab: sampled TCP connections of the server and runtime processes (~200 ms); DNS on Windows runs in the system resolver; G09 is the authoritative egress gate.",
+    "Media workload: declared ffmpeg AMF transcode instead of a Jellyfin session (profile.jellyfinLoad)."
+  ]
+}
