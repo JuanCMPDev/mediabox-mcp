@@ -204,12 +204,15 @@ Los números y el análisis de cada fallo están en
   el perfil lab3. Resultado **compatible**, con 60, 58 y 58 de 60, ninguna
   infracción y todo el rendimiento dentro de umbral. El verificador lo acepta
   como evidencia `local-lab`.
+- **§4.12, experimento 10** sobre `c605e06`, en el controlador confiable local
+  ([PR05-LOCAL-CONTROLLER.es.md](PR05-LOCAL-CONTROLLER.es.md)), con el mismo
+  modelo y el mismo perfil. Resultado **compatible**, con 60, 60 y 59 de 60,
+  ninguna infracción y todo el rendimiento dentro de umbral. El verificador lo
+  acepta como evidencia `trusted-controller`: confirma con GitHub el run, su
+  runner y el digest del paquete, y vuelve a puntuar las 180 ejecuciones.
 
-**P11 no está cerrada:** G10 solo sigue en rojo por la clase de evidencia. El
-experimento 9 cumple todos los umbrales en este laboratorio. Falta repetirlo en
-un controlador confiable, que produzca evidencia `trusted-controller` (§5). El
-controlador confiable local está construido y sus ficheros preparados; queda
-aprovisionar la cuenta como administrador y lanzar el run
-([PR05-LOCAL-CONTROLLER.es.md](PR05-LOCAL-CONTROLLER.es.md)).
+**P11 cerrada en el controlador confiable.** El experimento 10 cumple todos los
+umbrales y su evidencia es `trusted-controller` (§5). La verificación local,
+con la API de GitHub y las observaciones crudas, la acepta.
 
-Los nueve se conservan en `evals/evidence/`, y `current.json` apunta al último.
+Los diez se conservan en `evals/evidence/`, y `current.json` apunta al último.

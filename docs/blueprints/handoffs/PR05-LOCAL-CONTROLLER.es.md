@@ -195,5 +195,20 @@ aprovisionamiento y la contraseña guardada. `-RemoveFiles` borra también
 | Preparación de ficheros en `E:\mediabox-g10` | Hecha el 2026-09-14; los nueve controles coinciden con lab3 |
 | Ensayo del runtime preparado, en modo laboratorio | Hecho el 2026-09-14 con la cuenta del mantenedor (`pr05-g10-20260914T224836-2ae5a5fa`, clase `dev`): sin deriva del perfil, 2 de 2 escenarios, tres arranques en frío de unos 9 s, VRAM en 0,57 de la reserva, transcodificación sin OOM y ninguna conexión fuera del arnés |
 | Aprobación de workflows externos en el repositorio | Activada el 2026-09-14 |
-| Aprovisionamiento como administrador | Pendiente del mantenedor |
-| Ensayo y ejecución real | Pendientes del aprovisionamiento |
+| Aprovisionamiento como administrador | Hecho el 2026-09-14: las once comprobaciones y los contadores de GPU, correctos; la reescritura de permisos de D:\ tardó unos 27 minutos |
+| Ensayo en Actions | Pasó al cuarto intento, sobre `c605e06`. Los tres anteriores fallaron en el lanzador y en las rutas, y se corrigieron (§12) |
+| Ejecución real | `pr05-g10-20260915T013942-c605e060` sobre `c605e06`, run 34918137989: compatible, con 60, 60 y 59 de 60 y todo el rendimiento dentro de umbral |
+
+## 12. Primer uso
+
+El primer uso, el 2026-09-14, encontró cinco problemas del instalador y del
+lanzador. Todos se corrigieron antes de la ejecución real, y ninguno produjo
+evidencia.
+
+| Síntoma | Causa | Corrección |
+|---|---|---|
+| El instalador falla al crear la cuenta | Windows limita la descripción de una cuenta local a 48 caracteres | Descripción más corta, en `4f60e44` |
+| El lanzador aborta en `git push` al ejecutarse con la salida redirigida | Windows PowerShell 5.1 convierte el stderr de un comando nativo en error | Los comandos nativos se juzgan por su código de salida, en `8a83514` |
+| `Start-Process` falla con "El parámetro no es correcto" | CreateProcessWithLogonW admite 1024 caracteres de línea de comandos y la configuración JIT es más larga | La configuración pasa por un fichero que la cuenta lee y borra, en `7bb15dc` |
+| El runner sale con `Access to the path 'E:\' is denied` | El runner exige listar cada carpeta padre y la cuenta no puede listar E:\ | El runner corre desde una copia en el perfil de la cuenta, en `04350a9` |
+| `tsup` falla con "Cannot read directory: Access is denied" | esbuild lee cada carpeta padre del proyecto | El worktree va a la carpeta temporal del job, en `c605e06` |
