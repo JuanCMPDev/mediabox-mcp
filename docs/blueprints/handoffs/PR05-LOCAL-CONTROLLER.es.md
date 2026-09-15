@@ -110,7 +110,10 @@ Desde una PowerShell normal, sin elevar, en el repositorio:
 El lanzador:
 1. Comprueba que el commit está en GitHub y que no hay unidades extraíbles.
 2. Para el Ollama del mantenedor.
-3. Registra un runner JIT, empuja la etiqueta y arranca el runner como la cuenta.
+3. Registra un runner JIT, empuja la etiqueta y arranca el runner como la
+   cuenta. El runner corre desde una copia nueva en el perfil de la cuenta,
+   porque exige poder listar cada carpeta padre y la cuenta no puede listar
+   E:\. Sus logs de diagnóstico vuelven a `E:\mediabox-g10\runner\_diag`.
 4. Sigue el run, retira el registro del runner si sigue ahí y vuelve a
    arrancar Ollama.
 

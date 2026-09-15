@@ -41,17 +41,27 @@ $WorkflowPath = '.github/workflows/g10-controller.yml'
 $StatusContext = 'g10/trusted-controller'
 $OllamaApp = Join-Path $env:LOCALAPPDATA 'Programs\Ollama\ollama app.exe'
 
-# Runs as the dedicated account: reads the just-in-time configuration, deletes
-# its file at once and runs the runner for its single job. The configuration
-# travels in a file because CreateProcessWithLogonW, behind Start-Process
-# -Credential, accepts at most 1024 characters of command line.
+# Runs as the dedicated account. The just-in-time configuration travels in a
+# file, deleted at once, because CreateProcessWithLogonW (behind Start-Process
+# -Credential) accepts at most 1024 characters of command line. The runner
+# refuses a folder whose parents the account cannot list, and the data drive
+# denies the account listing its root, so every run starts from a fresh copy
+# of the staged runner inside the account profile; its diagnostic logs are
+# copied back next to the staged runner for the maintainer.
 $RunnerStarter = @'
-param([string]$ConfigFile, [string]$RunnerDir)
+param([string]$ConfigFile, [string]$SourceDir)
 $jit = (Get-Content -Raw -LiteralPath $ConfigFile).Trim()
 Remove-Item -LiteralPath $ConfigFile -Force
-Set-Location -LiteralPath $RunnerDir
-& (Join-Path $RunnerDir 'run.cmd') --jitconfig $jit
-exit $LASTEXITCODE
+$runnerDir = Join-Path $env:USERPROFILE 'actions-runner'
+& robocopy $SourceDir $runnerDir /MIR /XD _diag _work /NJH /NJS /NP /NFL /NDL /R:1 /W:1 | Out-Null
+if ($LASTEXITCODE -ge 8) { exit 90 }
+$work = Join-Path $runnerDir '_work'
+if (Test-Path -LiteralPath $work) { Remove-Item -LiteralPath $work -Recurse -Force }
+Set-Location -LiteralPath $runnerDir
+& (Join-Path $runnerDir 'run.cmd') --jitconfig $jit
+$code = $LASTEXITCODE
+& robocopy (Join-Path $runnerDir '_diag') (Join-Path $SourceDir '_diag') /E /NJH /NJS /NP /NFL /NDL /R:1 /W:1 | Out-Null
+exit $code
 '@
 
 function Write-Step([string]$Message) { Write-Host "==> $Message" -ForegroundColor Cyan }
@@ -125,7 +135,7 @@ try {
   Write-Step "Starting the runner as $($provisioning.account.name)"
   [IO.File]::WriteAllText($handoff, $jit.encoded_jit_config, [Text.Encoding]::ASCII)
   [IO.File]::WriteAllText($starter, $RunnerStarter, [Text.Encoding]::ASCII)
-  $runnerProcess = Start-Process -FilePath "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe" -ArgumentList "-NoProfile -ExecutionPolicy Bypass -File `"$starter`" -ConfigFile `"$handoff`" -RunnerDir `"$($provisioning.runner.dir)`"" -Credential $credential -LoadUserProfile -WorkingDirectory $provisioning.runner.dir -WindowStyle Minimized -PassThru
+  $runnerProcess = Start-Process -FilePath "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe" -ArgumentList "-NoProfile -ExecutionPolicy Bypass -File `"$starter`" -ConfigFile `"$handoff`" -SourceDir `"$($provisioning.runner.dir)`"" -Credential $credential -LoadUserProfile -WorkingDirectory $provisioning.tmp -WindowStyle Minimized -PassThru
 
   Write-Step 'Waiting for the workflow run'
   $deadline = (Get-Date).AddMinutes(5)
@@ -147,16 +157,22 @@ try {
     catch { Write-Host "    could not read the run, retrying: $($_.Exception.Message)"; continue }
     $state = "$($run.status) $($run.conclusion)".Trim()
     if ($state -ne $last) { Write-Host ('    {0:HH:mm:ss} {1}' -f (Get-Date), $state); $last = $state }
+    if ($run.status -ne 'completed' -and $runnerProcess.HasExited -and $run.status -eq 'queued') {
+      throw "The runner exited before taking the job (exit code $($runnerProcess.ExitCode)); its logs are in $(Join-Path $provisioning.runner.dir '_diag')."
+    }
     if ((Get-Date) -gt $deadline) { throw "The run did not finish in $TimeoutMinutes minutes: $($run.html_url)" }
   } until ($run.status -eq 'completed')
 } finally {
   $runnerExited = $false
   if ($runnerProcess) { $runnerExited = $runnerProcess.WaitForExit(120000) }
-  if ($jit -and -not $runnerExited) {
-    Write-Step 'Removing the runner registration'
-    try { Invoke-Native gh api --method DELETE "repos/$Repository/actions/runners/$($jit.runner.id)" | Out-Null }
-    catch { Write-Host '    the registration was already gone' }
-    if ($runnerProcess) { [void]$runnerProcess.WaitForExit(60000) }
+  if ($jit) {
+    # A just-in-time runner removes itself after its job; this only clears one
+    # that never ran or did not finish.
+    try {
+      Invoke-Native gh api --method DELETE "repos/$Repository/actions/runners/$($jit.runner.id)" | Out-Null
+      Write-Step 'Removed the runner registration'
+    } catch { }
+    if ($runnerProcess -and -not $runnerExited) { [void]$runnerProcess.WaitForExit(60000) }
   }
   if (Test-Path -LiteralPath $handoff) { Remove-Item -LiteralPath $handoff -Force }
   # Without a runner, a queued job of this tag would wait for a day and could
