@@ -113,7 +113,11 @@ El lanzador:
 3. Registra un runner JIT, empuja la etiqueta y arranca el runner como la
    cuenta. El runner corre desde una copia nueva en el perfil de la cuenta,
    porque exige poder listar cada carpeta padre y la cuenta no puede listar
-   E:\. Sus logs de diagnóstico vuelven a `E:\mediabox-g10\runner\_diag`.
+   E:\. Sus logs de diagnóstico vuelven a `E:\mediabox-g10\runner\_diag`. Por
+   la misma razón, el worktree y los temporales del run van a la carpeta
+   temporal del job, dentro de ese perfil: esbuild también lee cada carpeta
+   padre. El almacenamiento, los pesos y el toolchain siguen en
+   `E:\mediabox-g10`.
 4. Sigue el run, retira el registro del runner si sigue ahí y vuelve a
    arrancar Ollama.
 

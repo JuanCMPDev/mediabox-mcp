@@ -15,8 +15,9 @@
  *    (.github/workflows/g10-controller.yml), on the just-in-time runner of the
  *    dedicated account that scripts/controller/Install-G10Controller.ps1
  *    provisions, and only after every isolation check passes from inside that
- *    account (controller-isolation.mjs). Toolchain, weights, storage and
- *    temporary files come from the provisioning file, and the evaluated
+ *    account (controller-isolation.mjs). Toolchain, weights and storage come
+ *    from the provisioning file; the worktree and temporary files live in the
+ *    job's temporary folder, inside the account profile. The evaluated
  *    processes run on the evaluation node, which the firewall keeps on
  *    loopback. The manifest records the Actions run and the check results;
  *    the verifier confirms both with GitHub.
@@ -111,11 +112,15 @@ if (evidenceClass === 'trusted-controller') {
     storage = provisioning.storage;
     ollamaExe = provisioning.runtime.ollamaExe;
     evalNode = provisioning.toolchain.evalNode;
-    tmpRoot = provisioning.tmp;
+    // Build tools such as esbuild read every parent folder of the project, and
+    // the account cannot list the root of the data drive, so the worktree and
+    // the temporary files go to the job's temporary folder, inside the account
+    // profile, which the runner also empties after the job.
+    tmpRoot = process.env.RUNNER_TEMP || os.tmpdir();
     childEnv = withPath({
       ...process.env,
-      TEMP: provisioning.tmp,
-      TMP: provisioning.tmp,
+      TEMP: tmpRoot,
+      TMP: tmpRoot,
       npm_config_cache: provisioning.npmCache,
       OLLAMA_MODELS: provisioning.runtime.modelsDir,
     }, [path.dirname(provisioning.toolchain.node), provisioning.toolchain.ffmpegDir]);
