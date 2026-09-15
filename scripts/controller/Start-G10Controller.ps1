@@ -41,6 +41,19 @@ $WorkflowPath = '.github/workflows/g10-controller.yml'
 $StatusContext = 'g10/trusted-controller'
 $OllamaApp = Join-Path $env:LOCALAPPDATA 'Programs\Ollama\ollama app.exe'
 
+# Runs as the dedicated account: reads the just-in-time configuration, deletes
+# its file at once and runs the runner for its single job. The configuration
+# travels in a file because CreateProcessWithLogonW, behind Start-Process
+# -Credential, accepts at most 1024 characters of command line.
+$RunnerStarter = @'
+param([string]$ConfigFile, [string]$RunnerDir)
+$jit = (Get-Content -Raw -LiteralPath $ConfigFile).Trim()
+Remove-Item -LiteralPath $ConfigFile -Force
+Set-Location -LiteralPath $RunnerDir
+& (Join-Path $RunnerDir 'run.cmd') --jitconfig $jit
+exit $LASTEXITCODE
+'@
+
 function Write-Step([string]$Message) { Write-Host "==> $Message" -ForegroundColor Cyan }
 
 # Native commands are judged by their exit code. Windows PowerShell turns
@@ -91,7 +104,10 @@ $stamp = (Get-Date).ToUniversalTime().ToString('yyyyMMddTHHmmss')
 if ($Rehearsal) { $kind = 'g10-rehearsal' } else { $kind = 'g10' }
 $tag = "$kind/$($full.Substring(0, 8))-$stamp"
 $runnerName = "$($provisioning.runner.namePrefix)$stamp"
+$handoff = Join-Path $provisioning.tmp "jit-$stamp.txt"
+$starter = Join-Path $provisioning.tmp 'start-runner.ps1'
 $jit = $null
+$tagPushed = $false
 $runnerProcess = $null
 $run = $null
 
@@ -104,17 +120,21 @@ try {
   Write-Step "Tagging $full as $tag"
   Invoke-Native git -C $RepoRoot tag $tag $full | Out-Null
   Invoke-Native git -C $RepoRoot push -q $Remote "refs/tags/$tag" | Out-Null
+  $tagPushed = $true
 
   Write-Step "Starting the runner as $($provisioning.account.name)"
-  $runnerCmd = Join-Path $provisioning.runner.dir 'run.cmd'
-  $runnerProcess = Start-Process -FilePath "$env:SystemRoot\System32\cmd.exe" -ArgumentList "/d /c `"`"$runnerCmd`" --jitconfig $($jit.encoded_jit_config)`"" -Credential $credential -LoadUserProfile -WorkingDirectory $provisioning.runner.dir -PassThru
+  [IO.File]::WriteAllText($handoff, $jit.encoded_jit_config, [Text.Encoding]::ASCII)
+  [IO.File]::WriteAllText($starter, $RunnerStarter, [Text.Encoding]::ASCII)
+  $runnerProcess = Start-Process -FilePath "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe" -ArgumentList "-NoProfile -ExecutionPolicy Bypass -File `"$starter`" -ConfigFile `"$handoff`" -RunnerDir `"$($provisioning.runner.dir)`"" -Credential $credential -LoadUserProfile -WorkingDirectory $provisioning.runner.dir -WindowStyle Minimized -PassThru
 
   Write-Step 'Waiting for the workflow run'
   $deadline = (Get-Date).AddMinutes(5)
   while (-not $run) {
     Start-Sleep -Seconds 10
-    $runs = Invoke-GhJson api "repos/$Repository/actions/runs?head_sha=$full&event=push&per_page=50"
-    $run = @($runs.workflow_runs | Where-Object { $_.path -eq $WorkflowPath -and $_.head_branch -eq $tag }) | Select-Object -First 1
+    try {
+      $runs = Invoke-GhJson api "repos/$Repository/actions/runs?head_sha=$full&event=push&per_page=50"
+      $run = @($runs.workflow_runs | Where-Object { $_.path -eq $WorkflowPath -and $_.head_branch -eq $tag }) | Select-Object -First 1
+    } catch { Write-Host "    could not list the runs, retrying: $($_.Exception.Message)" }
     if (-not $run -and (Get-Date) -gt $deadline) { throw "No $WorkflowPath run appeared for $tag." }
   }
   Write-Host "    $($run.html_url)"
@@ -122,17 +142,33 @@ try {
   $last = ''
   do {
     Start-Sleep -Seconds 30
-    $run = Invoke-GhJson api "repos/$Repository/actions/runs/$($run.id)"
+    # A failed poll is retried; it must never end a run that is still going.
+    try { $run = Invoke-GhJson api "repos/$Repository/actions/runs/$($run.id)" }
+    catch { Write-Host "    could not read the run, retrying: $($_.Exception.Message)"; continue }
     $state = "$($run.status) $($run.conclusion)".Trim()
     if ($state -ne $last) { Write-Host ('    {0:HH:mm:ss} {1}' -f (Get-Date), $state); $last = $state }
     if ((Get-Date) -gt $deadline) { throw "The run did not finish in $TimeoutMinutes minutes: $($run.html_url)" }
   } until ($run.status -eq 'completed')
 } finally {
-  if ($runnerProcess -and -not $runnerProcess.WaitForExit(120000) -and $jit) {
+  $runnerExited = $false
+  if ($runnerProcess) { $runnerExited = $runnerProcess.WaitForExit(120000) }
+  if ($jit -and -not $runnerExited) {
     Write-Step 'Removing the runner registration'
     try { Invoke-Native gh api --method DELETE "repos/$Repository/actions/runners/$($jit.runner.id)" | Out-Null }
     catch { Write-Host '    the registration was already gone' }
-    [void]$runnerProcess.WaitForExit(60000)
+    if ($runnerProcess) { [void]$runnerProcess.WaitForExit(60000) }
+  }
+  if (Test-Path -LiteralPath $handoff) { Remove-Item -LiteralPath $handoff -Force }
+  # Without a runner, a queued job of this tag would wait for a day and could
+  # be taken by the next runner; cancel what did not finish.
+  if ($tagPushed -and (-not $run -or $run.status -ne 'completed')) {
+    try {
+      $pending = Invoke-GhJson api "repos/$Repository/actions/runs?head_sha=$full&event=push&per_page=50"
+      foreach ($stale in @($pending.workflow_runs | Where-Object { $_.head_branch -eq $tag -and $_.status -ne 'completed' })) {
+        Write-Step "Cancelling the unfinished run $($stale.id)"
+        Invoke-Native gh api --method POST "repos/$Repository/actions/runs/$($stale.id)/cancel" | Out-Null
+      }
+    } catch { Write-Host "    could not cancel the unfinished run: $($_.Exception.Message)" }
   }
   if ($stoppedOllama.Count -and (Test-Path $OllamaApp)) {
     Write-Step 'Restarting your Ollama'
