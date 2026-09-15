@@ -1,7 +1,7 @@
 import { Trans, useTranslation } from 'react-i18next';
 import { GlassInput } from '@/components/atoms/GlassInput';
 import { SegmentedControl } from '@/components/atoms/SegmentedControl';
-import type { WizardDraft } from '@/lib/wizard-types';
+import { isAiConfigured, type WizardDraft } from '@/lib/wizard-types';
 
 interface Props {
   draft: WizardDraft;
@@ -10,7 +10,8 @@ interface Props {
 
 export function TelegramStep({ draft, setTelegram }: Props) {
   const { t } = useTranslation('wizard');
-  const aiConfigured = draft.ai.provider !== 'none' && draft.ai.apiKey.trim().length > 0;
+  // The bot mirrors whichever provider the AI step configured, local included.
+  const aiConfigured = isAiConfigured(draft.ai);
 
   return (
     <>

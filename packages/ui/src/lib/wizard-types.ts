@@ -192,12 +192,14 @@ export function draftToDeployConfig(draft: WizardDraft): DeployConfig {
       ...(draft.ai.model && { model: draft.ai.model }),
     };
   } else if (draft.ai.provider === 'local') {
+    // The same values the AI step shows, so the endpoint follows the runtime.
+    const local = effectiveLocalAi(draft.ai);
     config.ai = {
       kind:          'local',
-      runtime:       (draft.ai.runtime as any) || 'ollama',
-      baseUrl:       draft.ai.baseUrl || 'http://127.0.0.1:11434',
-      model:         draft.ai.model || 'qwen2.5:7b',
-      contextTokens: draft.ai.contextTokens || 8192,
+      runtime:       local.runtime as any,
+      baseUrl:       local.baseUrl,
+      model:         local.model,
+      contextTokens: local.contextTokens,
       apiKey:        draft.ai.apiKey || undefined,
     };
   }
@@ -226,4 +228,60 @@ function cryptoRandomKey(len: number): string {
   const buf = new Uint8Array(len);
   crypto.getRandomValues(buf);
   return Array.from(buf, b => (b % 36).toString(36)).join('');
+}
+
+/* ─── Local AI defaults ──────────────────────────────────────────────────────
+ * One source for what the AI step shows and what the deploy config writes, so
+ * an untouched field never deploys a different value than the one on screen.
+ * ──────────────────────────────────────────────────────────────────────── */
+
+const LOCAL_ENDPOINTS: Record<string, string> = {
+  ollama:   'http://127.0.0.1:11434',
+  lmstudio: 'http://127.0.0.1:1234',
+  llamacpp: 'http://127.0.0.1:8080',
+  vllm:     'http://127.0.0.1:8000',
+};
+export const LOCAL_DEFAULT_MODEL = 'qwen2.5:7b';
+export const LOCAL_DEFAULT_CONTEXT_TOKENS = 8192;
+
+/** Runtime, endpoint, model and context the local provider will really use. */
+export function effectiveLocalAi(ai: WizardDraft['ai']): { runtime: string; baseUrl: string; model: string; contextTokens: number } {
+  const runtime = ai.runtime || 'ollama';
+  return {
+    runtime,
+    baseUrl:       ai.baseUrl?.trim() || LOCAL_ENDPOINTS[runtime] || LOCAL_ENDPOINTS.ollama,
+    model:         ai.model.trim() || LOCAL_DEFAULT_MODEL,
+    contextTokens: ai.contextTokens || LOCAL_DEFAULT_CONTEXT_TOKENS,
+  };
+}
+
+/**
+ * Whether the AI provider is complete: what the AI step needs to continue and
+ * what the Telegram bot needs to mirror it. Local mode has no API key; it only
+ * needs an http(s) endpoint and a model, and both have defaults.
+ */
+export function isAiConfigured(ai: WizardDraft['ai']): boolean {
+  switch (ai.provider) {
+    case 'none':
+      return false;
+    case 'local': {
+      const { baseUrl, model } = effectiveLocalAi(ai);
+      return isHttpUrl(baseUrl) && model.length > 0;
+    }
+    case 'openrouter':
+      return ai.apiKey.trim().length > 0 && ai.model.trim().length > 0;
+    case 'google':
+      return ai.apiKey.trim().length > 0;
+    default:
+      return false;
+  }
+}
+
+function isHttpUrl(value: string): boolean {
+  try {
+    const url = new URL(value);
+    return url.protocol === 'http:' || url.protocol === 'https:';
+  } catch {
+    return false;
+  }
 }

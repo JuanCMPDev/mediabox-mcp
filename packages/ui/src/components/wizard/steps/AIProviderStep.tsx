@@ -3,7 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { GlassInput } from '@/components/atoms/GlassInput';
 import { SegmentedControl } from '@/components/atoms/SegmentedControl';
 import { api } from '@/lib/api';
-import type { WizardDraft } from '@/lib/wizard-types';
+import { effectiveLocalAi, LOCAL_DEFAULT_MODEL, type WizardDraft } from '@/lib/wizard-types';
 
 interface Props {
   draft: WizardDraft;
@@ -16,6 +16,8 @@ const RUNTIME_PORTS: Record<string, number> = { ollama: 11434, lmstudio: 1234, l
 export function AIProviderStep({ draft, setAI }: Props) {
   const { t } = useTranslation('wizard');
   const isLocal = draft.ai.provider === 'local';
+  // What the deploy config will write for an untouched field.
+  const local = effectiveLocalAi(draft.ai);
   // Detection only runs when the owner actually picks local mode: probing hardware is
   // never on the critical path of the wizard (§3.3).
   const hardware = useQuery({
@@ -71,7 +73,7 @@ export function AIProviderStep({ draft, setAI }: Props) {
           <div className="wizard-field">
             <label className="wizard-label">{t('ai.localBaseUrlLabel')}</label>
             <GlassInput
-              value={draft.ai.baseUrl || (draft.ai.runtime === 'lmstudio' ? 'http://127.0.0.1:1234' : draft.ai.runtime === 'llamacpp' ? 'http://127.0.0.1:8080' : 'http://127.0.0.1:11434')}
+              value={draft.ai.baseUrl || local.baseUrl}
               onChange={v => setAI({ baseUrl: v })}
               placeholder="http://127.0.0.1:11434"
             />
@@ -80,9 +82,9 @@ export function AIProviderStep({ draft, setAI }: Props) {
           <div className="wizard-field">
             <label className="wizard-label">{t('ai.modelLabel')}</label>
             <GlassInput
-              value={draft.ai.model || 'qwen2.5:7b'}
+              value={draft.ai.model || local.model}
               onChange={v => setAI({ model: v })}
-              placeholder="qwen2.5:7b"
+              placeholder={LOCAL_DEFAULT_MODEL}
             />
             <span className="wizard-hint">
               <Trans i18nKey="ai.hints.localModel" t={t}>

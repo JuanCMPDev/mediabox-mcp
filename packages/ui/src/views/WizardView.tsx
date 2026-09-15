@@ -14,7 +14,7 @@ import { ReviewStep } from '@/components/wizard/steps/ReviewStep';
 import { ProwlarrSetupStep } from '@/components/wizard/steps/ProwlarrSetupStep';
 import { useWizardDraft } from '@/lib/use-wizard-draft';
 import { useDeployStream } from '@/lib/use-deploy-stream';
-import { draftToDeployConfig } from '@/lib/wizard-types';
+import { draftToDeployConfig, isAiConfigured } from '@/lib/wizard-types';
 import { defaultStackDir, getAppState, setAppState, restartSidecar, type WorkdirProbe } from '@/lib/tauri-bridge';
 import { reloadRuntimeConfig } from '@/lib/runtime-config';
 
@@ -89,10 +89,10 @@ export function WizardView({ onComplete }: Props) {
           && s.qbitPassword.length >= 8;
       }
       case 6: {
+        // Local mode needs no API key: its runtime, endpoint, model and context
+        // fall back to the same defaults the deploy config writes.
         if (draft.ai.provider === 'none') return true;
-        if (!draft.ai.apiKey.trim()) return false;
-        if (draft.ai.provider === 'openrouter' && !draft.ai.model.trim()) return false;
-        return true;
+        return isAiConfigured(draft.ai);
       }
       case 7: {
         if (!draft.telegram.enabled) return true;
