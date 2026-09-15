@@ -454,7 +454,15 @@ El verificador de promoción comprueba el resultado del run en GitHub o en el co
 
 PR no confiables: runners alojados/efímeros, permisos de lectura, sin secretos ni endpoints privados. Prohibido `pull_request_target` que haga checkout/ejecute código del PR con privilegios. No correr contribuciones arbitrarias en un PC con GPU que también contenga datos personales o claves de publicación.
 
-Evaluación local real: controlador confiable recibe un SHA explícito revisado y ejecuta el candidato en máquina/VM aislada, desechable, sin datos reales ni acceso a la red doméstica. Pesos preaprovisionados y egress restringido. El proceso evaluado no recibe credenciales del controlador. Preferir infraestructura separada del repo público. Una aprobación de environment no convierte un runner persistente en un sandbox. [Seguridad de Actions](https://docs.github.com/en/actions/reference/security/secure-use).
+Evaluación local real: controlador confiable recibe un SHA explícito revisado y ejecuta el candidato sin datos reales ni acceso a la red doméstica. Pesos preaprovisionados y egress restringido. El proceso evaluado no recibe credenciales del controlador. Lo preferible es una máquina/VM aislada y desechable, en infraestructura separada del repo público. Una aprobación de environment no convierte un runner persistente en un sandbox. [Seguridad de Actions](https://docs.github.com/en/actions/reference/security/secure-use).
+
+Revisión del 2026-09-14, decidida por el mantenedor: el proyecto tiene un solo equipo con GPU y no puede dedicarle otro sistema. Se admite como controlador confiable ese puesto, con estas condiciones:
+- una cuenta estándar dedicada, sin grupo de administradores, que no puede leer el perfil del mantenedor, sus credenciales ni sus discos y carpetas de datos;
+- un runner efímero de GitHub Actions que toma un único job, lanzado solo por una etiqueta que el mantenedor empuja sobre un commit revisado;
+- un cortafuegos que deja la cuenta fuera de las redes privadas y los binarios evaluados solo en loopback;
+- el paso que evalúa no recibe token, y el vínculo con el run lo publica un job alojado por GitHub.
+
+El controlador comprueba esas condiciones desde la cuenta antes de cada ejecución y las registra en la evidencia ([runbook](handoffs/PR05-LOCAL-CONTROLLER.es.md)). No es una máquina desechable ni un sandbox frente al candidato: la confianza descansa en que el candidato es un commit revisado del mantenedor, nunca código de forks.
 
 En PR de forks, replay simulado es obligatorio. Gates que requieren hardware se ejecutan después de revisión sobre el candidato exacto y quedan pendientes hasta disponer de evidencia confiable. La promoción que los exige espera; nunca se marca `model-quality: success` porque no hubo GPU. CI de PR00 no necesita un modelo real.
 

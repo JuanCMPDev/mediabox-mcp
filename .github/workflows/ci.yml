@@ -257,8 +257,18 @@ jobs:
     name: gate/model-quality (G10)
     needs: [gate-build-unit]
     runs-on: ubuntu-latest
+    # The verifier reads the controller run, its jobs and the candidate's commit
+    # statuses from the API (PR05 §5).
+    permissions:
+      contents: read
+      actions: read
+      statuses: read
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          # The evaluated commit and its descendants must exist here: the
+          # verifier binds the evidence to that commit (PR05 §5).
+          fetch-depth: 0
 
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:

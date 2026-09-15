@@ -15,6 +15,12 @@
  * or dirty checkout aborts the run. `--dev` exists for rehearsals and marks
  * the manifest mode `dev`, which the verifier never accepts.
  *
+ * A `trusted-controller` run is started only by controller.mjs inside the G10
+ * controller workflow: it must find that Actions run in its environment and
+ * the controller's isolation attestation (`--attestation`), and records both.
+ * Before measuring, the machine and the runtime libraries are compared with
+ * the sealed profile; any drift is another profile and aborts a live run.
+ *
  *   node evals/local-agent/runner.mjs --experiment-id <id> --storage <dir> --class local-lab
  *        [--ollama-exe <path>] [--passes 3] [--take-over] [--dev --only READ-01,ADV-06]
  */
@@ -33,12 +39,13 @@ import { scoreExecution, summarizePass, evaluateThresholds, serializeSummary, SC
 import { EXTRACTOR_VERSION, normalizeText, resolveTemplate } from './extractor.mjs';
 import { startInferenceProxy } from './inference-proxy.mjs';
 import { startEgressMonitor } from './egress-monitor.mjs';
-import { validateModelProfile, sha256File } from './profile.mjs';
+import { validateModelProfile, sha256File, checkProfileDrift } from './profile.mjs';
 import {
   OllamaProcess, runtimePids, startMemorySampler, generateMediaFixture, transcodeOnce, inferenceLoad, PERF_VERSION,
 } from './perf.mjs';
+import { actionsRunContext } from './controller-isolation.mjs';
 
-export const RUNNER_VERSION = '2.0.0';
+export const RUNNER_VERSION = '2.1.0';
 const __filename = fileURLToPath(import.meta.url);
 const repoRoot = path.resolve(path.dirname(__filename), '../..');
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -72,6 +79,7 @@ export function parseArgs(argv) {
     else if (k === '--storage') { a.storage = path.resolve(v); i++; }
     else if (k === '--class') { a.class = v; i++; }
     else if (k === '--controller-started-at') { a.controllerStartedAt = v; i++; }
+    else if (k === '--attestation') { a.attestation = v; i++; }
     else if (k === '--ollama-exe') { a.ollamaExe = v; i++; }
     else if (k === '--passes') { a.passes = Number(v); i++; }
     else if (k === '--profile') { a.profile = v; i++; }
@@ -473,6 +481,20 @@ export async function runExperiment(argv) {
   if (dirty && !args.dev) throw new Error(`refusing to measure a dirty checkout:\n${dirty}`);
   const mode = args.dev ? 'dev' : 'live';
 
+  // Trusted evidence exists only inside the controller workflow (PR05 §5): the
+  // run is identified before anything is measured, not discovered afterwards.
+  let actionsRun = null;
+  let isolation = null;
+  if (args.class === 'trusted-controller') {
+    actionsRun = actionsRunContext(process.env);
+    if (actionsRun.sha !== head || actionsRun.workflowSha !== head) {
+      throw new Error(`controller job ${actionsRun.sha} and workflow ${actionsRun.workflowSha} are not the evaluated commit ${head}`);
+    }
+    if (!args.attestation) throw new Error('trusted-controller runs need the controller isolation attestation (--attestation)');
+    isolation = JSON.parse(fs.readFileSync(args.attestation, 'utf8'));
+    if (isolation.ok !== true) throw new Error('the controller isolation attestation did not pass');
+  }
+
   const contract = JSON.parse(fs.readFileSync(path.join(repoRoot, SEALED.contract), 'utf8'));
   const corpus = JSON.parse(fs.readFileSync(path.join(repoRoot, SEALED.corpus), 'utf8'));
   const declarations = JSON.parse(fs.readFileSync(path.join(repoRoot, SEALED.declarations), 'utf8'));
@@ -494,6 +516,14 @@ export async function runExperiment(argv) {
   const exeSha = `sha256:${sha256File(exe)}`;
   if (exeSha !== profile.runtime.binary.sha256) throw new Error(`runtime binary ${exeSha} differs from the profile ${profile.runtime.binary.sha256}`);
 
+  // The sealed profile describes this machine: another driver, OS build, GPU
+  // or runtime library set is another profile (§4.1), never a silent change.
+  const drift = checkProfileDrift(profile, { exe });
+  if (!drift.ok) {
+    if (!args.dev) throw new Error(`the machine no longer matches the sealed profile ${profile.profileId}:\n- ${drift.mismatches.join('\n- ')}`);
+    console.warn(`[runner] dev rehearsal on a drifted profile:\n- ${drift.mismatches.join('\n- ')}`);
+  }
+
   const existing = runtimePids();
   if (existing.length) {
     if (!args.takeOver) throw new Error(`a runtime is already running (pids ${existing.join(', ')}); stop it or pass --take-over`);
@@ -501,7 +531,11 @@ export async function runExperiment(argv) {
     await sleep(1500);
   }
 
-  const runtime = new OllamaProcess({ exe, env: profile.runtime.env, logPath: path.join(args.storage, 'runtime.log') });
+  // The controller may keep the weights outside the account profile
+  // (OLLAMA_MODELS). The store location is not a runtime setting, and the
+  // manifest digest is checked against the profile below.
+  const runtimeEnv = { ...profile.runtime.env, ...(process.env.OLLAMA_MODELS ? { OLLAMA_MODELS: process.env.OLLAMA_MODELS } : {}) };
+  const runtime = new OllamaProcess({ exe, env: runtimeEnv, logPath: path.join(args.storage, 'runtime.log') });
   const proxy = await startInferenceProxy({ targetBaseUrl: runtime.baseUrl });
   const monitor = startEgressMonitor({ workDir: args.storage });
   const sampler = startMemorySampler({ intervalMs: profile.memoryPolicy.targetSampleIntervalMs, outPath: path.join(args.storage, 'memory.jsonl') });
@@ -513,7 +547,9 @@ export async function runExperiment(argv) {
   const scenarios = args.only ? corpus.scenarios.filter((s) => args.only.includes(s.id)) : corpus.scenarios;
   const passesPlanned = args.passes ?? contract.passes;
   const limitations = [
-    'Lab controller: personal workstation, native Windows server and runtime; evidence class local-lab is not accepted for G10 (PR05 §5).',
+    args.class === 'trusted-controller'
+      ? 'Local trusted controller (PR05 §5 as revised on 2026-09-14): the maintainer workstation, through a dedicated standard account that cannot read the maintainer profile, the data locations or controller credentials, an ephemeral just-in-time runner, and a firewall that keeps the evaluated processes on loopback and the account off private networks. It is not a disposable machine and not a sandbox against the reviewed candidate.'
+      : 'Lab controller: personal workstation, native Windows server and runtime; evidence class local-lab is not accepted for G10 (PR05 §5).',
     'Egress oracle in the lab: sampled TCP connections of the server and runtime processes (~200 ms); DNS on Windows runs in the system resolver; G09 is the authoritative egress gate.',
     'Media workload: declared ffmpeg AMF transcode instead of a Jellyfin session (profile.jellyfinLoad).',
   ];
@@ -664,22 +700,40 @@ export async function runExperiment(argv) {
     mode,
     evidenceClass: args.dev ? 'dev' : args.class,
     controller: {
-      id: `lab-${sha256(os.hostname()).slice(0, 12)}`,
+      id: `${args.class === 'trusted-controller' ? 'ctl' : 'lab'}-${sha256(os.hostname()).slice(0, 12)}`,
       kind: args.class === 'trusted-controller' ? 'github-actions' : 'local-workstation',
       cleanCheckout: !dirty,
       startedAt: args.controllerStartedAt ?? startedAt,
       finishedAt: new Date().toISOString(),
+      // The Actions run the verifier confirms with GitHub (PR05 §5).
+      ...(actionsRun ? {
+        repository: actionsRun.repository,
+        runId: actionsRun.runId,
+        runAttempt: actionsRun.runAttempt,
+        workflowRef: actionsRun.workflowRef,
+        workflowSha: actionsRun.workflowSha,
+        event: actionsRun.event,
+        ref: actionsRun.ref,
+        runnerName: actionsRun.runnerName,
+        runnerEnvironment: actionsRun.runnerEnvironment,
+      } : {}),
+      ...(isolation ? { isolation } : {}),
     },
     candidate: { baseRef: 'integration/local-agent-v1', baseSha, headSha: head, checkoutSha: head, treeSha: git(['rev-parse', 'HEAD^{tree}']) },
     versions: { runner: RUNNER_VERSION, scorer: SCORER_VERSION, extractor: EXTRACTOR_VERSION, perf: PERF_VERSION },
     sealed,
     profile: { profileId: profile.profileId, path: profileRel, sha256: sealed.profile.sha256, sealedAt: profileSealedAt },
+    profileDrift: drift,
     toolchain: {
       node: process.version,
+      nodeSha256: `sha256:${sha256File(process.execPath)}`,
       os: `${os.type()} ${os.release()} ${process.arch}`,
-      ffmpeg: execFileSync('ffmpeg', ['-hide_banner', '-version'], { encoding: 'utf8' }).split('\n')[0],
+      ffmpeg: execFileSync('ffmpeg', ['-hide_banner', '-version'], { encoding: 'utf8' }).split(/\r?\n/)[0],
     },
-    runtime: { name: 'ollama', version, model: profile.model.name, manifestDigestAtStart: digestAtStart, manifestDigestAtEnd: digestAtEnd, binarySha256: exeSha },
+    runtime: {
+      name: 'ollama', version, model: profile.model.name, manifestDigestAtStart: digestAtStart, manifestDigestAtEnd: digestAtEnd, binarySha256: exeSha,
+      modelStore: process.env.OLLAMA_MODELS ? 'OLLAMA_MODELS' : 'runtime default',
+    },
     corpus: { corpusId: corpus.corpusId, scenarioIds: scenarios.map((s) => s.id) },
     passes,
     performance: performance_,
