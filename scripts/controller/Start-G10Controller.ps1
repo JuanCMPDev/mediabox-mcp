@@ -43,10 +43,15 @@ $OllamaApp = Join-Path $env:LOCALAPPDATA 'Programs\Ollama\ollama app.exe'
 
 function Write-Step([string]$Message) { Write-Host "==> $Message" -ForegroundColor Cyan }
 
+# Native commands are judged by their exit code. Windows PowerShell turns
+# their stderr into error records when its own output is redirected, which
+# must not abort the script while the command succeeds.
 function Invoke-Native {
   $exe = $args[0]
   $rest = @($args | Select-Object -Skip 1)
-  $out = & $exe @rest
+  $previous = $ErrorActionPreference
+  $ErrorActionPreference = 'Continue'
+  try { $out = & $exe @rest } finally { $ErrorActionPreference = $previous }
   if ($LASTEXITCODE -ne 0) { throw "$exe $($rest -join ' ') failed with exit code $LASTEXITCODE" }
   return $out
 }
@@ -98,7 +103,7 @@ try {
 
   Write-Step "Tagging $full as $tag"
   Invoke-Native git -C $RepoRoot tag $tag $full | Out-Null
-  Invoke-Native git -C $RepoRoot push $Remote "refs/tags/$tag" | Out-Null
+  Invoke-Native git -C $RepoRoot push -q $Remote "refs/tags/$tag" | Out-Null
 
   Write-Step "Starting the runner as $($provisioning.account.name)"
   $runnerCmd = Join-Path $provisioning.runner.dir 'run.cmd'
@@ -125,7 +130,8 @@ try {
 } finally {
   if ($runnerProcess -and -not $runnerProcess.WaitForExit(120000) -and $jit) {
     Write-Step 'Removing the runner registration'
-    & gh api --method DELETE "repos/$Repository/actions/runners/$($jit.runner.id)" 2>$null | Out-Null
+    try { Invoke-Native gh api --method DELETE "repos/$Repository/actions/runners/$($jit.runner.id)" | Out-Null }
+    catch { Write-Host '    the registration was already gone' }
     [void]$runnerProcess.WaitForExit(60000)
   }
   if ($stoppedOllama.Count -and (Test-Path $OllamaApp)) {
@@ -155,10 +161,13 @@ Copy-Item -Path (Join-Path $package '*') -Destination $target -Force
 
 Write-Step "Verifying $experiment with its raw observations"
 $env:GITHUB_TOKEN = ((Invoke-Native gh auth token) | Out-String).Trim()
+$previous = $ErrorActionPreference
+$ErrorActionPreference = 'Continue'
 try {
   & node (Join-Path $RepoRoot 'scripts\ci\verify-evidence.mjs') --require-class trusted-controller --evidence $target --observations (Join-Path $provisioning.storage $experiment)
   $verified = ($LASTEXITCODE -eq 0)
 } finally {
+  $ErrorActionPreference = $previous
   Remove-Item Env:\GITHUB_TOKEN -ErrorAction SilentlyContinue
 }
 if (-not $verified) { throw 'The evidence did not verify; see the errors above.' }
